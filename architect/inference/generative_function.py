@@ -1,102 +1,127 @@
 """
-Define generative function types.
+Define types for a restricted class of probabilistic programs.
 
-A generative function is a function that simulates some stochastic process, usually
-by making random choices from some prior distribution. To be useful for probabilistic
-programming, a generative function should record the choices made as well as the log
-probability of each choice (allowing us to compute the log probability of an overall
-execution). These choices (and their logprobs) should be recorded in a *trace*, which is
-returned alongside the function result.
+A probabilistic program is one that simulates the output of some stochastic process by
+making random choices from some prior distribution. Here, we consider a restricted class
+of programs that have bounded support --- i.e. they rely on a known, fixed number of
+random choices. This results in a probabilistic program that generates a fixed-length
+trace of its execution.
 
-In addition to returning a trace alongside its result, a generative function should
-take (in addition to its regular arguments) a choice map that optionally specifies the
-values of particular random choices made by the function. This will allow us to sample
-from the posterior distribution of the function conditioned on some observations.
-
-Log probabilities need not be normalized.
-
-TODO How to make probabilistic programming compatible with JAX? I think I need to
-restrict to finite support programs (i.e. we can enumerate the choices made and that
-list is constant from execution to execution)?
+A probabilistic program is represented by a function that, in addition to returning
+some output, also returns a trace (a vector of all the random choices made during
+execution) and un-normalized log likelihood. The function should also take (in addition
+to its regular arguments), two arrays indicating any pre-defined random choices (the
+first vector should be 1 for any random variables with pre-defined choices, and the
+second vector should include the specified value for that random variable).
 """
-from abc import ABC
-from dataclasses import dataclass
-from functools import partial
-from typing import Any, Callable, Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List
 
-import jax
 import jax.numpy as jnp
-from immutables import Map
-from jax._src.prng import PRNGKeyArray
-from typing_extensions import Protocol
 
-#####################################
-# Types
-#####################################
-
-# Random choices are tracked using unique identifiers. Choice values can be
-# either scalar or multivariate, but in either case are represented using DeviceArrays
-Choice = str
-Value = jnp.DeviceArray
+######################################################################################
+# The function will need to keep track of the choices it makes using a choice database
+######################################################################################
+ChoiceName = str
+ChoiceIndex = int
 
 
-# A generative function maps arguments and a map of conditioned choices to a result,
-# a map of all choices (including conditioned ones) made during execution, and a log
-# probability of execution.
-#
-# We'll call the map of conditioned choices the "choicemap", and we'll call the map of
-# choices made during execution the "trace".
-class GenerativeFunction(Protocol):
-    def __call__(
-        self, *args: Any, choicemap: Map, key: PRNGKeyArray
-    ) -> Tuple[Any, Map, jnp.DeviceArray]:
-        ...
+@dataclass
+class ChoiceDatabase:
+    max_choices: int
+    lookup_table: Dict[ChoiceName, ChoiceIndex] = field(default_factory=dict)
+    next_index: ChoiceIndex = 0
 
+    def register_scalar_choice(self, name: ChoiceName) -> ChoiceIndex:
+        """
+        Adds a scalar choice to the database and assigns it a unique index in the trace.
 
-#####################################
-# Helper functions
-#####################################
+        args:
+            name: the name of the choice to register
+        returns:
+            the index of that choice in the trace
+        raises:
+            RuntimeError if max_choices exceeded
+        """
+        # We cannot register more than the pre-specified fixed number of choices
+        if self.next_index >= self.max_choices:
+            raise RuntimeError(
+                (
+                    f"Cannnot add additional choice {name}; "
+                    f"{self.max_choices} choices have already been registered!"
+                )
+            )
 
-# Whenever a generative function wants to make a random choice, it needs to check
-# whether that choice has been pre-determined in the choicemap, so let's add a helper
-# function to take care of that
-def make_random_choice(
-    choice: Choice,
-    choicemap: Map,
-    trace: Map,
-    random_fn: Callable[[PRNGKeyArray], jnp.DeviceArray],
-    logprob_fn: Callable[[Value], jnp.DeviceArray],
-    prng_key: PRNGKeyArray,
-) -> Tuple[Value, Map, jnp.DeviceArray]:
-    """
-    Make a random choice, or load a pre-determined choice if specified in the choicemap.
+        # If we do have room left, use the next available index
+        self.lookup_table[name] = self.next_index
+        self.next_index += 1
 
-    Saves the choice to the trace along with its value and log probability. Returns the
-    extended trace and consumes the given PRNG Key.
+        # Return the index we used
+        return self.lookup_table[name]
 
-    args:
-        choice: the string ID of the choice being made
-        choicemap: specifies any pre-determined choices
-        trace: the function trace
-        random_function: the function that generates the value of the
-            random choice.
-        logprob_fn: the function that returns the log probability of the chosen value.
-    returns:
-        the value of the random choice, the new trace, and the log probability of that
-        choice
-    """
-    # If we're assigning a choice that has been made before, that's an error
-    if choice in trace:
-        raise RuntimeError(f"Cannot assign to existing choice: {choice}")
+    def register_vector_choice(self, name: ChoiceName, size: int) -> List[ChoiceIndex]:
+        """
+        Adds a vector choice to the database, giving each element a unique trace index.
 
-    # If the choice has been specified in the choicemap, use that value
-    if choice in choicemap:
-        value = choicemap[choice]
-    else:  # Otherwise, make a random choice
-        value = random_fn(prng_key)
+        args:
+            name: the name of the choice to register
+            size: the size of the choice vector
+        returns:
+            the list of indices of the choice in the trace
+        raises:
+            RuntimeError if max_choices exceeded
+        """
+        # We cannot register more than the pre-specified fixed number of choices
+        if self.next_index + size > self.max_choices:
+            raise RuntimeError(
+                (
+                    f"Cannnot add additional choice {name} with {size} entries; "
+                    f"no more than {self.max_choices} choices may be registered!"
+                )
+            )
 
-    # Either way, make sure to save the value in the trace
-    # and return the value, trace, and logprob of the choice
-    logprob = logprob_fn(value)
-    trace = trace.set(choice, value)
-    return value, trace, logprob
+        # Register each entry
+        choice_indices = [
+            self.register_scalar_choice(f"{name}[{i}]") for i in range(size)
+        ]
+
+        return choice_indices
+
+    def add_choice_to_trace(
+        self, name: ChoiceName, value: jnp.ndarray, trace: jnp.ndarray
+    ) -> jnp.ndarray:
+        """
+        Add the given choice to the trace.
+
+        args:
+            name: the name of the choice to save
+            value: the value to save
+            trace: the current trace
+        returns:
+            the new trace
+        raises:
+            RuntimeError if the given choice was not previously registered or if it
+            has more than 1 axis
+        """
+        # Determine if the choice is a scalar or vector
+        dims = value.ndim
+        if dims == 0:
+            names = [name]
+            value = value.reshape(-1)
+        elif dims == 1:
+            names = [f"{name}[{i}]" for i in range(value.size)]
+        else:
+            raise RuntimeError(
+                f"Can only add vector or scalar choices to the trace (got {dims} dims)."
+            )
+
+        # Try to save each name/value, and raise an error if one is not found
+        try:
+            for name, value_i in zip(names, value):
+                choice_index = self.lookup_table[name]
+                trace = trace.at[choice_index].set(value_i)
+        except KeyError:
+            raise RuntimeError(f"{name} not found in database; did you register it?")
+
+        # Return the new trace
+        return trace

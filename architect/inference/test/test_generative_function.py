@@ -1,76 +1,42 @@
-import jax
 import jax.numpy as jnp
-from jax.random import normal
-import jax.scipy.stats as jaxstats
-from jax._src.prng import PRNGKeyArray
+import pytest
 
-from architect.inference import (
-    Choice,
-    Choicemap,
-    Trace,
-    Value,
-    make_random_choice,
-    trace_logprob,
-)
+from architect.inference import ChoiceDatabase
 
 
-def example_generative_function(
-    prior_mean: jnp.DeviceArray, choicemap: Choicemap, key: PRNGKeyArray
-):
-    """
-    An example generative function that makes some random choices.
+def test_choice_database():
+    """Test the choice database"""
+    # Make a choice database to test
+    max_choices = 4
+    db = ChoiceDatabase(max_choices)
 
-    These choices are organizes hierarchically as follows:
-        z_1 ~ N(prior_mean, 1.0)
-        z_2 ~ N(z_1, 1.0)
+    # There should be no choices in the database yet
+    assert len(db.lookup_table.keys()) == 0
 
-    args:
-        prior_mean: the mean of z_1
-        choicemap: the choicemap for this generative function
-        key: the key to use to generate random numbers
+    # If we add a scalar choice, that should work fine
+    index = db.register_scalar_choice("first_choice")
+    assert index is not None and index < max_choices
 
-    returns:
-        z_2
-    """
-    # All generative functions need to start by making a trace
-    trace = {}
+    # If we add a scalar choice, that should also work fine
+    size = 3
+    indices = db.register_vector_choice("second_choice", size)
+    assert len(indices) == size
 
-    # First choose a population mean from the prior mean
-    random_fn = lambda key: normal(key) + prior_mean
-    logprob_fn = lambda value: jaxstats.norm.logpdf(value, loc=prior_mean, scale=1.0)
-    key, subkey = jax.random.split(key)
-    z_1, trace = make_random_choice(
-        "z_1", choicemap, trace, random_fn, logprob_fn, subkey
-    )
+    # The database is now full, so trying to register additional choices should fail
+    with pytest.raises(RuntimeError):
+        db.register_scalar_choice("bad_choice")
 
-    # Then choose a sample with this population mean
-    random_fn = lambda key: normal(key) + z_1
-    logprob_fn = lambda value: jaxstats.norm.logpdf(value, loc=z_1, scale=1.0)
-    key, subkey = jax.random.split(key)
-    z_2, trace = make_random_choice(
-        "z_2", choicemap, trace, random_fn, logprob_fn, subkey
-    )
+    with pytest.raises(RuntimeError):
+        db.register_vector_choice("bad_choice", size)
 
-    return z_2, trace
+    # We can now save values for the registered values in a trace
+    trace = jnp.zeros((max_choices,))
+    trace = db.add_choice_to_trace("first_choice", jnp.array(1.0), trace)
+    trace = db.add_choice_to_trace("second_choice", jnp.array([2.0, 3.0, 4.0]), trace)
 
+    # The trace should now contain those values
+    assert jnp.allclose(trace, jnp.array([1.0, 2.0, 3.0, 4.0]))
 
-def test_example_generative_function():
-    """Test the example generative function"""
-    key = jax.random.PRNGKey(0)
-    prior_mean = jnp.array(0.0)
-
-    # First check if the function works with an empty choicemap
-    _, trace = example_generative_function(prior_mean, {}, key)
-
-    # Make sure all the right choices have been made
-    assert "z_1" in trace and "z_2" in trace
-
-    # Now see what happens if we provide some choices
-    _, trace = example_generative_function(prior_mean, {"z_1": jnp.array(0.0)}, key)
-    assert trace["z_1"][0] == 0.0
-
-    _, trace = example_generative_function(
-        prior_mean, {"z_1": jnp.array(0.0), "z_2": jnp.array(0.0)}, key
-    )
-    assert trace["z_1"][0] == 0.0
-    assert trace["z_2"][0] == 0.0
+    # If we try to save a choice that has not been registered, that should give an error
+    with pytest.raises(RuntimeError):
+        db.add_choice_to_trace("bad_choice", jnp.array(1.0), trace)
