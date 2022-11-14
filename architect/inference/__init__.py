@@ -1,4 +1,4 @@
-from .generative_function import (
+from .choice_database import (
     ChoiceDatabase
 )
 

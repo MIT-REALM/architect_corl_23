@@ -1,27 +1,12 @@
 """
-Define types for a restricted class of probabilistic programs.
-
-A probabilistic program is one that simulates the output of some stochastic process by
-making random choices from some prior distribution. Here, we consider a restricted class
-of programs that have bounded support --- i.e. they rely on a known, fixed number of
-random choices. This results in a probabilistic program that generates a fixed-length
-trace of its execution.
-
-A probabilistic program is represented by a function that, in addition to returning
-some output, also returns a trace (a vector of all the random choices made during
-execution) and un-normalized log likelihood. The function should also take (in addition
-to its regular arguments), two arrays indicating any pre-defined random choices (the
-first vector should be 1 for any random variables with pre-defined choices, and the
-second vector should include the specified value for that random variable).
+Define a database for tracking the choices made by a generative function in the trace
 """
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import jax.numpy as jnp
 
-######################################################################################
-# The function will need to keep track of the choices it makes using a choice database
-######################################################################################
+# Convenience types
 ChoiceName = str
 ChoiceIndex = int
 
@@ -88,8 +73,13 @@ class ChoiceDatabase:
         return choice_indices
 
     def add_choice_to_trace(
-        self, name: ChoiceName, value: jnp.ndarray, trace: jnp.ndarray
-    ) -> jnp.ndarray:
+        self,
+        name: ChoiceName,
+        value: jnp.ndarray,
+        trace: jnp.ndarray,
+        selection: jnp.ndarray,
+        predetermined_values: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Add the given choice to the trace.
 
@@ -97,8 +87,14 @@ class ChoiceDatabase:
             name: the name of the choice to save
             value: the value to save
             trace: the current trace
+            selections: a vector of the same length as the trace that is 1 where
+                a value has been pre-specified for that choice and 0 elsewhere.
+            predetermined_values: a vector of the same length as the trace containing
+                the values of any pre-specified choices.
         returns:
-            the new trace
+            - the value assigned (may differ if the selection vector assigns a pre-
+                specified value to a choice)
+            - the new trace
         raises:
             RuntimeError if the given choice was not previously registered or if it
             has more than 1 axis
@@ -115,13 +111,18 @@ class ChoiceDatabase:
                 f"Can only add vector or scalar choices to the trace (got {dims} dims)."
             )
 
-        # Try to save each name/value, and raise an error if one is not found
+        # Try to get the trace index for each value, and raise an error if is not found
         try:
-            for name, value_i in zip(names, value):
-                choice_index = self.lookup_table[name]
-                trace = trace.at[choice_index].set(value_i)
+            choice_indices = jnp.array([self.lookup_table[name] for name in names])
         except KeyError:
             raise RuntimeError(f"{name} not found in database; did you register it?")
 
-        # Return the new trace
-        return trace
+        # Save either the provided value or the pre-specified value, depending on what
+        # was selected
+        values_to_save = jnp.where(
+            selection[choice_indices], predetermined_values[choice_indices], value
+        )
+        trace = trace.at[choice_indices].set(values_to_save)
+
+        # Return the values that were saved and the new trace
+        return values_to_save, trace
