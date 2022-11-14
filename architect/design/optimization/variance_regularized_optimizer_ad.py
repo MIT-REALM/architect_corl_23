@@ -10,7 +10,7 @@ from jax._src.prng import PRNGKeyArray
 import numpy as np
 import scipy.optimize as sciopt
 
-from architect.design.problem import DesignProblem
+from architect.problem_definition import DesignProblem
 
 
 class VarianceRegularizedOptimizerAD(object):

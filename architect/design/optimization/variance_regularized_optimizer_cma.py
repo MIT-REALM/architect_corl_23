@@ -9,7 +9,7 @@ from jax._src.prng import PRNGKeyArray
 import numpy as np
 import nevergrad as ng
 
-from architect.design.problem import DesignProblem
+from architect.problem_definition import DesignProblem
 
 
 class VarianceRegularizedOptimizerCMA(object):

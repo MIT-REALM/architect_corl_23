@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from architect.design.problem import (
+from architect.problem_definition import (
     DesignProblem,
     DesignParameters,
     ExogenousParameters,
