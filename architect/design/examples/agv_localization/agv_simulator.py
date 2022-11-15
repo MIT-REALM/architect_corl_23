@@ -174,7 +174,7 @@ def step(
     actuation_noise: jnp.ndarray,
     actuation_noise_covariance: jnp.ndarray,
     dt: float,
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """
     Simulate one discrete time step for the AGV system
 
@@ -196,6 +196,7 @@ def step(
             - the new true state in a (3) array
             - the new state estimate in a (3) array
             - the new state estimate covariance in a (3, 3) matrix
+            - the navigation function at the current true state
     """
     # Get the control input based on the current state estimate
     control_input = navigate(current_state_estimate, control_gains)
@@ -245,7 +246,10 @@ def step(
         observation_noise_covariance,
     )
 
-    return new_state_true, new_state_estimate, new_state_estimate_covariance
+    # Compute the current navigation function value
+    V = navigation_function(new_state_true[:2])
+
+    return new_state_true, new_state_estimate, new_state_estimate_covariance, V
 
 
 def agv_simulate(
@@ -313,33 +317,55 @@ def agv_simulate(
         navigation_function(initial_state[:2])
     )
 
-    # Simulate forward
-    for t in range(time_steps - 1):
-        current_state_true = state_true[t]
-        current_state_estimate = state_estimate_mean[t]
-        current_state_estimate_covariance = state_estimate_covariance[t]
+    def step_wrapped(carry, disturbances):
+        """Wraps the step function in a form compatible with jax.lax.scan."""
+        # unpack current states from the carry
+        (
+            current_state_true,
+            current_state_estimate,
+            current_state_estimate_covariance,
+            _,
+        ) = carry
+        # Unpack the current disturbances
+        observation_noise = disturbances[0, :]
+        actuation_noise = disturbances[1, :]
 
-        new_state_true, new_state_estimate, new_state_estimate_covariance = step(
+        # Take a step
+        new_state_true, new_state_estimate, new_state_estimate_covariance, V = step(
             current_state_true,
             current_state_estimate,
             current_state_estimate_covariance,
             control_gains,
             beacon_locations,
-            observation_noises[t],
+            observation_noise,
             observation_noise_covariance,
-            actuation_noises[t],
+            actuation_noise,
             actuation_noise_covariance,
             dt,
         )
 
-        # Save the new state, estimate, and navigation function value
-        state_true = state_true.at[t + 1].set(new_state_true)
-        state_estimate_mean = state_estimate_mean.at[t + 1].set(new_state_estimate)
-        state_estimate_covariance = state_estimate_covariance.at[t + 1].set(
-            new_state_estimate_covariance
-        )
-        V = navigation_function(new_state_true[:2])
-        true_navigation_function = true_navigation_function.at[t + 1].set(V)
+        # Package the results into a new carry and output
+        carry = (new_state_true, new_state_estimate, new_state_estimate_covariance, V)
+        return carry, carry
+
+    # Implement the simulation loop using scan
+    initial_carry = (
+        initial_state,
+        initial_state_mean,
+        initial_state_covariance,
+        navigation_function(initial_state[:2]),
+    )
+    _, trace = jax.lax.scan(
+        step_wrapped,
+        initial_carry,
+        jnp.stack((observation_noises, actuation_noises), axis=1),
+    )
+
+    # Extract results
+    state_true = state_true.at[1:].set(trace[0][:-1])
+    state_estimate_mean = state_estimate_mean.at[1:].set(trace[1][:-1])
+    state_estimate_covariance = state_estimate_covariance.at[1:].set(trace[2][:-1])
+    true_navigation_function = true_navigation_function.at[1:].set(trace[3][:-1])
 
     # Return the state and estimate traces
     return (

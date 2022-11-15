@@ -661,8 +661,11 @@ def mam_simulate_single_push_two_turtles(
     settle_end_pts = initial_turtle_state[:, :2]
     settle_time = 0.5
     settle_steps = int(settle_time // dt)
-    for t in range(settle_steps):
-        initial_turtle_state, initial_box_state = multi_agent_box_dynamics_step(
+
+    # Wrap the step function to be used in scan
+    def settle_step(carry, t):
+        initial_turtle_state, initial_box_state = carry
+        carry = multi_agent_box_dynamics_step(
             initial_turtle_state,
             initial_box_state,
             settle_start_pts,
@@ -682,6 +685,13 @@ def mam_simulate_single_push_two_turtles(
             dt,
             n_turtles,
         )
+        return carry, None
+
+    (initial_turtle_state, initial_box_state), _ = jax.lax.scan(
+        settle_step,
+        (initial_turtle_state, initial_box_state),
+        xs=jnp.array(range(settle_steps)),
+    )
 
     # reset coordinates by zero-ing velocity,
     initial_turtle_state = initial_turtle_state.at[:, 3:].set(0.0)
@@ -731,11 +741,11 @@ def mam_simulate_single_push_two_turtles(
     box_states = jnp.zeros((push_steps, 6))
     box_states = box_states.at[0].set(initial_box_state)
 
-    # Simulate the push phase
-    for t in range(push_steps):
+    def sim_step(carry, t):
+        turtle_state, box_state = carry
         new_turtle_state, new_box_state = multi_agent_box_dynamics_step(
-            turtle_states[t],
-            box_states[t],
+            turtle_state,
+            box_state,
             start_pts,
             control_pts,
             end_pts,
@@ -754,8 +764,17 @@ def mam_simulate_single_push_two_turtles(
             n_turtles,
             desired_box_pose=desired_box_pose,
         )
-        turtle_states = turtle_states.at[t + 1].set(new_turtle_state)
-        box_states = box_states.at[t + 1].set(new_box_state)
+
+        carry = (new_turtle_state, new_box_state)
+        return carry, carry
+
+    _, trace = jax.lax.scan(
+        sim_step,
+        (initial_turtle_state, initial_box_state),
+        jnp.array(range(push_steps)),
+    )
+    turtle_states = turtle_states.at[1:].set(trace[0][:-1])
+    box_states = box_states.at[1:].set(trace[1][:-1])
 
     # Return the trace of box and turtlebot states
     return turtle_states, box_states

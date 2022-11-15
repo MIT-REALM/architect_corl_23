@@ -1,3 +1,5 @@
+import os
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -10,7 +12,6 @@ from architect.design.examples.multi_agent_manipulation.mam_plotting import (  #
     plot_box_trajectory,
     plot_turtle_trajectory,
     make_box_patches,
-    make_pushing_animation,
 )
 from architect.design.examples.multi_agent_manipulation.mam_simulator import (
     turtlebot_dynamics_step,
@@ -22,7 +23,7 @@ from architect.design.examples.multi_agent_manipulation.mam_simulator import (
 )
 
 
-def test_turtlebot_dynamics():
+def test_turtlebot_dynamics(plot=False):
     T = 5
     dt = 0.01
     n_steps = int(T // dt)
@@ -52,10 +53,10 @@ def test_turtlebot_dynamics():
     plt.xlabel("x")
     plt.ylabel("y")
     plt.gca().set_aspect("equal")
-    plt.show()
+    plt.show() if plot else None
 
 
-def test_signed_distance():
+def test_signed_distance(plot=False):
     # Test signed distance calculation
     box_pose = jnp.array([-0.4, 0.2, -0.1])
     box_size = jnp.array(0.61)
@@ -82,10 +83,10 @@ def test_signed_distance():
     )
     ax.set_aspect("equal")
     fig.colorbar(contours)
-    plt.show()
+    plt.show() if plot else None
 
 
-def test_box_dynamics():
+def test_box_dynamics(plot=False):
     # Test 1 box
     T = 1.0
     dt = 0.01
@@ -112,10 +113,10 @@ def test_box_dynamics():
     plt.xlabel("x")
     plt.ylabel("y")
     plt.gca().set_aspect("equal")
-    plt.show()
+    plt.show() if plot else None
 
 
-def test_turtle_spline_following():
+def test_turtle_spline_following(plot=False):
     # Test box and 1 turtlebot, but make sure they don't make contact
     T = 10.0
     dt = 0.01
@@ -128,7 +129,7 @@ def test_turtle_spline_following():
     box_size = jnp.array(0.61)
     chassis_radius = jnp.array(0.08)
     low_level_control_gains = jnp.array([5.0, 0.1])
-    high_level_control_gains = jnp.array([1.0, 5.0, 2.0])
+    high_level_control_gains = jnp.array([1.0, 5.0])
     initial_turtle_state = jnp.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
     initial_box_state = jnp.array([-2, 0.0, 0.0, 0.0, 0.0, 0.0])
     turtle_states = jnp.zeros((n_steps, 1, 6))
@@ -176,10 +177,10 @@ def test_turtle_spline_following():
     plt.xlabel("x")
     plt.ylabel("y")
     plt.gca().set_aspect("equal")
-    plt.show()
+    plt.show() if plot else None
 
 
-def test_box_turtle_dynamics():
+def test_box_turtle_dynamics(plot=False):
     # Test box and 1 turtlebot
     T = 10.0
     dt = 0.01
@@ -192,7 +193,7 @@ def test_box_turtle_dynamics():
     box_size = jnp.array(0.61)
     chassis_radius = jnp.array(0.08)
     low_level_control_gains = jnp.array([5.0, 0.1])
-    high_level_control_gains = jnp.array([1.0, 5.0, 2.0])
+    high_level_control_gains = jnp.array([1.0, 5.0])
     initial_turtle_state = jnp.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
     initial_box_state = jnp.array([0.5, 0.1, 0.0, 0.0, 0.0, 0.0])
     turtle_states = jnp.zeros((n_steps, 1, 6))
@@ -241,10 +242,10 @@ def test_box_turtle_dynamics():
     plt.xlabel("x")
     plt.ylabel("y")
     plt.gca().set_aspect("equal")
-    plt.show()
+    plt.show() if plot else None
 
 
-def test_box_two_turtles_dynamics():
+def test_box_two_turtles_dynamics(plot=False):
     # Test box and 2 turtlebot
     T = 10.0
     dt = 0.01
@@ -257,7 +258,7 @@ def test_box_two_turtles_dynamics():
     box_size = jnp.array(0.61)
     chassis_radius = jnp.array(0.08)
     low_level_control_gains = jnp.array([5.0, 0.1])
-    high_level_control_gains = jnp.array([1.0, 5.0, 2.0])
+    high_level_control_gains = jnp.array([1.0, 5.0])
     initial_turtle_state = jnp.array(
         [
             [-0.35, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -316,11 +317,11 @@ def test_box_two_turtles_dynamics():
 
     plt.xlabel("x")
     plt.ylabel("y")
-    # plt.gca().set_aspect("equal")
-    # plt.show()
+    plt.gca().set_aspect("equal")
+    plt.show() if plot else None
 
 
-def test_push():
+def test_push(plot=False):
     # Test mam_simulate_single_push_two_turtles function
     prng_key = jax.random.PRNGKey(1)
 
@@ -330,7 +331,10 @@ def test_push():
     prng_key, subkey = jax.random.split(prng_key)
     mam_design_problem = make_mam_design_problem(layer_widths, dt, subkey)
 
+    real_path = os.path.realpath(__file__)
+    dir_path = os.path.dirname(real_path)
     logfile = (
+        dir_path + "/../../../../../"
         "logs/multi_agent_manipulation/real_turtle_dimensions/"
         "design_optimization_512_samples_0p5x0p5xpi_4_target_"
         "9x32x4_network_spline_1e-1_variance_weight_solution.csv"
@@ -342,7 +346,11 @@ def test_push():
         )
     )
 
-    fig, axs = plt.subplots(4, 7)
+    if plot:
+        fig, axs = plt.subplots(4, 7)
+    else:
+        fig, axs = plt.subplots(1, 1)
+        axs = [[axs]]
     for row in axs:
         for ax in row:
             print("Simulating...")
@@ -374,30 +382,14 @@ def test_push():
             ax.axis("off")
 
     fig.tight_layout()
-    plt.show()
-
-    # box_size = 0.61
-    # chassis_radius = 0.08
-    # fps = 20
-    # n_steps_to_show = 4 * fps
-    # interval = int(1000 / fps)
-    # make_pushing_animation(
-    #     box_states,
-    #     turtle_states,
-    #     desired_box_pose,
-    #     box_size,
-    #     chassis_radius,
-    #     n_steps_to_show,
-    #     interval,
-    #     "animation.gif",
-    # )
+    plt.show() if plot else None
 
 
 if __name__ == "__main__":
-    # test_signed_distance()
-    # test_turtlebot_dynamics()
-    # test_box_dynamics()
-    # test_turtle_spline_following()
-    # test_box_turtle_dynamics()
-    # test_box_two_turtles_dynamics()
-    test_push()
+    # test_signed_distance(plot=True)
+    # test_turtlebot_dynamics(plot=True)
+    # test_box_dynamics(plot=True)
+    # test_turtle_spline_following(plot=True)
+    # test_box_turtle_dynamics(plot=True)
+    # test_box_two_turtles_dynamics(plot=True)
+    test_push(plot=True)

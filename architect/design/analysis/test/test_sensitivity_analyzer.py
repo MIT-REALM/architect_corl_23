@@ -1,3 +1,5 @@
+import pytest
+
 import jax
 import jax.numpy as jnp
 
@@ -52,7 +54,8 @@ def test_SensitivityAnalyzer_init():
     assert sensitivity_analyzer is not None
 
 
-def test_SensitivityAnalyzer_analyze():
+@pytest.mark.slow
+def test_SensitivityAnalyzer_analyze_detailed():
     """Test using a SensitivityAnalyzer to analyze variance"""
     # Get the test problem
     problem = create_test_design_problem()
@@ -75,3 +78,20 @@ def test_SensitivityAnalyzer_analyze():
     assert xi < 0.0, "should be in Weibull regime with upper-bounded support"
     upper_bound = mu - sigma / xi
     assert jnp.isclose(upper_bound, 1.0, rtol=1e-2)
+
+
+def test_SensitivityAnalyzer_analyze():
+    """Test using a SensitivityAnalyzer to analyze variance (just make sure it runs)"""
+    # Get the test problem
+    problem = create_test_design_problem()
+
+    # Initialize the analyzer
+    sample_size = 5
+    block_size = 2
+    sensitivity_analyzer = SensitivityAnalyzer(problem, sample_size, block_size)
+
+    # Get a PRNG key
+    key = jax.random.PRNGKey(0)
+
+    # Run the analysis and make sure it doesn't fail
+    sensitivity_analyzer.analyze(key, inject_noise=True, mcmc_steps=10)

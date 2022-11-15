@@ -48,6 +48,8 @@ class SensitivityAnalyzer(object):
         self,
         prng_key: PRNGKeyArray,
         inject_noise: bool = False,
+        jit: bool = False,
+        mcmc_steps: int = 10000,
     ) -> Tuple[pd.DataFrame, az.data.inference_data.InferenceData]:
         """Conduct the sensitivity analysis
 
@@ -57,6 +59,8 @@ class SensitivityAnalyzer(object):
                 be added to the measured sensitivities. This can help in simple cases
                 where the sensitivity is constant (and the corresponding extreme value
                 distribution is degenerate).
+            jit: if True, jit the cost function
+            mcmc_steps: how many steps to run the MCMC inference for
         returns: a tuple
             - a pandas DataFrame containing summary statistics for fitting a GEVD
               to the observed sensitivities
@@ -69,6 +73,8 @@ class SensitivityAnalyzer(object):
             return self.design_problem.cost_fn(design_params, exogenous_params)
 
         costv = jax.vmap(cost, (None, 0))
+        if jit:
+            costv = jax.jit(costv)
 
         # Construct a dataset of the maximum sensitivities for sample_size blocks,
         # each of size block_size.
@@ -152,9 +158,9 @@ class SensitivityAnalyzer(object):
             gevd = pm.DensityDist("gevd", logp, observed=block_maxes)  # noqa: F841
             step = pm.NUTS()
             idata = pm.sample(
-                10000,
+                mcmc_steps,
                 chains=4,
-                tune=5000,
+                tune=int(mcmc_steps / 2),
                 step=step,
                 start={"mu": mu_start, "sigma": sigma_start, "xi": -0.1},
                 return_inferencedata=True,
