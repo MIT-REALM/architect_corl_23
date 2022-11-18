@@ -1,15 +1,7 @@
-from .bounded_design_parameters import BoundedDesignParameters
-from .bounded_design_problem import BoundedDesignProblem
-from .bounded_exogenous_parameters import BoundedExogenousParameters
-from .design_parameters import DesignParameters
-from .design_problem import DesignProblem
-from .exogenous_parameters import ExogenousParameters
+from .parameters import Parameters
+from .autonomous_system import AutonomousSystem
 
 __all__ = [
-    "BoundedDesignParameters",
-    "BoundedDesignProblem",
-    "BoundedExogenousParameters",
-    "DesignParameters",
-    "DesignProblem",
-    "ExogenousParameters",
+    "Parameters",
+    "AutonomousSystem",
 ]
