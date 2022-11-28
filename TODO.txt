@@ -1,9 +1,0 @@
-[x] Create unit tests for examples
-    [x] agv
-    [x] mam
-    [x] satellite stl
-    [x] turtle stl
-[ ] Create Parameters superclass (should do size, names, sample_prior, and log_likelihood)
-[ ] Refactor DesignParameters (and design optimization, analysis, and examples) to subclass Parameters (define BoundedParameters for when that's needed)
-[ ] Refactor ExogenousParameters (and design optimization, analysis, and examples) to subclass Parameters
-[ ] Refactor DesignProblem (and optimization, analysis, and examples) to have performance metric and use generic parameters

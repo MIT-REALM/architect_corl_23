@@ -1,4 +1,4 @@
-from abc import ABC, abstractclassmethod, abstractmethod
+from abc import ABC, abstractmethod
 
 import equinox as eqx
 from jax._src.prng import PRNGKeyArray
@@ -27,7 +27,7 @@ class Parameters(eqx.Module, ABC):
         """Compute the log likelihood of these parameters."""
         raise NotImplementedError()
 
-    @abstractclassmethod
+    @abstractmethod
     def sample(self, prng_key: PRNGKeyArray) -> "Parameters":
         """Sample values for these parameters from this distribution.
 

@@ -3,6 +3,7 @@ black
 mypy
 pytest
 flake8
+beartype
 
 # Standard utility packages
 numpy
