@@ -155,13 +155,13 @@ def make_ieee_14_bus_system(T_horizon: int, T_sim: int) -> CentralizedDynamicDis
         ],
         nominal_line_limits=jnp.array([0.7 for _ in range(20)]),
         line_failure_times=jnp.array([10.0 for _ in range(20)]),
-        line_failure_durations=jnp.array([10.0 for _ in range(20)]),
+        line_failure_durations=jnp.array([5.0 for _ in range(20)]),
     )
 
 
 if __name__ == "__main__":
     horizon = 2
-    sim = 30
+    sim = 20
     sys = make_ieee_14_bus_system(horizon, sim)
     output = sys.simulate(
         jnp.zeros((sys.num_dispatchables,)),

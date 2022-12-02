@@ -15,6 +15,10 @@ ipykernel
 ipywidgets
 tqdm
 
+# JAX
+jax[cpu]
+jaxtyping
+
 # Optimization
 jaxopt
 optax
@@ -22,6 +26,5 @@ optax
 # Neural networks
 equinox
 
-# JAX
-jax[cpu]
-jaxtyping
+# Sampling
+blackjax
