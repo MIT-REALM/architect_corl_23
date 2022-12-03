@@ -32,7 +32,7 @@ def make_two_bus_system(horizon):
         intermittent_names=["wind_1"],
         intermittent_costs=jnp.array([[0.5, 0.5]]),
         intermittent_ramp_rates=jnp.array([1.0]),
-        intermittent_true_limits=jnp.array([[[0.5, 0.5]]] * T_sim),
+        intermittent_true_limits=jnp.array([[0.5]] * T_sim),
         intermittent_limits_prediction_err=jnp.array([[0.1]] * T_sim),
         # --------------
         storage_names=["storage_1"],
@@ -113,7 +113,7 @@ def test_CentralizedDynamicDispatch_make_constraints(
     initial_storage_power = jnp.array([0.0])
     initial_storage_state_of_charge = jnp.array([0.25])
     predicted_load_limits = jnp.array([[[0.0, 1.5]]] * two_bus_system.T_sim)
-    predicted_intermittent_limits = jnp.array([[[0.5, 0.5]]] * two_bus_system.T_sim)
+    predicted_intermittent_limits = jnp.array([[0.5]] * two_bus_system.T_sim)
     A, lb, ub = two_bus_system.make_constraints(
         initial_dispatchable_generation,
         initial_intermittent_generation,
@@ -284,7 +284,7 @@ def test_CentralizedDynamicDispatch_make_constraints(
         + T
         * [
             two_bus_system.dispatchable_limits[:, 0],
-            predicted_intermittent_limits[0, :, 0],  # these are constant for now
+            0 * predicted_intermittent_limits[0, :],  # lower lim assumed 0 for now
             two_bus_system.storage_power_limits[:, 0],
             -predicted_load_limits[0, :, 1],
         ]
@@ -310,7 +310,7 @@ def test_CentralizedDynamicDispatch_make_constraints(
         + T
         * [
             two_bus_system.dispatchable_limits[:, 1],
-            predicted_intermittent_limits[0, :, 1],  # these are constant for now
+            predicted_intermittent_limits[0, :],  # these are constant for now
             two_bus_system.storage_power_limits[:, 1],
             -predicted_load_limits[0, :, 0],
         ]
@@ -340,7 +340,7 @@ def test_CentralizedDynamicDispatch_solve_dynamic_dispatch(
     initial_storage_power = jnp.array([0.0])
     initial_storage_state_of_charge = jnp.array([0.25])
     predicted_load_limits = jnp.array([[[0.0, 1.5]]] * two_bus_system.T_sim)
-    predicted_intermittent_limits = jnp.array([[[0.5, 0.5]]] * two_bus_system.T_sim)
+    predicted_intermittent_limits = jnp.array([[0.5]] * two_bus_system.T_sim)
     result = two_bus_system.solve_dynamic_dispatch(
         initial_dispatchable_generation,
         initial_intermittent_generation,

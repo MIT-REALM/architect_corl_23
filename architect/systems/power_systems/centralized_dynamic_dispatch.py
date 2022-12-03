@@ -40,9 +40,9 @@ class CentralizedDynamicDispatch(AutonomousSystem):
     intermittent_costs: Float[Array, "ni 2"]
     intermittent_ramp_rates: Float[Array, " ni"]
     num_intermittents: int = field(init=False)
-    # Intermittent generators have a series of true limits and a series of
-    # prediction errors (same error will apply to both max and min limit)
-    intermittent_true_limits: Float[Array, "Tsim ni 2"]
+    # Intermittent generators have a series of maximum generation limits and a series of
+    # prediction errors
+    intermittent_true_limits: Float[Array, "Tsim ni"]
     intermittent_limits_prediction_err: Float[Array, "Tsim ni"]
 
     storage_names: List[str]
@@ -237,7 +237,7 @@ class CentralizedDynamicDispatch(AutonomousSystem):
         initial_storage_power: Float[Array, " ns"],
         initial_storage_state_of_charge: Float[Array, " ns"],
         predicted_load_limits: Float[Array, "Th nl 2"],
-        predicted_intermittent_limits: Float[Array, "Th ni 2"],
+        predicted_intermittent_limits: Float[Array, "Th ni"],
         line_limits: Float[Array, " nline"],
     ) -> Tuple[Float[Array, "nc nx"], Float[Array, " nc"], Float[Array, " nc"]]:
         """
@@ -299,7 +299,7 @@ class CentralizedDynamicDispatch(AutonomousSystem):
             new_lbs = jnp.hstack(
                 (
                     self.dispatchable_limits[:, 0],
-                    predicted_intermittent_limits[t, :, 0],
+                    0.0 * predicted_intermittent_limits[t, :],
                     self.storage_power_limits[:, 0],
                     # minus max load, since loads are negative injection
                     -predicted_load_limits[t, :, 1],
@@ -308,7 +308,7 @@ class CentralizedDynamicDispatch(AutonomousSystem):
             new_ubs = jnp.hstack(
                 (
                     self.dispatchable_limits[:, 1],
-                    predicted_intermittent_limits[t, :, 1],
+                    predicted_intermittent_limits[t, :],
                     self.storage_power_limits[:, 1],
                     # minus min load, since loads are negative injection
                     -predicted_load_limits[t, :, 0],
@@ -539,7 +539,7 @@ class CentralizedDynamicDispatch(AutonomousSystem):
         initial_storage_power: Float[Array, " ns"],
         initial_storage_state_of_charge: Float[Array, " ns"],
         predicted_load_limits: Float[Array, "Th nl 2"],
-        predicted_intermittent_limits: Float[Array, "Th ni 2"],
+        predicted_intermittent_limits: Float[Array, "Th ni"],
         line_limits: Float[Array, " nline"],
     ) -> PyTree[Float[Array, "..."]]:
         """
@@ -717,8 +717,8 @@ class CentralizedDynamicDispatch(AutonomousSystem):
                 axis=0,
             )
             predicted_intermittent_limits = predicted_intermittent_limits.at[
-                1:, :, :
-            ].add(predicted_intermittent_errs.reshape(self.T_horizon - 1, -1, 1))
+                1:, :
+            ].add(predicted_intermittent_errs)
 
             # Update the line limits for the current time
             line_limits = self.get_current_line_limits(t)

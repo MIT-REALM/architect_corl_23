@@ -31,7 +31,7 @@ def make_ieee_14_bus_system(T_horizon: int, T_sim: int) -> CentralizedDynamicDis
         intermittent_names=["wind1", "wind2"],
         intermittent_costs=jnp.array([[0.0, 14.5], [0.0, 14.5]]),
         intermittent_ramp_rates=jnp.array([0.7, 0.7]),
-        intermittent_true_limits=jnp.array([[[0.0, 1.0], [0.0, 1.0]]] * T_sim),
+        intermittent_true_limits=jnp.array([[1.0, 1.0]] * T_sim),
         intermittent_limits_prediction_err=jnp.array([[0.0, 0.0]] * T_sim),
         # --------------
         # In the baseline system we have no storage (although some might be added

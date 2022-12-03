@@ -1,13 +1,15 @@
-from math import ceil
+import time
 
+import seaborn as sns
 import blackjax
-import blackjax.smc.resampling as resampling
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
-from jaxtyping import PyTree
+from beartype import beartype
+from beartype.typing import Callable, Tuple
+from jaxtyping import Array, Integer, PyTree, jaxtyped
 
 from architect.components.specifications.stl.formula import (
     STLFormula,
@@ -35,9 +37,12 @@ def ep_filter_spec(sys: CentralizedDynamicDispatch) -> PyTree[bool]:
     # Line limits and intermittent generator limits
     filter_spec = jtu.tree_map(lambda _: False, sys)
     filter_spec = eqx.tree_at(
-        lambda tree: (tree.intermittent_limits_prediction_err,),
+        lambda tree: (
+            tree.intermittent_limits_prediction_err,
+            tree.intermittent_true_limits,
+        ),
         filter_spec,
-        replace=(True,),
+        replace=(True, True),
     )
 
     return filter_spec
@@ -46,7 +51,7 @@ def ep_filter_spec(sys: CentralizedDynamicDispatch) -> PyTree[bool]:
 def make_simulate_fn(
     sys: CentralizedDynamicDispatch,
     exogenous_filter_spec: PyTree,
-):
+) -> Callable[[PyTree], PyTree]:
     """
     Make a function to simulate system behavior given exogenous parameters.
 
@@ -82,6 +87,7 @@ def make_logprob_fns(
     sys: CentralizedDynamicDispatch,
     exogenous_filter_spec: PyTree,
     prediction_error_stddev: float = 0.05,
+    wind_generation_limits_stddev: float = 0.05,
     smoothing: float = 10.0,
     maximize_failure: bool = True,
 ):
@@ -93,6 +99,7 @@ def make_logprob_fns(
         exogenous_filter_spec: the filter specifying which parts of the system are
             exogenous factors
         prediction_error_stddev: the standard deviation of prediction error
+        wind_generation_limits_stddev: the standard deviation of wind upper limits
         smoothing: the smoothing parameter for the STL specification (higher = stiffer)
         maximize_failure: if True, prioritize sampling cases where there is more
             failure. Otherwise, treat all failures similarly.
@@ -102,17 +109,23 @@ def make_logprob_fns(
     # Make the STL formula we'll use to assess service level
     p_load_always_mostly_served = make_service_constraint()
 
-    # We assume that the prediction errors for intermittent capacity limits follow a
-    # Gaussian distribution with zero mean and given variance and are independent.
+    # For now, assume all exogenous params follow a multivariate gaussian distribution
     @jax.jit
     def prior_logprob_fn(exogenous_parameters):
         prediction_errors = exogenous_parameters.intermittent_limits_prediction_err
+        limits = exogenous_parameters.intermittent_true_limits
         T = prediction_errors.shape[0]
-        return jax.scipy.stats.multivariate_normal.logpdf(
-            prediction_errors,
+        logprob = jax.scipy.stats.multivariate_normal.logpdf(
+            prediction_errors.squeeze(),
             mean=jnp.zeros(T),
             cov=prediction_error_stddev ** 2 * jnp.eye(T),
         )
+        logprob += jax.scipy.stats.multivariate_normal.logpdf(
+            limits.squeeze(),
+            mean=jnp.ones(T),
+            cov=wind_generation_limits_stddev ** 2 * jnp.eye(T),
+        )
+        return logprob
 
     # The posterior logprob conditions on the event that a failure occurs
     simulate_fn = make_simulate_fn(sys, exogenous_filter_spec)
@@ -133,31 +146,41 @@ def make_logprob_fns(
         if not maximize_failure:
             robustness = jax.nn.softplus(robustness)
 
-        return robustness
+        # lower robustness -> higher logprob -> higher probability
+        return -robustness
 
     return prior_logprob_fn, posterior_logprob_fn
 
 
-def smc_inference_loop(rng_key, smc_kernel, initial_state, n_tempering_steps: int):
+@jaxtyped
+@beartype
+def inference_loop(
+    rng_key: Integer[Array, "..."],
+    kernel,
+    initial_state,
+    num_samples: int,
+) -> Tuple[CentralizedDynamicDispatch, PyTree]:
     """
-    Run the tempered SMC algorithm.
+    Run the given kernel for the specified number of steps, returning the samples.
 
-    Smoothly increase the tempering parameter from 0 to 1 in n_tempering_steps
+    args:
+        rng_key: JAX rng key
+        kernel: the MCMC kernel to run
+        initial_state: the starting state for the sampler
+        num_samples: how many samples to take
+    returns:
+        The sampled exogenous parameters and log probabilities
     """
 
     @jax.jit
-    def one_step(carry, lmbda):
-        i, state, key = carry
-        key, subkey = jax.random.split(key, 2)
-        state, _ = smc_kernel(subkey, state, lmbda)
-        new_carry = i + 1, state, key
-        return new_carry, None
+    def one_step(state, rng_key):
+        state, _ = kernel(rng_key, state)
+        return state, state
 
-    (n_iter, final_state, _), _ = jax.lax.scan(
-        one_step, (0, initial_state, rng_key), jnp.linspace(0, 1.0, n_tempering_steps)
-    )
+    keys = jax.random.split(rng_key, num_samples)
+    _, states = jax.lax.scan(one_step, initial_state, keys)
 
-    return n_iter, final_state
+    return states.position, states.logprob
 
 
 if __name__ == "__main__":
@@ -171,77 +194,83 @@ if __name__ == "__main__":
 
     # Compile log likelihood functions
     prediction_error_stddev = 0.05
+    wind_generation_limits_stddev = 0.05
+    smoothing = 1e3
     prior_logprob, posterior_logprob = make_logprob_fns(
         sys,
         exogenous_filter_spec,
         prediction_error_stddev=prediction_error_stddev,
-        smoothing=10.0,
+        wind_generation_limits_stddev=wind_generation_limits_stddev,
+        smoothing=smoothing,
         maximize_failure=True,
     )
 
-    # Make a tempered SMC kernel (with MALA inner kernel) to sample failures
-    n_samples = 100
-    n_tempering_steps = 10
+    # Make a MALA kernel for MCMC sampling
+    mala_step_size = 2e-3
+    n_samples = 5_000
+    n_chains = 2
     mala_parameters = {"step_size": 1e-4}
-    tempered = blackjax.tempered_smc(
-        prior_logprob,
-        posterior_logprob,
-        blackjax.mala,
-        mala_parameters,
-        resampling.systematic,
-        mcmc_iter=100,
+    mala = blackjax.mala(
+        lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
     )
 
     # Initialize the exogenous parameters randomly
-    baseline_exogenous_parameters = eqx.filter(sys, exogenous_filter_spec)
-
-    def generate_random_exogenous_parameters(key):
-        prediction_error = jax.random.multivariate_normal(
-            key, jnp.zeros(T_sim), prediction_error_stddev ** 2 * jnp.eye(T_sim)
-        )
-        return eqx.tree_at(
-            lambda spec: [
-                spec.intermittent_limits_prediction_err,
-            ],
-            baseline_exogenous_parameters,
-            replace=(prediction_error,),
-        )
-
     key = jax.random.PRNGKey(0)
-    initial_smc_state = jax.vmap(generate_random_exogenous_parameters)(
-        jax.random.split(key, n_samples)
-    )
-    initial_smc_state = tempered.init(initial_smc_state)
+    key, subkey = jax.random.split(key)
 
-    # Run SMC
-    n_iter, smc_samples = smc_inference_loop(
-        key, tempered.step, initial_smc_state, n_tempering_steps
+    baseline_exogenous_parameters = eqx.filter(sys, exogenous_filter_spec)
+    prediction_error = jax.random.multivariate_normal(
+        subkey, jnp.zeros(T_sim), prediction_error_stddev ** 2 * jnp.eye(T_sim)
+    ).reshape(-1, 1)
+    wind_generation_limits = jax.random.multivariate_normal(
+        subkey, jnp.ones(T_sim), wind_generation_limits_stddev ** 2 * jnp.eye(T_sim)
+    ).reshape(-1, 1)
+    initial_position = eqx.tree_at(
+        lambda spec: [
+            spec.intermittent_limits_prediction_err,
+            spec.intermittent_true_limits,
+        ],
+        baseline_exogenous_parameters,
+        replace=(prediction_error, wind_generation_limits),
     )
-    print("Number of steps in the adaptive algorithm: ", n_iter.item())
+    initial_state = mala.init(initial_position)
+
+    # Sample
+    single_chain = lambda key: inference_loop(key, mala.step, initial_state, n_samples)
+
+    keys = jax.random.split(key, n_chains)
+    start = time.perf_counter()
+    # samples = [single_chain(key) for key in keys]
+    samples, logprob = single_chain(keys[0])
+    end = time.perf_counter()
+    print(f"Sampled {n_samples} steps in {(end - start):.2f} s")
 
     # Simulate and plot the results
     simulate_fn = make_simulate_fn(sys, exogenous_filter_spec)
-    behaviors = jax.vmap(simulate_fn)(smc_samples.particles)
+    behaviors = jax.vmap(simulate_fn)(samples)
+
+    spec = make_service_constraint()
+
+    @jax.jit
+    def robustness_fn(load_served):
+        t = jnp.arange(T_sim - T_horizon) * 5
+        signal = jnp.vstack((t.reshape(1, -1), load_served))
+        robustness = spec(signal, smoothing=smoothing)[1, 0]
+        return robustness
 
     load_served = behaviors["load_served"]
     dispatchable_schedule = behaviors["dispatchable_schedule"]
     intermittent_schedule = behaviors["intermittent_schedule"]
-
-    spec = make_service_constraint()
-
-    def robustness_fn(load_served):
-        t = jnp.arange(T_sim - T_horizon) * 5
-        signal = jnp.vstack((t.reshape(1, -1), load_served))
-        robustness = spec(signal)[1, 0]
-        return robustness
-
     robustness = jax.vmap(robustness_fn)(load_served)
 
-    # Plot the histogram of robustnesses and the worst disturbance
-    fig, (hist_ax, worst_ax) = plt.subplots(1, 2, figsize=(16, 8))
+    # Plot results
+    fig, ((hist_ax, worst_ax), (r_ax, _)) = plt.subplots(2, 2, figsize=(16, 8))
 
-    hist_ax.hist(robustness, bins=ceil(n_samples / 10))
+    # Plot a robustness histogram
+    sns.histplot(x=robustness, ax=hist_ax)
+    r_ax.set_xlabel("Robustness")
 
+    # Plot the system performance for the worst trace found
     worst_disturbance_idx = jnp.argmin(robustness)
     t = jnp.arange(T_sim - T_horizon) * 5
     worst_ax.plot(t, load_served[worst_disturbance_idx], label="All generation")
@@ -255,6 +284,9 @@ if __name__ == "__main__":
     worst_ax.set_ylabel("Fraction of load served")
     worst_ax.legend()
 
-    plt.savefig(
-        f"plts/3_bus_contingency_{n_samples}_particles_{n_tempering_steps}_steps.png"
-    )
+    # Visualize the convergence of the sampler
+    r_ax.plot(robustness)
+    r_ax.set_ylabel("Robustness")
+    r_ax.set_xlabel("# steps")
+
+    plt.savefig(f"plts/dispatch/3bus/{n_samples}_steps_lr_{mala_step_size:0.1e}.png")

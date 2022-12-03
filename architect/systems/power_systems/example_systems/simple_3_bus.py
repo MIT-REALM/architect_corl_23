@@ -43,8 +43,8 @@ def make_3_bus_system(
         intermittent_costs=jnp.array([[0.0, 14.5]]),
         intermittent_ramp_rates=jnp.array([1.0]),
         intermittent_true_limits=jnp.array(
-            # [[[0.0, 1.0]] if t < 10 else [[0.0, 0.8]] for t in range(T_sim)]
-            [[[0.0, 1.0]] for _ in range(T_sim)]
+            # [[1.0] if t < 10 else [0.8] for t in range(T_sim)]
+            [[1.0] for _ in range(T_sim)]
         ),
         intermittent_limits_prediction_err=prediction_errors,
         # --------------
