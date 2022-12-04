@@ -207,9 +207,8 @@ if __name__ == "__main__":
 
     # Make a MALA kernel for MCMC sampling
     mala_step_size = 2e-3
-    n_samples = 5_000
+    n_samples = 2_0
     n_chains = 2
-    mala_parameters = {"step_size": 1e-4}
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
     )
@@ -245,48 +244,71 @@ if __name__ == "__main__":
     end = time.perf_counter()
     print(f"Sampled {n_samples} steps in {(end - start):.2f} s")
 
-    # Simulate and plot the results
+    # Simulate the worst likely disturbance and plot the results
+    worst_disturbance_idx = jnp.argmax(logprob)
+    worst_likely_disturbance = jtu.tree_map(
+        lambda leaf: leaf[worst_disturbance_idx] if leaf is not None else leaf, samples
+    )
     simulate_fn = make_simulate_fn(sys, exogenous_filter_spec)
-    behaviors = jax.vmap(simulate_fn)(samples)
+    behavior = simulate_fn(worst_likely_disturbance)
 
-    spec = make_service_constraint()
+    load_served = behavior["load_served"]
+    dispatchable_schedule = behavior["dispatchable_schedule"]
+    intermittent_schedule = behavior["intermittent_schedule"]
+    limits = worst_likely_disturbance.intermittent_true_limits[:-T_horizon]
+    predictions = worst_likely_disturbance.intermittent_limits_prediction_err[
+        :-T_horizon
+    ]
 
-    @jax.jit
-    def robustness_fn(load_served):
-        t = jnp.arange(T_sim - T_horizon) * 5
-        signal = jnp.vstack((t.reshape(1, -1), load_served))
-        robustness = spec(signal, smoothing=smoothing)[1, 0]
-        return robustness
+    # behaviors = jax.vmap(simulate_fn)(samples)
+    # spec = make_service_constraint()
 
-    load_served = behaviors["load_served"]
-    dispatchable_schedule = behaviors["dispatchable_schedule"]
-    intermittent_schedule = behaviors["intermittent_schedule"]
-    robustness = jax.vmap(robustness_fn)(load_served)
+    # @jax.jit
+    # def robustness_fn(load_served):
+    #     t = jnp.arange(T_sim - T_horizon) * 5
+    #     signal = jnp.vstack((t.reshape(1, -1), load_served))
+    #     robustness = spec(signal, smoothing=smoothing)[1, 0]
+    #     return robustness
+
+    # load_served = behaviors["load_served"]
+    # dispatchable_schedule = behaviors["dispatchable_schedule"]
+    # intermittent_schedule = behaviors["intermittent_schedule"]
+    # robustness = jax.vmap(robustness_fn)(load_served)
 
     # Plot results
     fig, ((hist_ax, worst_ax), (r_ax, _)) = plt.subplots(2, 2, figsize=(16, 8))
 
-    # Plot a robustness histogram
-    sns.histplot(x=robustness, ax=hist_ax)
-    r_ax.set_xlabel("Robustness")
-
-    # Plot the system performance for the worst trace found
-    worst_disturbance_idx = jnp.argmin(robustness)
-    t = jnp.arange(T_sim - T_horizon) * 5
-    worst_ax.plot(t, load_served[worst_disturbance_idx], label="All generation")
-    worst_ax.plot(
-        t, dispatchable_schedule.sum(axis=-1)[worst_disturbance_idx], label="Diesel"
-    )
-    worst_ax.plot(
-        t, intermittent_schedule.sum(axis=-1)[worst_disturbance_idx], label="Wind"
-    )
-    worst_ax.set_xlabel("Time (min)")
-    worst_ax.set_ylabel("Fraction of load served")
-    worst_ax.legend()
+    # Plot the logprobability histogram
+    sns.histplot(x=logprob, ax=hist_ax)
+    hist_ax.set_xlabel("Log probability")
 
     # Visualize the convergence of the sampler
-    r_ax.plot(robustness)
-    r_ax.set_ylabel("Robustness")
+    r_ax.plot(logprob)
+    r_ax.set_ylabel("Log probability")
     r_ax.set_xlabel("# steps")
+
+    # Plot the system performance for the worst trace found
+    t = jnp.arange(T_sim - T_horizon) * 5
+    worst_ax.plot(t, load_served, label="All generation")
+    worst_ax.plot(t, dispatchable_schedule.sum(axis=-1), label="Diesel")
+    worst_ax.plot(
+        t,
+        intermittent_schedule.sum(axis=-1),
+        label="Scheduled wind",
+        color="green",
+    )
+    worst_ax.plot(
+        t, limits.sum(axis=-1), label="Wind limit (true)", color="green", linestyle="--"
+    )
+    worst_ax.plot(
+        t,
+        limits.sum(axis=-1) + predictions.sum(axis=-1),
+        label="Wind limit (predicted)",
+        color="green",
+        linestyle=":",
+    )
+    worst_ax.set_xlabel("Time (min)")
+    worst_ax.set_ylabel("Power / total load")
+    worst_ax.legend()
 
     plt.savefig(f"plts/dispatch/3bus/{n_samples}_steps_lr_{mala_step_size:0.1e}.png")
