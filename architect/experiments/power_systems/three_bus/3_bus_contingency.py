@@ -193,8 +193,8 @@ if __name__ == "__main__":
     exogenous_filter_spec = ep_filter_spec(sys)
 
     # Compile log likelihood functions
-    prediction_error_stddev = 0.05
-    wind_generation_limits_stddev = 0.05
+    prediction_error_stddev = 0.2
+    wind_generation_limits_stddev = 0.2
     smoothing = 1e3
     prior_logprob, posterior_logprob = make_logprob_fns(
         sys,
@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
     # Make a MALA kernel for MCMC sampling
     mala_step_size = 2e-3
-    n_samples = 2_0
+    n_samples = 10_000
     n_chains = 2
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
@@ -311,4 +311,6 @@ if __name__ == "__main__":
     worst_ax.set_ylabel("Power / total load")
     worst_ax.legend()
 
-    plt.savefig(f"plts/dispatch/3bus/{n_samples}_steps_lr_{mala_step_size:0.1e}.png")
+    plt.savefig(
+        f"plts/dispatch/3bus/sigma_2e-1_{n_samples}_steps_lr_{mala_step_size:0.1e}.png"
+    )
