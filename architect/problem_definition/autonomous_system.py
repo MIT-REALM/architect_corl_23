@@ -1,5 +1,6 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC
 
+import jax.tree_util as jtu
 import equinox as eqx
 from jaxtyping import Array, Float, PyTree
 
@@ -28,7 +29,6 @@ class AutonomousSystem(eqx.Module, ABC):
         """Simulate the behavior of this AutonomousSystem"""
         return self.simulate()
 
-    @abstractmethod
     def simulate(self) -> PyTree[Float[Array, "..."]]:
         """
         Simulate the behavior of this AutonomousSystem.
@@ -38,30 +38,26 @@ class AutonomousSystem(eqx.Module, ABC):
         """
         raise NotImplementedError()
 
-    @abstractproperty
     def dp_filter_spec(self) -> PyTree[bool]:
         """Returns a PyTree filter selecting only the design parameters."""
-        # # Example of how to set up a parameter filter
-        # filter_spec = jtu.tree_map(lambda _: False, self)
+        # Example of how to set up a parameter filter
+        filter_spec = jtu.tree_map(lambda _: False, self)
         # filter_spec = eqx.tree_at(
         #     lambda spec: spec.design_parameters,
         #     filter_spec,
         #     replace=True,
         # )
 
-        # return filter_spec
-        pass
+        return filter_spec
 
-    @abstractproperty
     def ep_filter_spec(self) -> PyTree[bool]:
         """Returns a PyTree filter selecting only the exogenous parameters."""
-        # # Example of how to set up a parameter filter
-        # filter_spec = jtu.tree_map(lambda _: False, self)
+        # Example of how to set up a parameter filter
+        filter_spec = jtu.tree_map(lambda _: False, self)
         # filter_spec = eqx.tree_at(
         #     lambda spec: spec.exogenous_parameters,
         #     filter_spec,
         #     replace=True,
         # )
 
-        # return filter_spec
-        pass
+        return filter_spec

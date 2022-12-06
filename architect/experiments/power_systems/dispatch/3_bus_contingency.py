@@ -88,6 +88,7 @@ def make_logprob_fns(
     exogenous_filter_spec: PyTree,
     prediction_error_stddev: float = 0.05,
     wind_generation_limits_stddev: float = 0.05,
+    L: float = 1.0,
     smoothing: float = 10.0,
     maximize_failure: bool = True,
 ):
@@ -100,6 +101,7 @@ def make_logprob_fns(
             exogenous factors
         prediction_error_stddev: the standard deviation of prediction error
         wind_generation_limits_stddev: the standard deviation of wind upper limits
+        L: scaling to apply to the robustness.
         smoothing: the smoothing parameter for the STL specification (higher = stiffer)
         maximize_failure: if True, prioritize sampling cases where there is more
             failure. Otherwise, treat all failures similarly.
@@ -147,7 +149,7 @@ def make_logprob_fns(
             robustness = jax.nn.softplus(robustness)
 
         # lower robustness -> higher logprob -> higher probability
-        return -robustness
+        return -L * robustness
 
     return prior_logprob_fn, posterior_logprob_fn
 
@@ -193,21 +195,23 @@ if __name__ == "__main__":
     exogenous_filter_spec = ep_filter_spec(sys)
 
     # Compile log likelihood functions
-    prediction_error_stddev = 0.2
-    wind_generation_limits_stddev = 0.2
+    prediction_error_stddev = 0.05
+    wind_generation_limits_stddev = 0.05
     smoothing = 1e3
+    L = 1e1
     prior_logprob, posterior_logprob = make_logprob_fns(
         sys,
         exogenous_filter_spec,
         prediction_error_stddev=prediction_error_stddev,
         wind_generation_limits_stddev=wind_generation_limits_stddev,
+        L=1e2,
         smoothing=smoothing,
         maximize_failure=True,
     )
 
     # Make a MALA kernel for MCMC sampling
-    mala_step_size = 2e-3
-    n_samples = 10_000
+    mala_step_size = 1e-4
+    n_samples = 100_000
     n_chains = 2
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
@@ -312,5 +316,5 @@ if __name__ == "__main__":
     worst_ax.legend()
 
     plt.savefig(
-        f"plts/dispatch/3bus/sigma_2e-1_{n_samples}_steps_lr_{mala_step_size:0.1e}.png"
+        f"plts/dispatch/3bus/L_{L:0.1e}_{n_samples}_steps_lr_{mala_step_size:0.1e}.png"
     )
