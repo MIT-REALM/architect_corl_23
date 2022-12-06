@@ -6,7 +6,7 @@ flake8
 beartype
 
 # Standard utility packages
-numpy
+numpy>=1.22
 matplotlib
 celluloid
 seaborn
