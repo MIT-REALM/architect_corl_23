@@ -48,7 +48,7 @@ def inference_loop(
 
 if __name__ == "__main__":
     # Make the test system
-    L = 100.0
+    L = 1e2
     sys = make_14_bus_network(L)
 
     # Let's start by trying to solve the ACOPF problem for the nominal system
@@ -58,10 +58,10 @@ if __name__ == "__main__":
     posterior_logprob = lambda dispatch: -sys(dispatch, network).potential
 
     # Make a MALA kernel for MCMC sampling
-    mala_step_size = 1e-4
-    n_samples = 10_000_000
-    warmup_samples = 1_000_000
-    n_chains = 1
+    mala_step_size = 1e-5
+    n_samples = 100_000
+    warmup_samples = 10_000
+    n_chains = 10
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
     )
@@ -96,7 +96,14 @@ if __name__ == "__main__":
     result = jax.vmap(sys, in_axes=(0, None))(best_dispatch, network)
 
     # Plot the results
-    fig, axs = plt.subplots(2, 2, figsize=(16, 8))
+    fig = plt.figure(figsize=(16, 16), constrained_layout=True)
+    axs = fig.subplot_mosaic(
+        [
+            ["constraints", "cost"],
+            ["trace", "logprob_hist"],
+            ["generation", "generation"],
+        ]
+    )
 
     # Plot the violations at the best dispatch from each chain
     sns.swarmplot(
@@ -105,25 +112,47 @@ if __name__ == "__main__":
             result.Q_violation,
             result.V_violation,
         ],
-        ax=axs[0, 0],
+        ax=axs["constraints"],
     )
-    axs[0, 0].set_xticklabels(["P", "Q", "V"])
-    axs[0, 0].set_ylabel("Constraint Violation")
+    axs["constraints"].set_xticklabels(["P", "Q", "V"])
+    axs["constraints"].set_ylabel("Constraint Violation")
 
-    sns.histplot(x=result.generation_cost, ax=axs[0, 1])
-    axs[0, 1].set_xlabel("Generation cost")
+    sns.histplot(x=result.generation_cost, ax=axs["cost"])
+    axs["cost"].set_xlabel("Generation cost")
 
     # Plot the chain convergence
-    axs[1, 0].plot(logprobs.T)
-    axs[1, 0].set_xlabel("# Samples")
-    axs[1, 0].set_ylabel("Overall log probability")
-    axs[1, 0].vlines(
-        warmup_samples, *axs[1, 0].get_ylim(), colors="k", linestyles="dashed"
+    axs["trace"].plot(logprobs.T)
+    axs["trace"].set_xlabel("# Samples")
+    axs["trace"].set_ylabel("Overall log probability")
+    axs["trace"].vlines(
+        warmup_samples, *axs["trace"].get_ylim(), colors="k", linestyles="dashed"
     )
 
     # Plot the logprob histogram
-    sns.histplot(x=logprobs[:, warmup_samples:].flatten(), ax=axs[1, 1])
-    axs[1, 1].set_xlabel("Log probability")
+    sns.histplot(x=logprobs[:, warmup_samples:].flatten(), ax=axs["logprob_hist"])
+    axs["logprob_hist"].set_xlabel("Log probability")
+
+    # Plot the generations along with their limits
+    bus = jnp.arange(sys.n_bus)
+    P_min, P_max = sys.bus_active_limits.T
+    for i in range(n_chains):
+        P = result.P[i, :]
+        lower_error = P - P_min
+        upper_error = P_max - P
+        errs = jnp.vstack((lower_error, upper_error))
+        axs["generation"].errorbar(
+            bus,
+            P,
+            yerr=errs,
+            linestyle="None",
+            marker="o",
+            markersize=10,
+            linewidth=3.0,
+            capsize=10.0,
+            capthick=3.0
+        )
+    axs["generation"].set_xlabel("Active power injection (p.u.)")
+    axs["generation"].legend()
 
     plt.savefig(
         (

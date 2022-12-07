@@ -225,8 +225,27 @@ class ACOPF(AutonomousSystem):
             + self.bus_reactive_linear_costs * jnp.abs(Q)
         ).sum()
 
+        # Compute a normalizing factor for generation cost in the mean-P case
+        P_mean = (P_max - P_min) / 2.0
+        cost_normalization = jnp.abs(
+            (
+                self.bus_active_quadratic_costs * P_mean ** 2
+                + self.bus_active_linear_costs * P_mean
+            ).sum()
+        )
+
+        # Compute a normalizing factor for the constraints as well
+        Q_mean = (Q_max - Q_min) / 2.0
+        V_mean = (V_max - V_min) / 2.0
+        constraint_normalization = (
+            jnp.abs(P_mean).sum() + jnp.abs(Q_mean).sum() + jnp.abs(V_mean).sum()
+        )
+
         # Combine cost and violations to get the potential
-        potential = generation_cost + self.constraint_penalty * total_violation
+        potential = (
+            generation_cost / cost_normalization
+            + self.constraint_penalty * total_violation / constraint_normalization
+        )
 
         result = ACOPFResult(
             dispatch,
@@ -251,8 +270,8 @@ class ACOPF(AutonomousSystem):
         Probability is not necessarily normalized.
 
         We assume that the prior distribution for the dispatch is uniform with respect
-        to both voltage amplitude and angle. Voltage amplitude is uniform between
-        the specified min and max values, while angle is uniform on [-pi, pi].
+        to voltage amplitude between the specified min and max values, while angle is
+        assumed to be Gaussian centered at 0 with standard deviation pi/4.
 
         We use a smooth approximation of the uniform distribution.
         """
@@ -265,10 +284,12 @@ class ACOPF(AutonomousSystem):
         V_min, V_max = self.bus_voltage_limits.T
         logprob = log_smooth_uniform(dispatch.voltage_amplitudes, V_min, V_max).sum()
 
-        theta_min, theta_max = -jnp.pi, jnp.pi
-        logprob += log_smooth_uniform(
-            dispatch.voltage_angles, theta_min, theta_max
-        ).sum()
+        sigma_theta = jnp.pi / 4
+        logprob += jax.scipy.stats.multivariate_normal.logpdf(
+            dispatch.voltage_angles,
+            mean=jnp.zeros(self.n_bus),
+            cov=sigma_theta ** 2 * jnp.eye(self.n_bus),
+        )
 
         return logprob
 
@@ -278,7 +299,7 @@ class ACOPF(AutonomousSystem):
         """
         Sample a random dispatch from the uniform distribution
 
-            |V| x theta \sim [V_min, V_max] x [-pi, pi]
+            |V| x theta \sim [V_min, V_max] x N(0, pi/4)
 
         args:
             key: PRNG key to use for sampling
@@ -290,9 +311,10 @@ class ACOPF(AutonomousSystem):
             amplitude_key, shape=(self.n_bus,), minval=V_min, maxval=V_max
         )
 
-        theta_min, theta_max = -jnp.pi, jnp.pi
-        voltage_angles = jrandom.uniform(
-            angle_key, shape=(self.n_bus,), minval=theta_min, maxval=theta_max
+        sigma_theta = jnp.pi / 4
+        voltage_angles = jrandom.multivariate_normal(
+            angle_key, mean=jnp.zeros(self.n_bus),
+            cov=sigma_theta ** 2 * jnp.eye(self.n_bus),
         )
 
         return Dispatch(voltage_amplitudes, voltage_angles)
