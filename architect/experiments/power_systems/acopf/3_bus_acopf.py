@@ -63,8 +63,8 @@ if __name__ == "__main__":
 
     # Make a MALA kernel for MCMC sampling
     mala_step_size = 1e-5
-    n_samples = 50_000
-    warmup_samples = 5_000
+    n_samples = 30_000
+    warmup_samples = 20_000
     n_chains = 10
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
