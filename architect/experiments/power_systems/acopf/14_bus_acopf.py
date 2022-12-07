@@ -48,19 +48,23 @@ def inference_loop(
 
 if __name__ == "__main__":
     # Make the test system
-    L = 1e2
+    L = 100.0
+    repair_steps = 5
+    repair_lr = 1e-6
     sys = make_14_bus_network(L)
 
     # Let's start by trying to solve the ACOPF problem for the nominal system
     network = sys.nominal_network
     prior_logprob = sys.dispatch_prior_logprob
     # Remember the negative to make lower costs more likely!
-    posterior_logprob = lambda dispatch: -sys(dispatch, network).potential
+    posterior_logprob = lambda dispatch: -sys(
+        dispatch, network, repair_steps, repair_lr
+    ).potential
 
     # Make a MALA kernel for MCMC sampling
     mala_step_size = 1e-5
-    n_samples = 100_000
-    warmup_samples = 10_000
+    n_samples = 50_000
+    warmup_samples = 5_000
     n_chains = 10
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
@@ -93,7 +97,9 @@ if __name__ == "__main__":
         lambda leaf: leaf[jnp.arange(0, n_chains), most_likely_idx],
         samples,
     )
-    result = jax.vmap(sys, in_axes=(0, None))(best_dispatch, network)
+    result = jax.vmap(sys, in_axes=(0, None, None, None))(
+        best_dispatch, network, 100, repair_lr
+    )
 
     # Plot the results
     fig = plt.figure(figsize=(16, 16), constrained_layout=True)
@@ -149,14 +155,15 @@ if __name__ == "__main__":
             markersize=10,
             linewidth=3.0,
             capsize=10.0,
-            capthick=3.0
+            capthick=3.0,
         )
     axs["generation"].set_xlabel("Active power injection (p.u.)")
-    axs["generation"].legend()
 
     plt.savefig(
         (
             f"plts/acopf/14bus/L_{L:0.1e}_{n_samples}_samples_"
-            f"{n_chains}_chains_lr_{mala_step_size:0.1e}.png"
+            f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}_"
+            f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
+            ".png"
         )
     )

@@ -2,8 +2,9 @@ import jax
 import jax.experimental.sparse as jsparse
 import jax.numpy as jnp
 import jax.random as jrandom
+import jax.tree_util as jtu
 from beartype import beartype
-from beartype.typing import NamedTuple
+from beartype.typing import NamedTuple, Tuple
 from jax.nn import log_sigmoid, sigmoid, relu
 from jaxtyping import Array, Float, Inexact, Integer, jaxtyped
 
@@ -183,63 +184,165 @@ class ACOPF(AutonomousSystem):
 
     @jaxtyped
     @beartype
-    def __call__(self, dispatch: Dispatch, network: Network) -> ACOPFResult:
+    def power_injections(
+        self, dispatch: Dispatch, network: Network
+    ) -> Tuple[Float[Array, " n_bus"], Float[Array, " n_bus"]]:
         """
-        Computes the power flows associated with the proposed bus voltages and angles.
+        Compute the real and reactive power injections at each bus.
 
         args:
-            dispatch: the voltage dispatch to use when solving power flow
-            network: the network to use for solving power flow
+            dispatch: the voltage amplitudes and angles
+            network: the network to use to solve the injections
         returns:
-            an ACOPFResult
+            a tuple of real and reactive power injections at each bus
         """
-        Y = network.Y
-
         # Compute the complex voltage at each bus
         V = dispatch.voltage_amplitudes * jnp.exp(dispatch.voltage_angles * 1j)
 
         # Compute the complex current and power that results from the proposed voltages
+        Y = network.Y
         current = jsparse.sparsify(lambda Y, V: jnp.dot(Y, V))(Y, V)
         S = V * current.conj()
 
         # Extract real and reactive power from complex power
         P, Q = S.real, S.imag
 
-        # Compute constraint violations
+        return P, Q
+
+    @jaxtyped
+    @beartype
+    def generation_cost(
+        self, P: Float[Array, " n_bus"], Q: Float[Array, " n_bus"]
+    ) -> Float[Array, ""]:
+        """
+        Compute the cost of generation given power injections.
+        """
+        quad_cost = self.bus_active_quadratic_costs * P ** 2
+        lin_cost = self.bus_active_linear_costs * P
+        q_cost = self.bus_reactive_linear_costs * jnp.abs(Q)
+        return (quad_cost + lin_cost + q_cost).sum()
+
+    @jaxtyped
+    @beartype
+    def constraint_violations(
+        self, dispatch: Dispatch, P: Float[Array, " n_bus"], Q: Float[Array, " n_bus"]
+    ) -> Float[Array, " n_constraints"]:
+        """
+        Compute an array of constraint violations for:
+        - Active power limits
+        - Reactive power limits
+        - Voltage amplitude limits
+        """
+        constraint_violations = []
+
+        # Active power limits
         P_min, P_max = self.bus_active_limits.T
         P_violation = (relu(P - P_max) + relu(P_min - P)).sum()
+        constraint_violations.append(P_violation)
+
+        # Reactive power limits
         Q_min, Q_max = self.bus_reactive_limits.T
         Q_violation = (relu(Q - Q_max) + relu(Q_min - Q)).sum()
+        constraint_violations.append(Q_violation)
+
+        # Voltage amplitude limits
         V_min, V_max = self.bus_voltage_limits.T
         V_violation = (
             relu(dispatch.voltage_amplitudes - V_max)
             + relu(V_min - dispatch.voltage_amplitudes)
         ).sum()
+        constraint_violations.append(V_violation)
 
-        total_violation = P_violation + Q_violation + V_violation
+        return jnp.stack(constraint_violations)
+
+    @jaxtyped
+    @beartype
+    def repair_dispatch(
+        self,
+        dispatch: Dispatch,
+        network: Network,
+        num_steps: int = 10,
+        step_size: float = 1e-4,
+    ) -> Dispatch:
+        """
+        Use gradient descent to locally modify the dispatch to satisfy the constraints.
+
+        args:
+            dispatch: the voltage dispatch to repair
+            network: the network in use
+            num_steps: how many gradient steps to take
+            step_size: the size of the repair steps
+        returns:
+            a repaired dispatch (not guaranteed to satisfy the constraints, but should
+            be closer to feasible)
+        """
+        # Define the loss function to repair
+        def loss(dispatch):
+            P, Q = self.power_injections(dispatch, network)
+            violation = self.constraint_violations(dispatch, P, Q).sum()
+            return violation
+
+        # Define a function to execute one repair step
+        V_min, V_max = self.bus_voltage_limits.T
+
+        def repair_step(_, dispatch):
+            # Take a gradient step
+            grads = jax.grad(loss)(dispatch)
+            dispatch = jtu.tree_map(lambda d, g: d - step_size * g, dispatch, grads)
+            # Project voltage amplitudes to limits
+            fixed_voltage_amplitudes = jnp.clip(
+                dispatch.voltage_amplitudes, a_min=V_min, a_max=V_max
+            )
+            dispatch = Dispatch(fixed_voltage_amplitudes, dispatch.voltage_angles)
+            return dispatch
+
+        # Execute the step function a bunch of times and return the result
+        repaired_dispatch = jax.lax.fori_loop(0, num_steps, repair_step, dispatch)
+        return repaired_dispatch
+
+    @jaxtyped
+    @beartype
+    def __call__(
+        self,
+        dispatch: Dispatch,
+        network: Network,
+        repair_steps: int = 10,
+        repair_lr: float = 1e-4,
+    ) -> ACOPFResult:
+        """
+        Computes the power flows associated with the proposed bus voltages and angles.
+
+        args:
+            dispatch: the voltage dispatch to use when solving power flow
+            network: the network to use for solving power flow
+            repair_steps: how many steps to take to correct infeasible dispatches
+            repair_lr: the size of the repair steps
+        returns:
+            an ACOPFResult including the repaired dispatch
+        """
+        # Repair the dispatch using gradient descent (if necessary) to satisfy the
+        # constraints
+        dispatch = self.repair_dispatch(dispatch, network, repair_steps, repair_lr)
+
+        # Compute the power injections for the repaired dispatch
+        P, Q = self.power_injections(dispatch, network)
+
+        # Compute constraint violations
+        constraint_violations = self.constraint_violations(dispatch, P, Q)
+        total_violation = constraint_violations.sum()
 
         # Compute the net cost of generation
-        generation_cost = (
-            self.bus_active_quadratic_costs * P ** 2
-            + self.bus_active_linear_costs * P
-            + self.bus_reactive_linear_costs * jnp.abs(Q)
-        ).sum()
+        generation_cost = self.generation_cost(P, Q)
 
         # Compute a normalizing factor for generation cost in the mean-P case
+        P_min, P_max = self.bus_active_limits.T
+        Q_min, Q_max = self.bus_reactive_limits.T
         P_mean = (P_max - P_min) / 2.0
-        cost_normalization = jnp.abs(
-            (
-                self.bus_active_quadratic_costs * P_mean ** 2
-                + self.bus_active_linear_costs * P_mean
-            ).sum()
-        )
+        Q_mean = (Q_max - Q_min) / 2.0
+        cost_normalization = jnp.abs(self.generation_cost(P_mean, Q_mean))
 
         # Compute a normalizing factor for the constraints as well
-        Q_mean = (Q_max - Q_min) / 2.0
-        V_mean = (V_max - V_min) / 2.0
-        constraint_normalization = (
-            jnp.abs(P_mean).sum() + jnp.abs(Q_mean).sum() + jnp.abs(V_mean).sum()
-        )
+        constraint_normalization = jnp.maximum(jnp.abs(P_max), jnp.abs(P_min)).sum()
 
         # Combine cost and violations to get the potential
         potential = (
@@ -252,9 +355,9 @@ class ACOPF(AutonomousSystem):
             network,
             P,
             Q,
-            P_violation,
-            Q_violation,
-            V_violation,
+            constraint_violations[0],
+            constraint_violations[1],
+            constraint_violations[2],
             generation_cost,
             potential,
         )
@@ -313,7 +416,8 @@ class ACOPF(AutonomousSystem):
 
         sigma_theta = jnp.pi / 4
         voltage_angles = jrandom.multivariate_normal(
-            angle_key, mean=jnp.zeros(self.n_bus),
+            angle_key,
+            mean=jnp.zeros(self.n_bus),
             cov=sigma_theta ** 2 * jnp.eye(self.n_bus),
         )
 
