@@ -136,7 +136,6 @@ def make_14_bus_network(penalty: float = 10.0) -> ACOPF:
     P_load_min = jnp.array([12.5, 45.0, 25.0, 5.0, 7.5, 15.0, 5.0, 2.5, 2.5, 7.5, 7.5])
     Q_load_max = jnp.zeros_like(P_load_max) + 20.0
     Q_load_min = -Q_load_max
-    load_benefit = 100.0 + jnp.zeros_like(P_load_max)
     reactive_power_cost = jnp.zeros((n_bus,))
 
     # Convert these into per-bus limits
@@ -160,7 +159,6 @@ def make_14_bus_network(penalty: float = 10.0) -> ACOPF:
 
     bus_P_linear_costs = jnp.zeros((n_bus,))
     bus_P_linear_costs = bus_P_linear_costs.at[generator_buses].add(gen_linear_costs)
-    bus_P_linear_costs = bus_P_linear_costs.at[load_buses].add(-load_benefit)
 
     bus_P_quad_costs = jnp.zeros((n_bus,))
     bus_P_quad_costs = bus_P_quad_costs.at[generator_buses].add(gen_quad_costs)

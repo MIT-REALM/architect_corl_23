@@ -34,7 +34,7 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         bus_reactive_limits=jnp.array([[-2.0, 2.0], [-2.0, 2.0], [-2.0, 2.0]]),
         bus_voltage_limits=jnp.array([[0.9, 1.1], [0.9, 1.1], [0.9, 1.1]]),
         # Costs
-        bus_active_linear_costs=jnp.array([-10.0, 5.0, 1.0]),
+        bus_active_linear_costs=jnp.array([0.0, 5.0, 1.0]),
         bus_active_quadratic_costs=jnp.array([0.0, 0.0, 0.0]),
         bus_reactive_linear_costs=jnp.array([0.0, 0.1, 0.1]),
         constraint_penalty=penalty,
