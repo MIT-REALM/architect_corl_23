@@ -12,8 +12,8 @@ from beartype.typing import Tuple, Union
 from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.systems.power_systems.acopf import Dispatch, Network
-from architect.systems.power_systems.example_systems.acopf.simple_3_bus import (
-    make_3_bus_network,
+from architect.systems.power_systems.example_systems.acopf.ieee_14_bus import (
+    make_14_bus_network,
 )
 
 
@@ -49,7 +49,7 @@ def inference_loop(
 if __name__ == "__main__":
     # Make the test system
     L = 100.0
-    sys = make_3_bus_network(L)
+    sys = make_14_bus_network(L)
 
     # Let's start by trying to solve the ACOPF problem for the nominal system
     network = sys.nominal_network
@@ -59,9 +59,9 @@ if __name__ == "__main__":
 
     # Make a MALA kernel for MCMC sampling
     mala_step_size = 1e-4
-    n_samples = 100_000
-    warmup_samples = 10_000
-    n_chains = 100
+    n_samples = 10_000_000
+    warmup_samples = 1_000_000
+    n_chains = 1
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
     )
@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     plt.savefig(
         (
-            f"plts/acopf/3bus/L_{L:0.1e}_{n_samples}_samples_"
+            f"plts/acopf/14bus/L_{L:0.1e}_{n_samples}_samples_"
             f"{n_chains}_chains_lr_{mala_step_size:0.1e}.png"
         )
     )

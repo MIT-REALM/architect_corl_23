@@ -19,7 +19,7 @@ from architect.components.specifications.stl.formula import (
 from architect.systems.power_systems.centralized_dynamic_dispatch import (
     CentralizedDynamicDispatch,
 )
-from architect.systems.power_systems.example_systems import make_3_bus_system
+from architect.systems.power_systems.example_systems.dispatch import make_3_bus_system
 
 
 def make_service_constraint() -> STLFormula:
