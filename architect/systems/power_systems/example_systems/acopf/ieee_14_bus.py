@@ -113,11 +113,8 @@ def make_14_bus_network(penalty: float = 10.0) -> ACOPF:
 
     # Now we can load this data into our representation
     nominal_network = Network(
-        lines=lines,
         line_conductances=line_conductances,
         line_susceptances=line_susceptances,
-        shunt_conductances=shunt_conductance,
-        shunt_susceptances=shunt_reactance,
     )
 
     # We need to load in all of the bus data as well for generator capacities
@@ -165,6 +162,9 @@ def make_14_bus_network(penalty: float = 10.0) -> ACOPF:
 
     return ACOPF(
         nominal_network,
+        lines=lines,
+        shunt_conductances=shunt_conductance,
+        shunt_susceptances=shunt_reactance,
         # Limits
         bus_active_limits=bus_P_limits,
         bus_reactive_limits=bus_Q_limits,

@@ -6,7 +6,7 @@ import jax.tree_util as jtu
 from beartype import beartype
 from beartype.typing import NamedTuple, Tuple
 from jax.nn import log_sigmoid, sigmoid, relu
-from jaxtyping import Array, Float, Inexact, Integer, jaxtyped
+from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.problem_definition import AutonomousSystem
 
@@ -36,64 +36,67 @@ class Network(NamedTuple):
     """
     Representation of network connectivity for AC power flow.
 
+    Includes admittances between nodes, but not shunt admittances.
+
     args:
-        lines: n_lines x 2 array of integers specifying bus connections. If [i, j] is
-            a row in this array, then buses i and j will be connected. Each connection
-            should be specified only once (so if [i, j] is included, it is not necessary
-            to include [j, i] as well)
         line_conductances: n_lines-element array of conductances connecting buses.
             If [i, j] is the k-th row of `lines`, then the k-th entry of `conductances`
             contains the conductance connecting bus i and bus j.
         line_susceptances: n_lines-element array of susceptances connecting buses.
             If [i, j] is the k-th row of `lines`, then the k-th entry of `susceptances`
             contains the susceptance connecting bus i and bus j.
-        shunt_conductances: n_lines-element array of shunt conductances connecting buses
-            to ground.
-        shunt_susceptances: n_lines-element array of shunt susceptances connecting buses
-            to ground.
     """
 
-    lines: Integer[Array, "n_lines 2"]
-    line_conductances: Inexact[Array, " n_lines"]
-    line_susceptances: Inexact[Array, " n_lines"]
-    shunt_conductances: Inexact[Array, " n_bus"]
-    shunt_susceptances: Inexact[Array, " n_bus"]
-
-    @property
-    def n_bus(self):
-        """Return the number of buses in this network"""
-        return self.shunt_conductances.shape[0]
+    line_conductances: Float[Array, " n_lines"]
+    line_susceptances: Float[Array, " n_lines"]
 
     @property
     def n_line(self):
         """Return the number of lines in this network"""
         return self.line_conductances.shape[0]
 
-    @property
-    def Y(self):
-        """Compute the nodal admittance matrix for this network"""
+    def Y(
+        self,
+        lines: Integer[Array, "n_lines 2"],
+        shunt_conductances: Float[Array, " n_bus"],
+        shunt_susceptances: Float[Array, " n_bus"],
+    ):
+        """
+        Compute the nodal admittance matrix for this network.
+
+        args:
+            lines: n_lines x 2 array of integers specifying bus connections. If [i, j]
+                is a row in this array, then buses i and j will be connected. Each
+                connection should be specified only once (so if [i, j] is included,
+                it is not necessary to include [j, i] as well)
+            shunt_conductances: n_lines-element array of shunt conductances connecting
+                buses to ground.
+            shunt_susceptances: n_lines-element array of shunt susceptances connecting
+                buses to ground.
+        """
         # Clip all line and shunt conductances to make sure they're non-negative
         line_conductances = jnp.clip(self.line_conductances, a_min=0.0)
-        shunt_conductances = jnp.clip(self.shunt_conductances, a_min=0.0)
+        shunt_conductances = jnp.clip(shunt_conductances, a_min=0.0)
 
         # Assemble conductance and susceptance into complex admittance
         line_admittances = line_conductances + 1j * self.line_susceptances
-        shunt_admittances = shunt_conductances + 1j * self.shunt_susceptances
+        shunt_admittances = shunt_conductances + 1j * shunt_susceptances
 
         # Assemble the admittance matrix from the given data
         # For off-diagonal elements, Y_ij = negative admittance connecting bus i and j
         # For diagonal elements, Y_ii = shunt admittance at bus i - sum of off-diagonal
         #   entries
+        n_bus = shunt_conductances.shape[0]
         Y_off_diagonal = jsparse.BCOO(
-            (-1.0 * line_admittances, self.lines), shape=(self.n_bus, self.n_bus)
+            (-1.0 * line_admittances, lines), shape=(n_bus, n_bus)
         )
         Y_off_diagonal = Y_off_diagonal + Y_off_diagonal.T
 
-        diagonal_indices = jnp.arange(0, self.n_bus).reshape(-1, 1)
+        diagonal_indices = jnp.arange(0, n_bus).reshape(-1, 1)
         diagonal_indices = jnp.hstack((diagonal_indices, diagonal_indices))
         diagonal_entries = shunt_admittances - Y_off_diagonal.sum(axis=1).todense()
         Y_diagonal = jsparse.BCOO(
-            (diagonal_entries, diagonal_indices), shape=(self.n_bus, self.n_bus)
+            (diagonal_entries, diagonal_indices), shape=(n_bus, n_bus)
         )
 
         Y = Y_diagonal + Y_off_diagonal
@@ -135,7 +138,15 @@ class ACOPF(AutonomousSystem):
     # TODO support thermal limits on lines
 
     args:
-        nominal_network: the nominal admittances of the network
+        nominal_network: the nominal admittances of the network lines
+        lines: n_lines x 2 array of integers specifying bus connections. If [i, j]
+            is a row in this array, then buses i and j will be connected. Each
+            connection should be specified only once (so if [i, j] is included,
+            it is not necessary to include [j, i] as well)
+        shunt_conductances: n_lines-element array of shunt conductances connecting
+            buses to ground.
+        shunt_susceptances: n_lines-element array of shunt susceptances connecting
+            buses to ground.
         bus_active_limits: n_bus x 2 array of (min, max) active power limits at each
             bus (positive for generation, negative for load)
         bus_reactive_limits: n_bus x 2 array of (min, max) reactive power limits at
@@ -157,6 +168,9 @@ class ACOPF(AutonomousSystem):
     """
 
     nominal_network: Network
+    lines: Integer[Array, "n_lines 2"]
+    shunt_conductances: Float[Array, " n_bus"]
+    shunt_susceptances: Float[Array, " n_bus"]
 
     bus_active_limits: Float[Array, "n_bus 2"]
     bus_reactive_limits: Float[Array, "n_bus 2"]
@@ -175,7 +189,7 @@ class ACOPF(AutonomousSystem):
     @property
     def n_bus(self) -> int:
         """Return the number of buses in the network"""
-        return self.nominal_network.n_bus
+        return self.shunt_conductances.shape[0]
 
     @property
     def n_line(self) -> int:
@@ -200,8 +214,14 @@ class ACOPF(AutonomousSystem):
         V = dispatch.voltage_amplitudes * jnp.exp(dispatch.voltage_angles * 1j)
 
         # Compute the complex current and power that results from the proposed voltages
-        Y = network.Y
-        current = jsparse.sparsify(lambda Y, V: jnp.dot(Y, V))(Y, V)
+        # TODO@dawsonc convert to sparse admittance matrix once
+        # https://github.com/google/jax/issues/13118 is resolved
+        Y = network.Y(self.lines, self.shunt_conductances, self.shunt_susceptances)
+        Y = Y.todense()
+        # current = jsparse.sparsify(lambda Y, V: Y @ V)(
+        #     Y, V
+        # )
+        current = jnp.dot(Y, V)
         S = V * current.conj()
 
         # Extract real and reactive power from complex power
@@ -561,9 +581,6 @@ class ACOPF(AutonomousSystem):
 
         # Return a new network (shunt admittances are unchanged from nominal)
         return Network(
-            self.nominal_network.lines,
             conductances,
             susceptances,
-            self.nominal_network.shunt_conductances,
-            self.nominal_network.shunt_susceptances,
         )

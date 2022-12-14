@@ -1,3 +1,4 @@
+import json
 import time
 
 import blackjax
@@ -159,11 +160,17 @@ if __name__ == "__main__":
         )
     axs["generation"].set_xlabel("Active power injection (p.u.)")
 
-    plt.savefig(
-        (
-            f"plts/acopf/14bus/L_{L:0.1e}_{n_samples}_samples_"
-            f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}_"
-            f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
-            ".png"
-        )
+    filename = (
+        f"results/acopf/14bus/dispatch_L_{L:0.1e}_{n_samples}_samples_"
+        f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}_"
+        f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
     )
+    plt.savefig(filename + ".png")
+
+    # Save the dispatch
+    dispatch_serializable = {
+        "voltage_amplitudes": best_dispatch.voltage_amplitudes.tolist(),
+        "voltage_angles": best_dispatch.voltage_angles.tolist(),
+    }
+    with open(filename + ".json", "w") as f:
+        json.dump({"best_dispatch": dispatch_serializable}, f)

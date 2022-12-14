@@ -316,5 +316,8 @@ if __name__ == "__main__":
     worst_ax.legend()
 
     plt.savefig(
-        f"plts/dispatch/3bus/L_{L:0.1e}_{n_samples}_steps_lr_{mala_step_size:0.1e}.png"
+        (
+            f"results/dispatch/3bus/L_{L:0.1e}_{n_samples}_steps_"
+            "lr_{mala_step_size:0.1e}.png"
+        )
     )

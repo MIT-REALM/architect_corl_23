@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     plt.savefig(
         (
-            f"plts/acopf/3bus/L_{L:0.1e}_{n_samples}_samples_"
+            f"results/acopf/3bus/L_{L:0.1e}_{n_samples}_samples_"
             f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}_"
             f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
             ".png"

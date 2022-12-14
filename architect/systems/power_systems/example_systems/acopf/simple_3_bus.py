@@ -21,14 +21,14 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         penalty coefficient
     """
     nominal_network = Network(
-        lines=jnp.array([[0, 1], [0, 2]]),
         line_conductances=jnp.array([0.0, 0.0]),
         line_susceptances=jnp.array([1.0, 1.0]),
-        shunt_conductances=jnp.array([0.0, 0.0, 0.0]),
-        shunt_susceptances=jnp.array([0.0, 0.0, 0.0]),
     )
     return ACOPF(
         nominal_network,
+        lines=jnp.array([[0, 1], [0, 2]]),
+        shunt_conductances=jnp.array([0.0, 0.0, 0.0]),
+        shunt_susceptances=jnp.array([0.0, 0.0, 0.0]),
         # Limits
         bus_active_limits=jnp.array([[-1.0, -0.8], [0.0, 1.0], [0.0, 0.5]]),
         bus_reactive_limits=jnp.array([[-2.0, 2.0], [-2.0, 2.0], [-2.0, 2.0]]),
