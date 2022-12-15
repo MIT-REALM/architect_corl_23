@@ -29,10 +29,18 @@ def softmax(x: Float[Array, "..."], smoothing: float = 50):
     return 1 / smoothing * logsumexp(smoothing * x)
 
 
+def softmin(x: Float[Array, "..."], smoothing: float = 50):
+    """Return the soft minimum of the given vector"""
+    return -softmax(-x, smoothing)
+
+
 @jaxtyped
 @beartype
 def compile_dispatch_logprobs(
-    sys: ACOPF, networks: Network
+    sys: ACOPF,
+    networks: Network,
+    repair_steps: int = 5,
+    repair_lr: float = 1e-6,
 ) -> Tuple[Likelihood, Likelihood]:
     """
     Compile the prior and posterior log likelihood functions for the dispatch.
@@ -40,17 +48,19 @@ def compile_dispatch_logprobs(
     args:
         sys: the ACOPF problem being solved
         networks: the set of network contingencies to optimize against
+        repair_steps: how many local repair steps the operator is permitted
+        repair_lr: the stepsize for local repair steps
     returns:
         A tuple containing the prior and posterior log likelihood functions
     """
     prior_logprob = sys.dispatch_prior_logprob
 
     # Negative to make lower costs more likely!
-    posterior_logprob_single_network = lambda dispatch, network: -sys(
+    posterior_logprob_single_network = lambda dispatch, network: sys(
         dispatch, network, repair_steps, repair_lr
     ).potential
-    posterior_logprob = lambda dispatch: softmax(
-        jax.vmap(posterior_logprob_single_network, in_axes=(None, 0, None, None))(
+    posterior_logprob = lambda dispatch: -softmax(
+        jax.vmap(posterior_logprob_single_network, in_axes=(None, 0))(
             dispatch, networks
         )
     )
@@ -61,7 +71,10 @@ def compile_dispatch_logprobs(
 @jaxtyped
 @beartype
 def compile_network_logprobs(
-    sys: ACOPF, dispatches: Network
+    sys: ACOPF,
+    dispatches: Dispatch,
+    repair_steps: int = 5,
+    repair_lr: float = 1e-6,
 ) -> Tuple[Likelihood, Likelihood]:
     """
     Compile the prior and posterior log likelihood functions for the network.
@@ -69,6 +82,8 @@ def compile_network_logprobs(
     args:
         sys: the ACOPF problem being solved
         dispatches: the set of dispatches to optimize against
+        repair_steps: how many local repair steps the operator is permitted
+        repair_lr: the stepsize for local repair steps
     returns:
         A tuple containing the prior and posterior log likelihood functions
     """
@@ -78,8 +93,8 @@ def compile_network_logprobs(
     posterior_logprob_single_dispatch = lambda dispatch, network: sys(
         dispatch, network, repair_steps, repair_lr
     ).potential
-    posterior_logprob = lambda network: softmax(
-        jax.vmap(posterior_logprob_single_dispatch, in_axes=(0, None, None, None))(
+    posterior_logprob = lambda network: softmin(
+        jax.vmap(posterior_logprob_single_dispatch, in_axes=(0, None))(
             dispatches, network
         )
     )
@@ -109,144 +124,183 @@ def run_chain(
     """
 
     @jax.jit
-    def one_step(state, rng_key):
-        state, _ = kernel(rng_key, state)
-        return state, state
+    def one_step(_, carry):
+        # unpack carry
+        state, rng_key = carry
 
-    keys = jrandom.split(rng_key, num_samples)
-    _, states = jax.lax.scan(one_step, initial_state, keys)
+        # Take a step
+        rng_key, subkey = jrandom.split(rng_key)
+        state, _ = kernel(subkey, state)
 
-    last_sample = jtu.tree_map(
-        lambda leaf: leaf[-1],
-        states.position,
-    )
+        # Re-pack the carry and return
+        carry = (state, rng_key)
+        return carry
 
-    return last_sample, states.logprob[-1]
+    initial_carry = (initial_state, rng_key)
+    states, _ = jax.lax.fori_loop(0, num_samples, one_step, initial_carry)
+
+    return states.position, states.logprob
 
 
 @jaxtyped
 @beartype
-def one_smc_step(
+def run_smc(
+    rng_key: Integer[Array, "..."],
     sys: ACOPF,
     dispatches: Dispatch,
     networks: Network,
+    num_smc_steps: int,
     num_substeps: int,
     step_size: float,
-) -> Tuple[Dispatch, Network, Float[Array, " n"]]:
+    repair_steps: int = 5,
+    repair_lr: float = 1e-6,
+) -> Tuple[Dispatch, Float[Array, " n"], Network, Float[Array, " n"]]:
     """
-    Run one step of the sequential monte carlo algorithm for SCACOPF
+    Run the sequential monte carlo algorithm for SC-ACOPF
 
     args:
+        rng_key: JAX rng key
         sys: the ACOPF system to optimize
         dispatches: the initial population of dispatches
         networks: the initial population of networks
+        num_smc_steps: how many steps to take for the top-level SMC algorithm
         num_substeps: the number of steps to run for each set of MCMC chains within
             this step
         stepsize: the size of MCMC step to take on each substep
+        repair_steps: how many local repair steps the operator is permitted
+        repair_lr: the stepsize for local repair steps
     returns:
         - The updated population of dispatches
+        - The overall log probabilities for the dispatches (before the contingencies are
+            generated)
         - The updated population of network contingencies
-        - The overall log probability after updating the contingencies
+        - The overall log probabilities for the contingencies
     """
-    # Compile dispatch logprobs and MCMC kernel
-    dispatch_prior, dispatch_posterior = compile_dispatch_logprobs(sys, networks)
-    dispatch_sampler = blackjax.mala(
-        lambda x: dispatch_prior(x) + dispatch_posterior(x), step_size
+    # Make the function to run one step and jit it
+    @jax.jit
+    def one_smc_step(_, carry):
+        # Unpack the carry
+        rng_key, dispatches, _, networks, _ = carry
+
+        # Compile dispatch logprobs and MCMC kernel
+        dispatch_prior, dispatch_posterior = compile_dispatch_logprobs(
+            sys, networks, repair_steps, repair_lr
+        )
+        dispatch_sampler = blackjax.mala(
+            lambda x: dispatch_prior(x) + dispatch_posterior(x), step_size
+        )
+        # Initialize the dispatch chains
+        initial_dispatch_state = jax.vmap(dispatch_sampler.init)(dispatches)
+        # Run dispatch chains and update dispatches
+        n_dispatch_chains = dispatches.voltage_amplitudes.shape[0]
+        rng_key, sample_key = jrandom.split(rng_key)
+        sample_keys = jrandom.split(sample_key, n_dispatch_chains)
+        dispatches, dispatch_logprobs = jax.vmap(run_chain, in_axes=(0, None, 0, None))(
+            sample_keys, dispatch_sampler.step, initial_dispatch_state, num_substeps
+        )
+
+        # Compile network logprobs
+        network_prior, network_posterior = compile_network_logprobs(
+            sys, dispatches, repair_steps, repair_lr
+        )
+        network_sampler = blackjax.mala(
+            lambda x: network_prior(x) + network_posterior(x), step_size
+        )
+        # Initialize the network chains
+        initial_network_state = jax.vmap(network_sampler.init)(networks)
+        # Run network chains and update networks
+        n_network_chains = networks.line_conductances.shape[0]
+        rng_key, sample_key = jrandom.split(rng_key)
+        sample_keys = jrandom.split(sample_key, n_network_chains)
+        networks, network_logprobs = jax.vmap(run_chain, in_axes=(0, None, 0, None))(
+            sample_keys, network_sampler.step, initial_network_state, num_substeps
+        )
+
+        # Return the updated carry
+        return (rng_key, dispatches, dispatch_logprobs, networks, network_logprobs)
+
+    # Run the appropriate number of steps
+    n_dispatches = dispatches.voltage_amplitudes.shape[0]
+    n_networks = networks.line_conductances.shape[0]
+    initial_carry = (
+        rng_key,
+        dispatches,
+        jnp.zeros(n_dispatches),
+        networks,
+        jnp.zeros(n_networks),
     )
-    # Initialize the dispatch chains
-    initial_dispatch_state = jax.vmap(dispatch_sampler.init)(dispatches)
-    # Run dispatch chains and update dispatches
-    n_dispatch_chains = dispatches.voltage_amplitudes.shape[0]
-    sample_keys = jrandom.split(sample_key, n_dispatch_chains)
-    dispatches, _ = jax.vmap(run_chain, in_axes=(0, None, 0, None))(
-        sample_keys, dispatch_sampler.step, initial_dispatch_state, num_substeps
+    _, dispatches, dispatch_logprobs, networks, network_logprobs = jax.lax.fori_loop(
+        0, num_smc_steps, one_smc_step, initial_carry
     )
 
-    # Compile network logprobs
-    network_prior, network_posterior = compile_network_logprobs(sys, dispatches)
-    network_sampler = blackjax.mala(
-        lambda x: network_prior(x) + network_posterior(x), step_size
-    )
-    # Initialize the network chains
-    initial_network_state = jax.vmap(network_sampler.init)(networks)
-    # Run network chains and update networks
-    n_network_chains = networks.line_conductances.shape[0]
-    sample_keys = jrandom.split(sample_key, n_dispatch_chains)
-    dispatches, _ = jax.vmap(run_chain, in_axes=(0, None, 0, None))(
-        sample_keys, dispatch_sampler.step, initial_dispatch_state, num_substeps
-    )
-
-    pass
+    return dispatches, dispatch_logprobs, networks, network_logprobs
 
 
 if __name__ == "__main__":
+    # Make some random keys to use as we go
+    key = jrandom.PRNGKey(0)
+
     # Make the test system
     L = 100.0
     repair_steps = 5
     repair_lr = 1e-6
     sys = make_14_bus_network(L)
 
-    # Let's assume that we've already solved for a feasible dispatch for the ACOPF
-    # problem, so we can load it from a file. Pick one dispatch arbitrarily
-    # from the proposed solutions
-    dispatch_filename = (
-        "results/acopf/14bus/dispatch_L_1.0e+02_30000_samples_"
-        "10_chains_mala_step_1.0e-05_repair_steps_5_repair_lr_1.0e-06.json"
-    )
-    with open(dispatch_filename, "r") as f:
-        dispatch_json = json.load(f)
-        dispatch = Dispatch(
-            jnp.array(dispatch_json["best_dispatch"]["voltage_amplitudes"])[0],
-            jnp.array(dispatch_json["best_dispatch"]["voltage_angles"])[0],
-        )
+    # Define the SMC parameters
+    n_dispatches = 10
+    n_networks = 10
+    n_mcmc_substeps = 1000
+    mcmc_step_size = 1e-5
+    n_smc_steps = 100
 
-    # Now the problem is to find a likely perturbation to the network that will
-    # cause this dispatch to fail
-    prior_logprob = sys.network_prior_logprob
-    # Positive to make higher costs more likely!
-    posterior_logprob = lambda network: sys(
-        dispatch, network, repair_steps, repair_lr
-    ).potential
+    # Initialize dispatch and network populations from the prior
+    key, dispatch_key = jrandom.split(key)
+    dispatch_keys = jrandom.split(dispatch_key, n_dispatches)
+    initial_dispatches = jax.vmap(sys.sample_random_dispatch)(dispatch_keys)
 
-    # Make a MALA kernel for MCMC sampling
-    mala_step_size = 1e-5
-    n_samples = 2_000
-    warmup_samples = 2_000
-    n_chains = 100
-    mala = blackjax.mala(
-        lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
-    )
-
-    # Make some random keys to use as we go
-    key = jrandom.PRNGKey(0)
-
-    # Initialize the network randomly
     key, network_key = jrandom.split(key)
-    network_keys = jrandom.split(network_key, n_chains)
-    initial_network = jax.vmap(sys.sample_random_network)(network_keys)
+    network_keys = jrandom.split(network_key, n_networks)
+    initial_networks = jax.vmap(sys.sample_random_network)(network_keys)
 
-    # Initialize the sampler
-    initial_state = jax.vmap(mala.init)(initial_network)
+    print(
+        (
+            f"Initialized {initial_dispatches.voltage_amplitudes.shape[0]} dispatches "
+            f"and {initial_networks.line_conductances.shape[0]} network contingencies."
+        )
+    )
 
-    # Run the chains
-    key, sample_key = jrandom.split(key)
-    sample_keys = jrandom.split(sample_key, n_chains)
+    # Run the SMC algorithm
     t_start = time.perf_counter()
-    samples, logprobs = jax.vmap(inference_loop, in_axes=(0, None, 0, None))(
-        sample_keys, mala.step, initial_state, n_samples + warmup_samples
+    dispatches, dispatch_logprobs, networks, network_logprobs = run_smc(
+        key,
+        sys,
+        initial_dispatches,
+        initial_networks,
+        n_smc_steps,
+        n_mcmc_substeps,
+        mcmc_step_size,
+        repair_steps,
+        repair_lr,
     )
     t_end = time.perf_counter()
-    print(f"Ran {n_chains} chains of {n_samples:,} samples in {t_end - t_start:.2f} s")
-
-    # Get the most likely network from each chain
-    most_likely_idx = jnp.argmax(logprobs, axis=-1)
-    best_network = jtu.tree_map(
-        lambda leaf: leaf[jnp.arange(0, n_chains), most_likely_idx],
-        samples,
+    print(
+        (
+            f"Ran {n_smc_steps} SMC rounds of {n_mcmc_substeps} substeps "
+            f"in {t_end - t_start:.2f} s"
+        )
     )
-    # The dispatcher is allowed to locally repair their dispatch in response
+
+    # Get the most likely dispatch
+    most_likely_dispatch_idx = jnp.argmax(dispatch_logprobs, axis=-1)
+    best_dispatch = jtu.tree_map(
+        lambda leaf: leaf[most_likely_dispatch_idx],
+        dispatches,
+    )
+
+    # Evaluate the performance of this dispatch against each proposed contingency,
+    # allowing the operator to locally repair as much as they can
     result = jax.vmap(sys, in_axes=(None, 0, None, None))(
-        dispatch, best_network, 10_000, repair_lr
+        best_dispatch, networks, 10_000, repair_lr
     )
 
     # Plot the results
@@ -254,7 +308,7 @@ if __name__ == "__main__":
     axs = fig.subplot_mosaic(
         [
             ["constraints", "violation_vs_logprob"],
-            ["trace", "logprob_hist"],
+            # ["trace", "logprob_hist"],
             ["conductances", "susceptances"],
         ]
     )
@@ -271,23 +325,23 @@ if __name__ == "__main__":
     axs["constraints"].set_xticklabels(["P", "Q", "V"])
     axs["constraints"].set_ylabel("Constraint Violation")
 
-    prior = jax.vmap(prior_logprob)(best_network)
+    prior = jax.vmap(sys.network_prior_logprob)(networks)
     violation = result.P_violation + result.Q_violation + result.V_violation
     sns.scatterplot(x=prior, y=100 * violation, ax=axs["violation_vs_logprob"])
     axs["violation_vs_logprob"].set_xlabel("Prior log likelihood")
     axs["violation_vs_logprob"].set_ylabel("Severity (MW)")
 
-    # Plot the chain convergence
-    axs["trace"].plot(logprobs.T)
-    axs["trace"].set_xlabel("# Samples")
-    axs["trace"].set_ylabel("Overall log probability")
-    axs["trace"].vlines(
-        warmup_samples, *axs["trace"].get_ylim(), colors="k", linestyles="dashed"
-    )
+    # # Plot the chain convergence
+    # axs["trace"].plot(logprobs.T)
+    # axs["trace"].set_xlabel("# Samples")
+    # axs["trace"].set_ylabel("Overall log probability")
+    # axs["trace"].vlines(
+    #     warmup_samples, *axs["trace"].get_ylim(), colors="k", linestyles="dashed"
+    # )
 
-    # Plot the logprob histogram
-    sns.histplot(x=logprobs[:, warmup_samples:].flatten(), ax=axs["logprob_hist"])
-    axs["logprob_hist"].set_xlabel("Log probability")
+    # # Plot the logprob histogram
+    # sns.histplot(x=logprobs[:, warmup_samples:].flatten(), ax=axs["logprob_hist"])
+    # axs["logprob_hist"].set_xlabel("Log probability")
 
     # Plot the line conductances vs their nominal values.
     # Scale the size of markers by the extent of total violation caused
@@ -314,9 +368,9 @@ if __name__ == "__main__":
         s=500,
         label="Nominal Susceptance",
     )
-    for i in range(n_chains):
-        conductances = best_network.line_conductances[i]
-        susceptances = best_network.line_susceptances[i]
+    for i in range(n_networks):
+        conductances = networks.line_conductances[i]
+        susceptances = networks.line_susceptances[i]
         axs["conductances"].scatter(line, conductances, marker="o", s=markersize[i])
         axs["susceptances"].scatter(line, susceptances, marker="o", s=markersize[i])
 
@@ -330,17 +384,25 @@ if __name__ == "__main__":
     axs["susceptances"].set_xticklabels([f"{i}->{j}" for i, j in sys.lines])
 
     filename = (
-        f"results/acopf/14bus/attack_L_{L:0.1e}_{n_samples}_samples_"
-        f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}_"
+        f"results/acopf/14bus/scopf_L_{L:0.1e}_{n_smc_steps}_smc_steps_"
+        f"{n_dispatches}_dispatch_{n_networks}_networks_mala_"
+        f"step_{mcmc_step_size:0.1e}_{n_mcmc_substeps}_substeps_"
         f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
     )
-    plt.show()
-    # plt.savefig(filename + ".png")
+    # plt.show()
+    plt.savefig(filename + ".png")
 
-    # # Save the attack
-    # network_serializable = {
-    #     "line_conductances": best_network.line_conductances.tolist(),
-    #     "line_susceptances": best_network.line_susceptances.tolist(),
-    # }
-    # with open(filename + ".json", "w") as f:
-    #     json.dump({"best_network": network_serializable}, f)
+    # Save the contingencies and dispatch
+    network_serializable = {
+        "line_conductances": networks.line_conductances.tolist(),
+        "line_susceptances": networks.line_susceptances.tolist(),
+    }
+    dispatch_serializable = {
+        "voltage_amplitudes": best_dispatch.voltage_amplitudes.tolist(),
+        "voltage_angles": best_dispatch.voltage_angles.tolist(),
+    }
+    with open(filename + ".json", "w") as f:
+        json.dump(
+            {"contingencies": network_serializable, "dispatch": dispatch_serializable},
+            f,
+        )

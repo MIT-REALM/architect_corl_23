@@ -64,6 +64,8 @@ class Network(NamedTuple):
         """
         Compute the nodal admittance matrix for this network.
 
+        TODO: handle transformer https://www.gridpack.org/wiki/images/7/7e/Ybus.pdf
+
         args:
             lines: n_lines x 2 array of integers specifying bus connections. If [i, j]
                 is a row in this array, then buses i and j will be connected. Each
