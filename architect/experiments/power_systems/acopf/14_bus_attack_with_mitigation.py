@@ -24,12 +24,12 @@ Params = Union[Dispatch, Network]
 Likelihood = Callable[[Params], Float[Array, ""]]
 
 
-def softmax(x: Float[Array, "..."], smoothing: float = 50):
+def softmax(x: Float[Array, "..."], smoothing: float = 5):
     """Return the soft maximum of the given vector"""
     return 1 / smoothing * logsumexp(smoothing * x)
 
 
-def softmin(x: Float[Array, "..."], smoothing: float = 50):
+def softmin(x: Float[Array, "..."], smoothing: float = 5):
     """Return the soft minimum of the given vector"""
     return -softmax(-x, smoothing)
 
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     n_networks = 10
     n_mcmc_substeps = 1000
     mcmc_step_size = 1e-5
-    n_smc_steps = 100
+    n_smc_steps = 10
 
     # Initialize dispatch and network populations from the prior
     key, dispatch_key = jrandom.split(key)
