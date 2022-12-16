@@ -1,16 +1,7 @@
 import json
-import time
 
-import blackjax
 import jax
 import jax.numpy as jnp
-import jax.random as jrandom
-import jax.tree_util as jtu
-import matplotlib.pyplot as plt
-import seaborn as sns
-from beartype import beartype
-from beartype.typing import Tuple, Union
-from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.systems.power_systems.acopf import Dispatch, Network
 from architect.systems.power_systems.example_systems.acopf.ieee_14_bus import (
@@ -54,7 +45,7 @@ if __name__ == "__main__":
             jnp.array(old_dispatch_json["best_dispatch"]["voltage_amplitudes"])[0],
             jnp.array(old_dispatch_json["best_dispatch"]["voltage_angles"])[0],
         )
-    
+
     # Get the power injections for old and mitigated dispatches on the nominal network
     P_old, _ = sys.power_injections(old_dispatch, sys.nominal_network)
     P_new, _ = sys.power_injections(dispatch, sys.nominal_network)

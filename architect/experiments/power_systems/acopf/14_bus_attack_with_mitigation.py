@@ -251,7 +251,7 @@ if __name__ == "__main__":
     n_networks = 10
     n_mcmc_substeps = 1000
     mcmc_step_size = 1e-5
-    n_smc_steps = 10
+    n_smc_steps = 100
 
     # Initialize dispatch and network populations from the prior
     key, dispatch_key = jrandom.split(key)
