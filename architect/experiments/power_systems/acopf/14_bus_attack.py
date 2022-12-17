@@ -80,7 +80,7 @@ if __name__ == "__main__":
     mala_step_size = 1e-5
     n_samples = 2_000
     warmup_samples = 2_000
-    n_chains = 100
+    n_chains = 10
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
     )

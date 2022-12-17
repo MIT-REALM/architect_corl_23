@@ -59,11 +59,9 @@ def compile_dispatch_logprobs(
     posterior_logprob_single_network = lambda dispatch, network: sys(
         dispatch, network, repair_steps, repair_lr
     ).potential
-    posterior_logprob = lambda dispatch: -softmax(
-        jax.vmap(posterior_logprob_single_network, in_axes=(None, 0))(
-            dispatch, networks
-        )
-    )
+    posterior_logprob = lambda dispatch: -jax.vmap(
+        posterior_logprob_single_network, in_axes=(None, 0)
+    )(dispatch, networks).mean()
 
     return prior_logprob, posterior_logprob
 
@@ -251,7 +249,7 @@ if __name__ == "__main__":
     n_networks = 10
     n_mcmc_substeps = 1000
     mcmc_step_size = 1e-5
-    n_smc_steps = 100
+    n_smc_steps = 10
 
     # Initialize dispatch and network populations from the prior
     key, dispatch_key = jrandom.split(key)
@@ -384,7 +382,7 @@ if __name__ == "__main__":
     axs["susceptances"].set_xticklabels([f"{i}->{j}" for i, j in sys.lines])
 
     filename = (
-        f"results/acopf/14bus/scopf_L_{L:0.1e}_{n_smc_steps}_smc_steps_"
+        f"results/acopf/14bus/mean_scopf_L_{L:0.1e}_{n_smc_steps}_smc_steps_"
         f"{n_dispatches}_dispatch_{n_networks}_networks_mala_"
         f"step_{mcmc_step_size:0.1e}_{n_mcmc_substeps}_substeps_"
         f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
