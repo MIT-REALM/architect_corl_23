@@ -26,5 +26,8 @@ optax
 # Neural networks
 equinox
 
+# DE solver (includes Newton-Raphson solver)
+diffrax
+
 # Sampling
 blackjax

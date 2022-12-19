@@ -60,11 +60,11 @@ class Network(NamedTuple):
         lines: Integer[Array, "n_lines 2"],
         shunt_conductances: Float[Array, " n_bus"],
         shunt_susceptances: Float[Array, " n_bus"],
+        transformer_tap_ratios: Float[Array, " n_lines"],
+        transformer_phase_shifts: Float[Array, " n_lines"],
     ):
         """
         Compute the nodal admittance matrix for this network.
-
-        TODO: handle transformer https://www.gridpack.org/wiki/images/7/7e/Ybus.pdf
 
         args:
             lines: n_lines x 2 array of integers specifying bus connections. If [i, j]
@@ -75,7 +75,12 @@ class Network(NamedTuple):
                 buses to ground.
             shunt_susceptances: n_lines-element array of shunt susceptances connecting
                 buses to ground.
+            transformer_tap_ratios: tap ratios of all lines (1 if no transformer)
+            transformer_phase_shifts: phase shifts of all lines (0 if no transformer)
+                Units should be in radians.
         """
+        n_bus = shunt_conductances.shape[0]
+
         # Clip all line and shunt conductances to make sure they're non-negative
         line_conductances = jnp.clip(self.line_conductances, a_min=0.0)
         shunt_conductances = jnp.clip(shunt_conductances, a_min=0.0)
@@ -84,26 +89,71 @@ class Network(NamedTuple):
         line_admittances = line_conductances + 1j * self.line_susceptances
         shunt_admittances = shunt_conductances + 1j * shunt_susceptances
 
-        # Assemble the admittance matrix from the given data
-        # For off-diagonal elements, Y_ij = negative admittance connecting bus i and j
-        # For diagonal elements, Y_ii = shunt admittance at bus i - sum of off-diagonal
-        #   entries
-        n_bus = shunt_conductances.shape[0]
-        Y_off_diagonal = jsparse.BCOO(
-            (-1.0 * line_admittances, lines), shape=(n_bus, n_bus)
-        )
-        Y_off_diagonal = Y_off_diagonal + Y_off_diagonal.T
-
+        # Make the shunt admittance matrix
         diagonal_indices = jnp.arange(0, n_bus).reshape(-1, 1)
         diagonal_indices = jnp.hstack((diagonal_indices, diagonal_indices))
-        diagonal_entries = shunt_admittances - Y_off_diagonal.sum(axis=1).todense()
-        Y_diagonal = jsparse.BCOO(
-            (diagonal_entries, diagonal_indices), shape=(n_bus, n_bus)
+        Y_shunt = jsparse.BCOO(
+            (shunt_admittances, diagonal_indices), shape=(n_bus, n_bus)
         )
 
-        Y = Y_diagonal + Y_off_diagonal
+        # The following is based on the code in MATPOWER, PyPower, and Pandapower
+        # see github.com/e2nIEE/pandapower/blob/develop/pandapower/pypower/makeYbus.py
+        # and https://matpower.org/docs/manual.pdf
 
-        return Y
+        # Assemble the branch admittance matrices, which give the current injections
+        # at the from and to ends of each branch (If, It) as a function of the voltages
+        # at the from and to ends (Vf, Vt)
+        #
+        #      | If |   | Yff  Yft |   | Vf |
+        #      |    | = |          | * |    |
+        #      | It |   | Ytf  Ytt |   | Vt |
+
+        # Make complex tap ratio
+        tap = transformer_tap_ratios * jnp.exp(1j * transformer_phase_shifts)
+
+        # Assume no line charging susceptance
+        Ytt = line_admittances
+        Yff = Ytt / transformer_tap_ratios ** 2
+        Yft = -line_admittances / jnp.conj(tap)
+        Ytf = -line_admittances / tap
+
+        # To go from branch admittances to bus admittances, we need connection matrices,
+        # Cf (from connections) and Ct (to connections). These each have n_lines rows
+        # and n_buses columns, and are zero everywhere except that the (i, j) element of
+        # Cf and the (i, k) element of Ct are 1 iff line i connects from bus j to bus k
+        from_b = lines[:, 0]
+        to_b = lines[:, 1]
+        # Turns out we don't need this (they can maybe be used in a performance boost?)
+        # line_indices = jnp.arange(0, n_line).reshape(-1, 1)
+        # Cf_indices = jnp.hstack((line_indices, from_b.reshape(-1, 1)))
+        # Ct_indices = jnp.hstack((line_indices, to_b.reshape(-1, 1)))
+        # Cf = jsparse.BCOO((jnp.ones(n_line), Cf_indices), shape=(n_line, n_bus))
+        # Ct = jsparse.BCOO((jnp.ones(n_line), Ct_indices), shape=(n_line, n_bus))
+
+        # Make the sparse bus admittance matrix
+        Y_bus = (
+            jsparse.BCOO(
+                (
+                    jnp.concatenate((Yff, Yft, Ytf, Ytt)),  # data
+                    jnp.hstack(
+                        (
+                            # Row indices
+                            jnp.concatenate((from_b, from_b, to_b, to_b)).reshape(
+                                -1, 1
+                            ),
+                            # Column indices
+                            jnp.concatenate((from_b, to_b, from_b, to_b)).reshape(
+                                -1, 1
+                            ),
+                        )
+                    ),
+                ),
+                shape=(n_bus, n_bus),
+            )
+            + Y_shunt
+        )
+
+        return Y_bus
 
 
 # @jaxtyped
@@ -149,6 +199,9 @@ class ACOPF(AutonomousSystem):
             buses to ground.
         shunt_susceptances: n_lines-element array of shunt susceptances connecting
             buses to ground.
+        transformer_tap_ratios: the tap ratios of all lines (1 if no transformer)
+        transformer_phase_shifts: the phase shifts of all lines (0 if no transformer)
+            Units should be in radians.
         bus_active_limits: n_bus x 2 array of (min, max) active power limits at each
             bus (positive for generation, negative for load)
         bus_reactive_limits: n_bus x 2 array of (min, max) reactive power limits at
@@ -173,6 +226,8 @@ class ACOPF(AutonomousSystem):
     lines: Integer[Array, "n_lines 2"]
     shunt_conductances: Float[Array, " n_bus"]
     shunt_susceptances: Float[Array, " n_bus"]
+    transformer_tap_ratios: Float[Array, " n_lines"]
+    transformer_phase_shifts: Float[Array, " n_lines"]
 
     bus_active_limits: Float[Array, "n_bus 2"]
     bus_reactive_limits: Float[Array, "n_bus 2"]
@@ -218,12 +273,16 @@ class ACOPF(AutonomousSystem):
         # Compute the complex current and power that results from the proposed voltages
         # TODO@dawsonc convert to sparse admittance matrix once
         # https://github.com/google/jax/issues/13118 is resolved
-        Y = network.Y(self.lines, self.shunt_conductances, self.shunt_susceptances)
-        Y = Y.todense()
-        # current = jsparse.sparsify(lambda Y, V: Y @ V)(
-        #     Y, V
-        # )
-        current = jnp.dot(Y, V)
+        Y = network.Y(
+            self.lines,
+            self.shunt_conductances,
+            self.shunt_susceptances,
+            self.transformer_tap_ratios,
+            self.transformer_phase_shifts,
+        )
+        # Y = Y.todense()
+        current = jsparse.sparsify(lambda Y, V: Y @ V)(Y, V)
+        # current = jnp.dot(Y, V)
         S = V * current.conj()
 
         # Extract real and reactive power from complex power

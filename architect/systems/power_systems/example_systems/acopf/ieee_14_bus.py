@@ -104,6 +104,11 @@ def make_14_bus_network(penalty: float = 10.0) -> ACOPF:
     shunt_reactance = shunt_reactance.at[8].set(19.0)
     shunt_conductance = shunt_conductance / base_MVA
     shunt_reactance = shunt_reactance / base_MVA
+    tap_ratios = jnp.ones((n_line,))
+    transformer_phase_shifts = jnp.zeros((n_line,))
+    tap_ratios = tap_ratios.at[7].set(0.978)
+    tap_ratios = tap_ratios.at[8].set(0.969)
+    tap_ratios = tap_ratios.at[9].set(0.932)
 
     # The line data is provided as impedance, so we need to convert to admittances
     line_impedance = line_resistances + 1j * line_reactances
@@ -165,6 +170,8 @@ def make_14_bus_network(penalty: float = 10.0) -> ACOPF:
         lines=lines,
         shunt_conductances=shunt_conductance,
         shunt_susceptances=shunt_reactance,
+        transformer_tap_ratios=tap_ratios,
+        transformer_phase_shifts=transformer_phase_shifts,
         # Limits
         bus_active_limits=bus_P_limits,
         bus_reactive_limits=bus_Q_limits,
@@ -185,4 +192,5 @@ if __name__ == "__main__":
     sys = make_14_bus_network()
     key = jax.random.PRNGKey(0)
     dispatch = sys.sample_random_dispatch(key)
+    sys.power_injections(dispatch, sys.nominal_network)
     sys(dispatch, sys.nominal_network)

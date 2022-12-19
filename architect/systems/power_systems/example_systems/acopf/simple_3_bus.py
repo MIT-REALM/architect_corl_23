@@ -29,6 +29,8 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         lines=jnp.array([[0, 1], [0, 2]]),
         shunt_conductances=jnp.array([0.0, 0.0, 0.0]),
         shunt_susceptances=jnp.array([0.0, 0.0, 0.0]),
+        transformer_tap_ratios=jnp.ones(2),
+        transformer_phase_shifts=jnp.zeros(2),
         # Limits
         bus_active_limits=jnp.array([[-1.0, -0.8], [0.0, 1.0], [0.0, 0.5]]),
         bus_reactive_limits=jnp.array([[-2.0, 2.0], [-2.0, 2.0], [-2.0, 2.0]]),
