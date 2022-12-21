@@ -1,7 +1,12 @@
 import jax.numpy as jnp
 from beartype import beartype
 
-from architect.systems.power_systems.acopf import ACOPF, Network
+from architect.systems.power_systems.acopf import ACOPF
+from architect.systems.power_systems.acopf_types import (
+    InterconnectionSpecification,
+    Network,
+    NetworkSpecification,
+)
 
 
 @beartype
@@ -24,24 +29,38 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         line_conductances=jnp.array([0.0, 0.0]),
         line_susceptances=jnp.array([1.0, 1.0]),
     )
-    return ACOPF(
+    network_spec = NetworkSpecification(
         nominal_network,
         lines=jnp.array([[0, 1], [0, 2]]),
         shunt_conductances=jnp.array([0.0, 0.0, 0.0]),
         shunt_susceptances=jnp.array([0.0, 0.0, 0.0]),
         transformer_tap_ratios=jnp.ones(2),
         transformer_phase_shifts=jnp.zeros(2),
-        # Limits
-        bus_active_limits=jnp.array([[-1.0, -0.8], [0.0, 1.0], [0.0, 0.5]]),
-        bus_reactive_limits=jnp.array([[-2.0, 2.0], [-2.0, 2.0], [-2.0, 2.0]]),
-        bus_voltage_limits=jnp.array([[0.9, 1.1], [0.9, 1.1], [0.9, 1.1]]),
-        # Costs
-        bus_active_linear_costs=jnp.array([0.0, 5.0, 1.0]),
-        bus_active_quadratic_costs=jnp.array([0.0, 0.0, 0.0]),
-        bus_reactive_linear_costs=jnp.array([0.0, 0.1, 0.1]),
-        constraint_penalty=penalty,
-        # Failures
         prob_line_failure=jnp.array([0.1, 0.1]),
         line_conductance_stddev=jnp.array([0.1, 0.1]),
         line_susceptance_stddev=jnp.array([0.1, 0.1]),
+    )
+    gen_spec = InterconnectionSpecification(
+        buses=jnp.array([1, 2]),
+        P_limits=jnp.array([[0.0, 1.0], [0.0, 0.5]]),
+        Q_limits=jnp.array([[-2.0, 2.0]]),
+        P_linear_costs=jnp.array([5.0, 1.0]),
+        P_quadratic_costs=jnp.array([0.0, 0.0]),
+    )
+    load_spec = InterconnectionSpecification(
+        buses=jnp.array([1]),
+        P_limits=jnp.array([[-1.0, -0.8]]),
+        Q_limits=jnp.array([[0.0, 0.0]]),
+        P_linear_costs=jnp.array([0.0]),
+        P_quadratic_costs=jnp.array([0.0]),
+    )
+    bus_voltage_limits = jnp.array([[0.9, 1.1], [0.9, 1.1], [0.9, 1.1]])
+
+    return ACOPF(
+        gen_spec,
+        load_spec,
+        network_spec,
+        bus_voltage_limits,
+        ref_bus_idx=1,
+        constraint_penalty=penalty,
     )

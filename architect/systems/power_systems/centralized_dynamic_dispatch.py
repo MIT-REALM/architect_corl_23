@@ -716,9 +716,9 @@ class CentralizedDynamicDispatch(AutonomousSystem):
                 self.T_horizon - 1,
                 axis=0,
             )
-            predicted_intermittent_limits = predicted_intermittent_limits.at[
-                1:, :
-            ].add(predicted_intermittent_errs)
+            predicted_intermittent_limits = predicted_intermittent_limits.at[1:, :].add(
+                predicted_intermittent_errs
+            )
 
             # Update the line limits for the current time
             line_limits = self.get_current_line_limits(t)
