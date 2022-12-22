@@ -13,8 +13,8 @@ from beartype.typing import Tuple, Union
 from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.systems.power_systems.acopf import Dispatch, Network
-from architect.systems.power_systems.example_systems.acopf.ieee_14_bus import (
-    make_14_bus_network,
+from architect.systems.power_systems.example_systems.acopf.load_test_networks import (
+    load_test_network,
 )
 
 
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     L = 100.0
     repair_steps = 5
     repair_lr = 1e-6
-    sys = make_14_bus_network(L)
+    sys = load_test_network("case14", penalty=L)
 
     # Let's assume that we've already solved for a feasible dispatch for the ACOPF
     # problem, so we can load it from a file. Pick one dispatch arbitrarily
