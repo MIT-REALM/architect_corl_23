@@ -38,7 +38,9 @@ def load_test_network(
     # Load data from file
     ############################
     current_path = os.path.abspath(os.path.dirname(__file__))
-    datafile_path = os.path.join(current_path, "data/" + case_name + ".json")
+    datafile_path = os.path.join(
+        current_path, "example_system_data/" + case_name + ".json"
+    )
 
     with open(datafile_path) as f:
         case_data = json.load(f)

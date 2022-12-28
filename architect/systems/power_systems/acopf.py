@@ -1,3 +1,4 @@
+import equinox as eqx
 import jaxopt
 import jax
 import jax.experimental.sparse as jsparse
@@ -9,7 +10,6 @@ from beartype.typing import Tuple, Dict
 from jax.nn import log_sigmoid, relu, sigmoid
 from jaxtyping import Array, Float, Integer, Bool, jaxtyped
 
-from architect.problem_definition import AutonomousSystem
 from architect.systems.power_systems.acopf_types import (
     ACOPFResult,
     Dispatch,
@@ -26,7 +26,7 @@ PRNGKeyArray = Integer[Array, "2"]
 
 @jaxtyped
 @beartype
-class ACOPF(AutonomousSystem):
+class ACOPF(eqx.Module):
     """
     Defines an autonomous system modelling AC optimal power flow.
 

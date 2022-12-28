@@ -14,7 +14,7 @@ from beartype.typing import Tuple, Union, Callable
 from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.systems.power_systems.acopf import Dispatch, Network, ACOPF
-from architect.systems.power_systems.example_systems.acopf.load_test_networks import (
+from architect.systems.power_systems.load_test_network import (
     load_test_network,
 )
 

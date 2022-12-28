@@ -28,6 +28,7 @@ def test_system():
         shunt_susceptances=jnp.array([0.0, 0.0]),
         transformer_tap_ratios=jnp.array([1.0]),
         transformer_phase_shifts=jnp.array([0.0]),
+        charging_susceptances=jnp.array([0.0]),
         prob_line_failure=jnp.array([0.1]),
         line_conductance_stddev=jnp.array([0.1]),
         line_susceptance_stddev=jnp.array([0.1]),

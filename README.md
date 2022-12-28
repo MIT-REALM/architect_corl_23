@@ -48,6 +48,10 @@ Hardware experiments currently require `rospy` (must be installed separately) an
 
 TODO: define a new example for V2.0
 
+## Code organization
+
+TODO
+
 ## Warning: Research code may contain sharp edges!
 
 Architect is under active development as part of research in the [Reliable Autonomy Laboratory](realm.mit.edu) at MIT (REALM). We will aim to release a tagged version to coincide with each new publication and major advance in capabilities, but we currently cannot commit to a stable interface.

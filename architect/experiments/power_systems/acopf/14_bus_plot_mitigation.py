@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from architect.systems.power_systems.acopf import Dispatch, Network
-from architect.systems.power_systems.example_systems.acopf.load_test_networks import (
+from architect.systems.power_systems.load_test_network import (
     load_test_network,
 )
 
