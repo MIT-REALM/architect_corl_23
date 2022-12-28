@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from beartype import beartype
 from beartype.typing import Tuple, Union
-from jaxtyping import Array, Float, Integer, jaxtyped
+from jaxtyping import Array, Float, Integer, jaxtyped, Shaped
 
 from architect.systems.power_systems.acopf import Dispatch, Network
 from architect.systems.power_systems.example_systems.acopf.load_test_networks import (
@@ -49,23 +49,19 @@ def inference_loop(
 
 if __name__ == "__main__":
     # Make the test system
-    L = 100.0
-    repair_steps = 5
-    repair_lr = 1e-6
+    L = 50.0
     sys = load_test_network("case14", penalty=L)
 
     # Let's start by trying to solve the ACOPF problem for the nominal system
-    network = sys.nominal_network
+    network = sys.network_spec.nominal_network
     prior_logprob = sys.dispatch_prior_logprob
     # Remember the negative to make lower costs more likely!
-    posterior_logprob = lambda dispatch: -sys(
-        dispatch, network, repair_steps, repair_lr
-    ).potential
+    posterior_logprob = lambda dispatch: -sys(dispatch, network).potential
 
     # Make a MALA kernel for MCMC sampling
     mala_step_size = 1e-5
-    n_samples = 30_000
-    warmup_samples = 20_000
+    n_samples = 200
+    warmup_samples = 200
     n_chains = 10
     mala = blackjax.mala(
         lambda x: prior_logprob(x) + posterior_logprob(x), mala_step_size
@@ -98,34 +94,43 @@ if __name__ == "__main__":
         lambda leaf: leaf[jnp.arange(0, n_chains), most_likely_idx],
         samples,
     )
-    result = jax.vmap(sys, in_axes=(0, None, None, None))(
-        best_dispatch, network, 10_000, repair_lr
-    )
+    result = jax.vmap(sys, in_axes=(0, None))(best_dispatch, network)
 
     # Plot the results
-    fig = plt.figure(figsize=(16, 16), constrained_layout=True)
+    fig = plt.figure(figsize=(32, 16), constrained_layout=True)
     axs = fig.subplot_mosaic(
         [
             ["constraints", "cost"],
             ["trace", "logprob_hist"],
-            ["generation", "generation"],
+            ["generation", "voltage"],
         ]
     )
 
     # Plot the violations at the best dispatch from each chain
     sns.swarmplot(
         data=[
-            result.P_violation,
-            result.Q_violation,
-            result.V_violation,
+            result.P_gen_violation.sum(axis=-1),
+            result.Q_gen_violation.sum(axis=-1),
+            result.P_load_violation.sum(axis=-1),
+            result.Q_load_violation.sum(axis=-1),
+            result.V_violation.sum(axis=-1),
         ],
         ax=axs["constraints"],
     )
-    axs["constraints"].set_xticklabels(["P", "Q", "V"])
+    axs["constraints"].set_xticklabels(["Pg", "Qg", "Pd", "Qd", "V"])
     axs["constraints"].set_ylabel("Constraint Violation")
 
-    sns.histplot(x=result.generation_cost, ax=axs["cost"])
+    # Plot generation cost vs constraint violation
+    total_constraint_violation = (
+        result.P_gen_violation.sum(axis=-1)
+        + result.Q_gen_violation.sum(axis=-1)
+        + result.P_load_violation.sum(axis=-1)
+        + result.Q_load_violation.sum(axis=-1)
+        + result.V_violation.sum(axis=-1)
+    )
+    axs["cost"].scatter(result.generation_cost, total_constraint_violation)
     axs["cost"].set_xlabel("Generation cost")
+    axs["cost"].set_ylabel("Total constraint violation")
 
     # Plot the chain convergence
     axs["trace"].plot(logprobs.T)
@@ -140,10 +145,10 @@ if __name__ == "__main__":
     axs["logprob_hist"].set_xlabel("Log probability")
 
     # Plot the generations along with their limits
-    bus = jnp.arange(sys.n_bus)
-    P_min, P_max = sys.bus_active_limits.T
+    bus = sys.gen_spec.buses
+    P_min, P_max = sys.gen_spec.P_limits.T
     for i in range(n_chains):
-        P = result.P[i, :]
+        P = result.dispatch.gen.P[i, :]
         lower_error = P - P_min
         upper_error = P_max - P
         errs = jnp.vstack((lower_error, upper_error))
@@ -158,19 +163,39 @@ if __name__ == "__main__":
             capsize=10.0,
             capthick=3.0,
         )
-    axs["generation"].set_xlabel("Active power injection (p.u.)")
+    axs["generation"].set_ylabel("$P_g$ (p.u.)")
+
+    # Plot the voltages along with their limits
+    bus = jnp.arange(sys.n_bus)
+    V_min, V_max = sys.bus_voltage_limits.T
+    for i in range(n_chains):
+        V = result.voltage_amplitudes[i, :]
+        lower_error = V - V_min
+        upper_error = V_max - V
+        errs = jnp.vstack((lower_error, upper_error))
+        axs["voltage"].errorbar(
+            bus,
+            V,
+            yerr=errs,
+            linestyle="None",
+            marker="o",
+            markersize=10,
+            linewidth=3.0,
+            capsize=10.0,
+            capthick=3.0,
+        )
+    axs["voltage"].set_ylabel("$|V|$ (p.u.)")
 
     filename = (
         f"results/acopf/14bus/dispatch_L_{L:0.1e}_{n_samples}_samples_"
-        f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}_"
-        f"repair_steps_{repair_steps}_repair_lr_{repair_lr:0.1e}"
+        f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}"
     )
     plt.savefig(filename + ".png")
 
     # Save the dispatch
-    dispatch_serializable = {
-        "voltage_amplitudes": best_dispatch.voltage_amplitudes.tolist(),
-        "voltage_angles": best_dispatch.voltage_angles.tolist(),
-    }
     with open(filename + ".json", "w") as f:
-        json.dump({"best_dispatch": dispatch_serializable}, f)
+        json.dump(
+            {"dispatch": best_dispatch._asdict(), "network": network._asdict()},
+            f,
+            default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
+        )

@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 from beartype import beartype
 
@@ -36,6 +37,7 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         shunt_susceptances=jnp.array([0.0, 0.0, 0.0]),
         transformer_tap_ratios=jnp.ones(2),
         transformer_phase_shifts=jnp.zeros(2),
+        charging_susceptances=jnp.zeros(2),
         prob_line_failure=jnp.array([0.1, 0.1]),
         line_conductance_stddev=jnp.array([0.1, 0.1]),
         line_susceptance_stddev=jnp.array([0.1, 0.1]),
@@ -48,7 +50,7 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         P_quadratic_costs=jnp.array([0.0, 0.0]),
     )
     load_spec = InterconnectionSpecification(
-        buses=jnp.array([1]),
+        buses=jnp.array([0]),
         P_limits=jnp.array([[-1.0, -0.8]]),
         Q_limits=jnp.array([[0.0, 0.0]]),
         P_linear_costs=jnp.array([0.0]),
@@ -64,3 +66,11 @@ def make_3_bus_network(penalty: float = 100.0) -> ACOPF:
         ref_bus_idx=1,
         constraint_penalty=penalty,
     )
+
+
+if __name__ == "__main__":
+    sys = make_3_bus_network()
+    key = jax.random.PRNGKey(0)
+    dispatch = sys.sample_random_dispatch(key)
+    r = sys(dispatch, sys.network_spec.nominal_network)
+    print(r.acopf_residual)

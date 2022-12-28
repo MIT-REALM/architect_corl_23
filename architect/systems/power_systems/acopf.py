@@ -112,6 +112,7 @@ class ACOPF(AutonomousSystem):
             self.network_spec.shunt_susceptances,
             self.network_spec.transformer_tap_ratios,
             self.network_spec.transformer_phase_shifts,
+            self.network_spec.charging_susceptances,
         )
         current = jsparse.sparsify(lambda Y, V: Y @ V)(Y, V)
         # Y = Y.todense()
@@ -184,7 +185,9 @@ class ACOPF(AutonomousSystem):
         V_gen: Float[Array, " n_gen"],
         P_load: Float[Array, " n_load"],
         Q_load: Float[Array, " n_load"],
-    ) -> Tuple[Float[Array, " n_nongen_bus"], Float[Array, " n_nonref_bus"]]:
+    ) -> Tuple[
+        Float[Array, " n_nongen_bus"], Float[Array, " n_nonref_bus"], Float[Array, ""]
+    ]:
         """
         Solve for free voltage amplitudes and angles.
 
@@ -234,38 +237,42 @@ class ACOPF(AutonomousSystem):
             Q_residual = Q_implied
             Q_residual = Q_residual.at[self.load_spec.buses].add(-Q_load)
 
-            # Filter down to the buses we care about at this stage
+            # Filter down to the buses we care about at this stage. We need to balance
+            # active power at all buses except the slack buses, and we need to balance
+            # reactive power at all buses without generators
             P_residual = P_residual[self.nonref_buses]
-            Q_residual = Q_residual[self.load_spec.buses]
+            Q_residual = Q_residual[self.nongen_buses]
 
             # Stack the residuals to minimize
             residuals = jnp.hstack((P_residual, Q_residual))
+
             return residuals
 
         # Solve the nonlinear least squares problem
         V_nongen_init = jnp.ones(n_nongen)
         voltage_angles_nonref_init = jnp.zeros(n_nonref)
         x_init = jnp.hstack((V_nongen_init, voltage_angles_nonref_init))
-        cost = lambda x, network, P_gen, V_gen, P_load, Q_load: (
-            power_flow_residuals(x, network, P_gen, V_gen, P_load, Q_load) ** 2
-        ).sum()
-        solver = jaxopt.LBFGS(
-            fun=cost, tol=self.tolerance, maxiter=self.maxsteps
+        solver = jaxopt.GaussNewton(
+            residual_fun=power_flow_residuals,
+            tol=self.tolerance,
+            maxiter=self.maxsteps,
         )
         sol = solver.run(
             x_init,
-            network=network,
-            P_gen=P_gen,
-            V_gen=V_gen,
-            P_load=P_load,
-            Q_load=Q_load,
+            network,
+            P_gen,
+            V_gen,
+            P_load,
+            Q_load,
         )
 
         # Extract solution
         x_sol = sol.params
         V_nongen = x_sol[:n_nongen]
         voltage_angles_nonref = x_sol[n_nongen:]
-        return V_nongen, voltage_angles_nonref
+        acopf_residual = (sol.state.residual ** 2).sum()
+
+        return V_nongen, voltage_angles_nonref, acopf_residual
 
     @jaxtyped
     @beartype
@@ -349,7 +356,8 @@ class ACOPF(AutonomousSystem):
         # First, solve the nonlinear power flow equations for a subset of the variables
         #   - |V| at the non-generator buses
         #   - voltage angle at all non-reference buses
-        V_nongen, voltage_angles_nonref = self.complete_voltages(
+        # also track any error in the ACOPF power flow
+        V_nongen, voltage_angles_nonref, acopf_residual = self.complete_voltages(
             network, P_gen, V_gen, P_load, Q_load
         )
 
@@ -379,20 +387,8 @@ class ACOPF(AutonomousSystem):
         # Compute the net cost of generation
         generation_cost = self.generation_cost(dispatch)
 
-        # Compute a normalizing factor for generation cost in the mean-P case.
-        # This will help normalize the potential
-        P_min, P_max = self.gen_spec.P_limits.T
-        P_mean = (P_max - P_min) / 2.0
-        cost_normalization = jnp.abs(self.gen_spec.cost(P_mean))
-
-        # Compute a normalizing factor for the constraints as well
-        constraint_normalization = jnp.maximum(jnp.abs(P_max), jnp.abs(P_min)).sum()
-
         # Combine cost and violations to get the potential
-        potential = (
-            generation_cost / cost_normalization
-            + self.constraint_penalty * total_violation / constraint_normalization
-        )
+        potential = generation_cost + self.constraint_penalty * total_violation
 
         result = ACOPFResult(
             dispatch,
@@ -409,6 +405,7 @@ class ACOPF(AutonomousSystem):
             constraint_violations["V"],
             generation_cost,
             potential,
+            acopf_residual,
         )
 
         return result

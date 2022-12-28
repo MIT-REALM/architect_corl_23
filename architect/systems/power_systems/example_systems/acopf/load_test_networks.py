@@ -82,6 +82,9 @@ def load_test_network(
     tap_ratios = tap_ratios.at[jnp.nonzero(taps)[0]].set(taps[jnp.nonzero(taps)[0]])
     transformer_phase_shifts = jnp.array(case_data["branch"]["SHIFT"])
 
+    # Get charging susceptances
+    charging_susceptances = jnp.array(case_data["branch"]["BR_B"])
+
     # Add line failure parameters
     prob_line_failure = jnp.array([p_failure for _ in range(n_line)])
     line_conductance_stddev = jnp.array([g_stddev for _ in range(n_line)])
@@ -99,6 +102,7 @@ def load_test_network(
         shunt_susceptances,
         tap_ratios,
         transformer_phase_shifts,
+        charging_susceptances,
         prob_line_failure,
         line_conductance_stddev,
         line_susceptance_stddev,
@@ -118,6 +122,10 @@ def load_test_network(
         (jnp.array(case_data["gen"]["QMIN"]), jnp.array(case_data["gen"]["QMAX"]))
     ).T
 
+    # normalize by the base unit
+    P_gen_limits /= base_MVA
+    Q_gen_limits /= base_MVA
+
     # load costs (only quadratic costs supported for now)
     cost_types = jnp.array(case_data["gen"]["cost_model"])
     polynomial_degree = jnp.array(case_data["gen"]["NCOST"]) - 1
@@ -128,9 +136,10 @@ def load_test_network(
             "Polynomial cost models beyond quadratic not yet supported!"
         )
 
+    # Normalize the cost by 1 / base_MVA ** 2
     cost_model_coeffs = jnp.array(case_data["gen"]["coeffs"])
     P_quadratic_costs = cost_model_coeffs[:, 0]
-    P_linear_costs = cost_model_coeffs[:, 1]
+    P_linear_costs = cost_model_coeffs[:, 1] / base_MVA
 
     gen_spec = InterconnectionSpecification(
         buses=generator_buses,
@@ -145,12 +154,17 @@ def load_test_network(
     ############################
 
     # Add a load anywhere the case shows power demand
-    # TODO@dawsonc these cases usually don't include flexible loads; should we add them?
+    # These cases don't include flexible loads, but let's add 20% dispatchability
+    # to these loads. Also make negative to indicate a load
     P_load = jnp.array(case_data["bus"]["PD"])
     Q_load = jnp.array(case_data["bus"]["QD"])
     load_mask = jnp.logical_and(P_load != 0, Q_load != 0)
-    P_load_limits = jnp.vstack((P_load, P_load)).T[load_mask]
-    Q_load_limits = jnp.vstack((Q_load, Q_load)).T[load_mask]
+    P_load_limits = jnp.vstack((-P_load, -0.8 * P_load)).T[load_mask]
+    Q_load_limits = jnp.vstack((-Q_load, -0.8 * Q_load)).T[load_mask]
+
+    # Normalize to base power
+    P_load_limits /= base_MVA
+    Q_load_limits /= base_MVA
 
     # Subtract 1 for matlab 1 indexing
     load_buses = jnp.array(case_data["bus"]["i"])[load_mask] - 1
@@ -174,6 +188,8 @@ def load_test_network(
         bus_voltage_limits,
         ref_bus_idx=0,
         constraint_penalty=penalty,
+        maxsteps=30,
+        tolerance=1e-3,
     )
 
 
@@ -181,4 +197,5 @@ if __name__ == "__main__":
     sys = load_test_network("case14")
     key = jax.random.PRNGKey(0)
     dispatch = sys.sample_random_dispatch(key)
-    sys(dispatch, sys.network_spec.nominal_network)
+    r = sys(dispatch, sys.network_spec.nominal_network)
+    print(r.acopf_residual)

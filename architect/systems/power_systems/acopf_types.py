@@ -24,6 +24,13 @@ class GenerationDispatch(NamedTuple):
     P: Float[Array, " n_bus"]
     voltage_amplitudes: Float[Array, " n_bus"]
 
+    # def _asdict(self):
+    #     """Override NamedTuple asdict to allow JAX array to be serialized."""
+    #     return {
+    #         "P": self.P.tolist(),
+    #         "voltag_amplitudes": self.voltag_amplitudes.tolist(),
+    #     }
+
 
 # @jaxtyped
 # @beartype  # Commented out until beartype 0.12.0 release (TODO@dawsonc)
@@ -38,6 +45,13 @@ class LoadDispatch(NamedTuple):
 
     P: Float[Array, " n_bus"]
     Q: Float[Array, " n_bus"]
+
+    # def _asdict(self):
+    #     """Override NamedTuple asdict to allow JAX array to be serialized."""
+    #     return {
+    #         "P": self.P.tolist(),
+    #         "Q": self.Q.tolist(),
+    #     }
 
 
 # @jaxtyped
@@ -134,6 +148,13 @@ class Network(NamedTuple):
         """Return the number of lines in this network"""
         return self.line_conductances.shape[0]
 
+    # def _asdict(self):
+    #     """Override NamedTuple asdict to allow JAX array to be serialized."""
+    #     return {
+    #         "line_conductances": self.line_conductances.tolist(),
+    #         "line_susceptances": self.line_susceptances.tolist(),
+    #     }
+
     def Y(
         self,
         lines: Integer[Array, "n_lines 2"],
@@ -141,6 +162,7 @@ class Network(NamedTuple):
         shunt_susceptances: Float[Array, " n_bus"],
         transformer_tap_ratios: Float[Array, " n_lines"],
         transformer_phase_shifts: Float[Array, " n_lines"],
+        charging_susceptances: Float[Array, " n_lines"],
     ):
         """
         Compute the nodal admittance matrix for this network.
@@ -157,6 +179,8 @@ class Network(NamedTuple):
             transformer_tap_ratios: tap ratios of all lines (1 if no transformer)
             transformer_phase_shifts: phase shifts of all lines (0 if no transformer)
                 Units should be in radians.
+            charging_susceptances: n_lines-element array of charging susceptances of
+                lines.
         """
         n_bus = shunt_conductances.shape[0]
 
@@ -184,7 +208,7 @@ class Network(NamedTuple):
         tap = transformer_tap_ratios * jnp.exp(1j * transformer_phase_shifts)
 
         # Assume no line charging susceptance
-        Ytt = line_admittances
+        Ytt = line_admittances + 0.5j * charging_susceptances
         Yff = Ytt / transformer_tap_ratios ** 2
         Yft = -line_admittances / jnp.conj(tap)
         Ytf = -line_admittances / tap
@@ -239,13 +263,14 @@ class NetworkSpecification(NamedTuple):
             is a row in this array, then buses i and j will be connected. Each
             connection should be specified only once (so if [i, j] is included,
             it is not necessary to include [j, i] as well)
-        shunt_conductances: n_lines-element array of shunt conductances connecting
+        shunt_conductances: n_bus-element array of shunt conductances connecting
             buses to ground.
-        shunt_susceptances: n_lines-element array of shunt susceptances connecting
+        shunt_susceptances: n_bus-element array of shunt susceptances connecting
             buses to ground.
         transformer_tap_ratios: the tap ratios of all lines (1 if no transformer)
         transformer_phase_shifts: the phase shifts of all lines (0 if no transformer)
             Units should be in radians.
+        charging_susceptances: n_lines-element array of charging susceptances of lines.
         prob_line_failure: n_line-element array of prior probabilities of line failures
         line_conductance_stddev: n_line-element array of standard deviation of line
             conductances in both the nominal and failure cases.
@@ -259,6 +284,7 @@ class NetworkSpecification(NamedTuple):
     shunt_susceptances: Float[Array, " n_bus"]
     transformer_tap_ratios: Float[Array, " n_lines"]
     transformer_phase_shifts: Float[Array, " n_lines"]
+    charging_susceptances: Float[Array, " n_lines"]
 
     prob_line_failure: Float[Array, " n_line"]
     line_conductance_stddev: Float[Array, " n_line"]
@@ -290,6 +316,7 @@ class ACOPFResult(NamedTuple):
         The total violation of voltage limits
         The net generation cost
         The augmented cost ("potential") = cost + penalty * total violation
+        The residual that remains in the ACOPF flow constraints
 
     """
 
@@ -311,3 +338,5 @@ class ACOPFResult(NamedTuple):
 
     generation_cost: Float[Array, ""]
     potential: Float[Array, ""]
+
+    acopf_residual: Float[Array, ""]
