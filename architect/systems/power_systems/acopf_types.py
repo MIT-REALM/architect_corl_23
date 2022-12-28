@@ -24,13 +24,6 @@ class GenerationDispatch(NamedTuple):
     P: Float[Array, " n_bus"]
     voltage_amplitudes: Float[Array, " n_bus"]
 
-    # def _asdict(self):
-    #     """Override NamedTuple asdict to allow JAX array to be serialized."""
-    #     return {
-    #         "P": self.P.tolist(),
-    #         "voltag_amplitudes": self.voltag_amplitudes.tolist(),
-    #     }
-
 
 # @jaxtyped
 # @beartype  # Commented out until beartype 0.12.0 release (TODO@dawsonc)
@@ -45,13 +38,6 @@ class LoadDispatch(NamedTuple):
 
     P: Float[Array, " n_bus"]
     Q: Float[Array, " n_bus"]
-
-    # def _asdict(self):
-    #     """Override NamedTuple asdict to allow JAX array to be serialized."""
-    #     return {
-    #         "P": self.P.tolist(),
-    #         "Q": self.Q.tolist(),
-    #     }
 
 
 # @jaxtyped
@@ -147,13 +133,6 @@ class Network(NamedTuple):
     def n_line(self):
         """Return the number of lines in this network"""
         return self.line_conductances.shape[0]
-
-    # def _asdict(self):
-    #     """Override NamedTuple asdict to allow JAX array to be serialized."""
-    #     return {
-    #         "line_conductances": self.line_conductances.tolist(),
-    #         "line_susceptances": self.line_susceptances.tolist(),
-    #     }
 
     def Y(
         self,

@@ -8,8 +8,9 @@ from dataclasses import field
 from beartype import beartype
 from beartype.typing import Tuple, Dict
 from jax.nn import log_sigmoid, relu, sigmoid
-from jaxtyping import Array, Float, Integer, Bool, jaxtyped
+from jaxtyping import Array, Float, Bool, jaxtyped
 
+from architect.types import PRNGKeyArray
 from architect.systems.power_systems.acopf_types import (
     ACOPFResult,
     Dispatch,
@@ -19,9 +20,6 @@ from architect.systems.power_systems.acopf_types import (
     Network,
     NetworkSpecification,
 )
-
-# Utility type
-PRNGKeyArray = Integer[Array, "2"]
 
 
 @jaxtyped
