@@ -49,7 +49,7 @@ def inference_loop(
 
 if __name__ == "__main__":
     # Make the test system
-    L = 50.0
+    L = 100.0
     sys = load_test_network("case14", penalty=L)
 
     # Let's start by trying to solve the ACOPF problem for the nominal system
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     posterior_logprob = lambda dispatch: -sys(dispatch, network).potential
 
     # Make a MALA kernel for MCMC sampling
-    mala_step_size = 1e-5
+    mala_step_size = 1e-6
     n_samples = 200
     warmup_samples = 200
     n_chains = 10
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     axs["voltage"].set_ylabel("$|V|$ (p.u.)")
 
     filename = (
-        f"results/acopf/14bus/dispatch_L_{L:0.1e}_{n_samples}_samples_"
+        f"results/acopf/case14/dispatch_L_{L:0.1e}_{n_samples}_samples_"
         f"{n_chains}_chains_mala_step_{mala_step_size:0.1e}"
     )
     plt.savefig(filename + ".png")

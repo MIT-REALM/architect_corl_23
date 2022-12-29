@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 from beartype import beartype
@@ -29,8 +30,11 @@ def test_make_kernel_mala():
     """Test the make_kernel function for the MALA sampler."""
     step_size = 1e-3
 
+    # Scale up the potential to make the test more consistent
+    potential = lambda x: 100 * quadratic_potential(x)
+
     kernel = make_kernel(
-        quadratic_potential, step_size, use_gradients=True, use_stochasticity=True
+        potential, step_size, use_gradients=True, use_stochasticity=True
     )
 
     # Kernel should be initialized correctly
@@ -39,7 +43,24 @@ def test_make_kernel_mala():
     # We should be able to call the kernel
     n = 2
     position = jnp.ones(n)
-    state = init_sampler(position, quadratic_potential)
+    state = init_sampler(position, potential)
     prng_key = jrandom.PRNGKey(0)
     next_state = kernel(prng_key, state)
     assert next_state is not None
+
+    # If we run the kernel for a while, we should get samples that average around the
+    # minimum at x = 0
+    n_steps = 1000
+    tolerance = 1e-2
+
+    @jax.jit
+    def one_step(state, rng_key):
+        state = kernel(rng_key, state)
+        return state, state
+
+    keys = jrandom.split(prng_key, n_steps * 2)
+    _, states = jax.lax.scan(one_step, next_state, keys)
+
+    assert jnp.allclose(
+        states.position[n_steps:].mean(axis=0), jnp.zeros(n), atol=tolerance
+    )

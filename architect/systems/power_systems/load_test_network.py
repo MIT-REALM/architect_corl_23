@@ -20,6 +20,7 @@ def load_test_network(
     g_stddev: float = 0.1,
     b_stddev: float = 0.1,
     penalty: float = 10.0,
+    load_dispatchability: float = 0.3,
 ) -> ACOPF:
     """
     Load a test network from the MATPOWER suite.
@@ -32,7 +33,8 @@ def load_test_network(
         p_failure: the probability of any single line failing
         g_stddev: the standard deviation in line conductance
         b_stddev: the standard deviation in line susceptance
-        penalty coefficient
+        L: penalty coefficient
+        load_dispatchability: what fraction of demand we can dispatch.
     """
     ############################
     # Load data from file
@@ -156,13 +158,19 @@ def load_test_network(
     ############################
 
     # Add a load anywhere the case shows power demand
-    # These cases don't include flexible loads, but let's add 20% dispatchability
+    # These cases don't include flexible loads, but let's add some dispatchability
     # to these loads. Also make negative to indicate a load
     P_load = jnp.array(case_data["bus"]["PD"])
     Q_load = jnp.array(case_data["bus"]["QD"])
     load_mask = jnp.logical_and(P_load != 0, Q_load != 0)
-    P_load_limits = jnp.vstack((-P_load, -0.8 * P_load)).T[load_mask]
-    Q_load_limits = jnp.vstack((-Q_load, -0.8 * Q_load)).T[load_mask]
+    scale = 1.0 - load_dispatchability
+    P_load_limits = jnp.vstack((-P_load, -scale * P_load)).T[load_mask]
+    Q_load_limits = jnp.vstack((-Q_load, -scale * Q_load)).T[load_mask]
+    # We may have shuffled some of these maxes and mins, but that's easy to fix
+    P_min, P_max = jnp.min(P_load_limits, axis=-1), jnp.max(P_load_limits, axis=-1)
+    P_load_limits = jnp.vstack((P_min, P_max)).T
+    Q_min, Q_max = jnp.min(Q_load_limits, axis=-1), jnp.max(Q_load_limits, axis=-1)
+    Q_load_limits = jnp.vstack((Q_min, Q_max)).T
 
     # Normalize to base power
     P_load_limits /= base_MVA
