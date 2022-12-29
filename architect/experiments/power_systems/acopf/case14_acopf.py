@@ -17,14 +17,14 @@ if __name__ == "__main__":
     case_name = "case14"
     L = 100.0
     mcmc_step_size = 1e-6
-    num_rounds = 400
-    num_mcmc_steps_per_round = 1
+    num_rounds = 10
+    num_mcmc_steps_per_round = 20
     num_chains = 11
     use_gradients = True
     use_stochasticity = True
     repair = True
     predict = False
-    quench_rounds = 200
+    quench_rounds = 5
 
     # Load the test case
     sys = load_test_network(case_name, penalty=L)
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     axs = fig.subplot_mosaic(
         [
             ["constraints", "cost"],
-            ["trace", "logprob_hist"],
+            ["trace", "trace"],
             ["generation", "voltage"],
         ]
     )
@@ -112,10 +112,6 @@ if __name__ == "__main__":
     axs["trace"].plot(dp_logprobs)
     axs["trace"].set_xlabel("# Samples")
     axs["trace"].set_ylabel("Overall log probability")
-
-    # Plot the logprob histogram
-    sns.histplot(x=dp_logprobs.flatten(), ax=axs["logprob_hist"])
-    axs["logprob_hist"].set_xlabel("Log probability")
 
     # Plot the generations along with their limits
     bus = sys.gen_spec.buses

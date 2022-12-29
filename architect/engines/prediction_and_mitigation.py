@@ -81,6 +81,7 @@ def predict_and_mitigate_failure_modes(
     repair: bool = True,
     predict: bool = True,
     quench_rounds: int = 0,
+    quench_step_size: Optional[float] = None,
 ) -> Tuple[
     Params,
     Params,
@@ -111,6 +112,8 @@ def predict_and_mitigate_failure_modes(
         repair: if True, run the repair steps
         predict: if True, run the predict steps
         quench_rounds: if True, turn off stochasticity for the last round
+        quench_step_size: step size to use during quenching. If not provided, defaults
+            to mcmc_step_size
     returns:
         - A trace of updated populations of design parameters
         - A trace of updated populations of exogenous parameters
@@ -118,6 +121,10 @@ def predict_and_mitigate_failure_modes(
             following update to the exogenous parameters)
         - A trace of overall log probabilities for the exogenous parameters
     """
+    # Provide defaults
+    if quench_step_size is None:
+        quench_step_size = mcmc_step_size
+
     # Make the function to run one round of repair/predict
     @jax.jit
     def one_smc_step(carry, prng_key):
@@ -135,6 +142,13 @@ def predict_and_mitigate_failure_modes(
             i > num_rounds - quench_rounds,
             lambda: False,
             lambda: use_stochasticity,
+        )
+
+        # Modify the step size during quenching
+        step_size = jax.lax.cond(
+            i > num_rounds - quench_rounds,
+            lambda: quench_step_size,
+            lambda: mcmc_step_size,
         )
 
         ###############################################
@@ -156,7 +170,7 @@ def predict_and_mitigate_failure_modes(
 
             # Make the sampling kernel
             dp_kernel = make_kernel(
-                dp_logprob_fn, mcmc_step_size, use_gradients, stochasticity
+                dp_logprob_fn, step_size, use_gradients, stochasticity
             )
 
             # Run the chains and update the design parameters
@@ -190,7 +204,7 @@ def predict_and_mitigate_failure_modes(
 
             # Make the sampling kernel
             ep_kernel = make_kernel(
-                ep_logprob_fn, mcmc_step_size, use_gradients, stochasticity
+                ep_logprob_fn, step_size, use_gradients, stochasticity
             )
 
             # Run the chains and update the design parameters

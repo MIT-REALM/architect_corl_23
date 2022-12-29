@@ -35,7 +35,7 @@ def init_sampler(position: Params, logdensity_fn: LogLikelihood) -> SamplerState
 @beartype
 def make_kernel(
     logdensity_fn: LogLikelihood,
-    step_size: float,
+    step_size: Union[float, Float[Array, ""]],
     use_gradients: Union[bool, Bool[Array, ""]] = True,
     use_stochasticity: Union[bool, Bool[Array, ""]] = True,
 ) -> Sampler:
@@ -64,7 +64,9 @@ def make_kernel(
     @jaxtyped
     @beartype
     def transition_log_probability(
-        state: SamplerState, new_state: SamplerState, step_size: float
+        state: SamplerState,
+        new_state: SamplerState,
+        step_size: Union[float, Float[Array, ""]],
     ):
         """Compute the log likelihood of proposing new_state starting in state."""
         # Based on the MALA implementation in Blackjax, but extended to allow
