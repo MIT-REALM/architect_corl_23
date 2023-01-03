@@ -1,4 +1,6 @@
+import argparse
 import json
+import os
 import time
 
 import jax
@@ -13,18 +15,46 @@ from architect.engines import predict_and_mitigate_failure_modes
 from architect.systems.power_systems.load_test_network import load_test_network
 
 if __name__ == "__main__":
+    # Set up arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--case_name", type=str, nargs="?", default="case14")
+    parser.add_argument("--L", type=float, nargs="?", default=100.0)
+    parser.add_argument("--mcmc_step_size", type=float, nargs="?", default=1e-6)
+    parser.add_argument("--num_rounds", type=int, nargs="?", default=10)
+    parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=20)
+    parser.add_argument("--num_chains", type=int, nargs="?", default=10)
+    parser.add_argument("--quench_rounds", type=int, nargs="?", default=5)
+    parser.add_argument("--disable_gradients", action="store_true")
+    parser.add_argument("--disable_stochasticity", action="store_true")
+    parser.add_argument("--repair", nargs="?", const=True, default=True)
+    parser.add_argument("--predict", nargs="?", const=True, default=False)
+    args = parser.parse_args()
+
     # Hyperparameters
-    case_name = "case14"
-    L = 100.0
-    mcmc_step_size = 1e-6
-    num_rounds = 10
-    num_mcmc_steps_per_round = 20
-    num_chains = 11
-    use_gradients = True
-    use_stochasticity = True
-    repair = True
-    predict = False
-    quench_rounds = 5
+    case_name = args.case_name
+    L = args.L
+    mcmc_step_size = args.mcmc_step_size
+    num_rounds = args.num_rounds
+    num_mcmc_steps_per_round = args.num_mcmc_steps_per_round
+    num_chains = args.num_chains
+    use_gradients = not args.disable_gradients
+    use_stochasticity = not args.disable_stochasticity
+    repair = args.repair
+    predict = args.predict
+    quench_rounds = args.quench_rounds
+
+    print(f"Running ACOPF on {case_name} with hyperparameters:")
+    print(f"\tcase_name = {case_name}")
+    print(f"\tL = {L}")
+    print(f"\tmcmc_step_size = {mcmc_step_size}")
+    print(f"\tnum_rounds = {num_rounds}")
+    print(f"\tnum_mcmc_steps_per_round = {num_mcmc_steps_per_round}")
+    print(f"\tnum_chains = {num_chains}")
+    print(f"\tuse_gradients = {use_gradients}")
+    print(f"\tuse_stochasticity = {use_stochasticity}")
+    print(f"\trepair = {repair}")
+    print(f"\tpredict = {predict}")
+    print(f"\tquench_rounds = {quench_rounds}")
 
     # Load the test case
     sys = load_test_network(case_name, penalty=L)
@@ -41,6 +71,8 @@ if __name__ == "__main__":
     prng_key, dispatch_key = jrandom.split(prng_key)
     dispatch_keys = jrandom.split(dispatch_key, num_chains)
     design_params = jax.vmap(sys.sample_random_dispatch)(dispatch_keys)
+
+    print("Setup complete.")
 
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
@@ -62,7 +94,7 @@ if __name__ == "__main__":
     )
     t_end = time.perf_counter()
     print(
-        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+        f"Ran {num_rounds:,} rounds of {num_chains} chains in {t_end - t_start:.2f} s."
     )
 
     # Get the performance with the design parameters after the last round
@@ -156,11 +188,13 @@ if __name__ == "__main__":
     axs["voltage"].set_ylabel("$|V|$ (p.u.)")
 
     filename = (
-        f"results/acopf/case14/dispatch_L_{L:0.1e}_"
+        f"results/acopf/{case_name}/dispatch_L_{L:0.1e}_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
         f"{quench_rounds}_quench_rounds_"
         f"{num_chains}_chains_mala_step_{mcmc_step_size:0.1e}"
     )
+    print(f"Saving results to: {filename}")
+    os.makedirs(f"results/acopf/{case_name}", exist_ok=True)
     plt.savefig(filename + ".png")
 
     # Save the dispatch

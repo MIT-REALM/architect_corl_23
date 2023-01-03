@@ -86,7 +86,7 @@ def predict_and_mitigate_failure_modes(
     Params,
     Params,
     Optional[Float[Array, "num_rounds n"]],
-    Optional[Float[Array, "num_rounds n"]],
+    Optional[Float[Array, "num_rounds m"]],
 ]:
     """
     Run the sequential monte carlo algorithm for SC-ACOPF

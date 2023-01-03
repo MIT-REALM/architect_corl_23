@@ -1,3 +1,4 @@
+import time
 import json
 import os.path
 
@@ -56,6 +57,11 @@ def load_test_network(
         (jnp.array(case_data["bus"]["VMIN"]), jnp.array(case_data["bus"]["VMAX"]))
     ).T
 
+    # Make sure buses are labelled correctly
+    # TODO relabel them somehow
+    bus_idxs = jnp.array(case_data["bus"]["i"])
+    assert jnp.allclose(jnp.diff(bus_idxs), 1), "Buses should be labelled sequentially"
+
     ############################
     # Network/branch data
     ############################
@@ -90,9 +96,9 @@ def load_test_network(
     charging_susceptances = jnp.array(case_data["branch"]["BR_B"])
 
     # Add line failure parameters
-    prob_line_failure = jnp.array([p_failure for _ in range(n_line)])
-    line_conductance_stddev = jnp.array([g_stddev for _ in range(n_line)])
-    line_susceptance_stddev = jnp.array([b_stddev for _ in range(n_line)])
+    prob_line_failure = jnp.zeros(n_line) + p_failure
+    line_conductance_stddev = jnp.zeros(n_line) + g_stddev
+    line_susceptance_stddev = jnp.zeros(n_line) + b_stddev
 
     # Now we can load this data into our representation
     nominal_network = Network(
@@ -204,8 +210,21 @@ def load_test_network(
 
 
 if __name__ == "__main__":
-    sys = load_test_network("case14")
+    # Cases that load and get residual << 1:
+    # case14, case57, case118, case_ACTIVSg200
+    # Cases that load and get residual ~1
+    # case_ACTIVSg500
+    case_name = "case_ACTIVSg200"
+    sys = load_test_network(case_name)
+    print(
+        f"Successfully loaded {case_name} with {sys.n_bus} buses and {sys.n_line} lines"
+    )
     key = jax.random.PRNGKey(0)
     dispatch = sys.sample_random_dispatch(key)
+    start = time.perf_counter()
     r = sys(dispatch, sys.network_spec.nominal_network)
-    print(r.acopf_residual)
+    end = time.perf_counter()
+
+    print(
+        f"ACOPF completion residual {r.acopf_residual:.2e} (took {end - start:.2f} s)"
+    )
