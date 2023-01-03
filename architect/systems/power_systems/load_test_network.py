@@ -212,7 +212,7 @@ def load_test_network(
 if __name__ == "__main__":
     # Cases that load and get residual << 1:
     # case14, case57, case118, case_ACTIVSg200
-    # Cases that load and get residual ~1
+    # Cases that load but don't solve
     # case_ACTIVSg500
     case_name = "case_ACTIVSg200"
     sys = load_test_network(case_name)

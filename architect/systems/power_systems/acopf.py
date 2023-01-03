@@ -1,5 +1,5 @@
 import equinox as eqx
-import jaxopt
+import diffrax
 import jax
 import jax.experimental.sparse as jsparse
 import jax.numpy as jnp
@@ -205,17 +205,28 @@ class ACOPF(eqx.Module):
         n_nongen = self.n_bus - self.gen_spec.n
         n_nonref = self.n_bus - 1
 
-        def power_flow_residuals(x, network, P_gen, V_gen, P_load, Q_load):
+        # Compute the static part of the residual power injections
+        P_residual = jnp.zeros(self.n_bus)
+        P_residual = P_residual.at[self.gen_spec.buses].add(-P_gen)
+        P_residual = P_residual.at[self.load_spec.buses].add(-P_load)
+        Q_residual = jnp.zeros(self.n_bus)
+        Q_residual = Q_residual.at[self.load_spec.buses].add(-Q_load)
+
+        # Pre-populate the static voltage amplitudes and angles
+        voltage_amplitudes = jnp.zeros(self.n_bus)
+        voltage_amplitudes = voltage_amplitudes.at[self.gen_spec.buses].set(V_gen)
+        voltage_angles = jnp.zeros(self.n_bus)
+
+        def power_flow_residuals(x, args):
+            # Extract parameters
+            network, voltage_amplitudes, voltage_angles, P_residual, Q_residual = args
+
             # Extract voltage amplitudes and angles from the inputs
             V_nongen = x[:n_nongen]
             voltage_angles_nonref = x[n_nongen:]
 
             # Combine these amplitudes and angles with the known values
-            voltage_amplitudes = jnp.zeros(self.n_bus)
-            voltage_amplitudes = voltage_amplitudes.at[self.gen_spec.buses].set(V_gen)
             voltage_amplitudes = voltage_amplitudes.at[self.nongen_buses].set(V_nongen)
-
-            voltage_angles = jnp.zeros(self.n_bus)
             voltage_angles = voltage_angles.at[self.nonref_buses].set(
                 voltage_angles_nonref
             )
@@ -229,20 +240,17 @@ class ACOPF(eqx.Module):
             # power injections. We want the active power residual to be zero at all
             # non-reference buses, and we want the reactive power residual to be zero at
             # all load buses
-            P_residual = P_implied
-            P_residual = P_residual.at[self.gen_spec.buses].add(-P_gen)
-            P_residual = P_residual.at[self.load_spec.buses].add(-P_load)
-            Q_residual = Q_implied
-            Q_residual = Q_residual.at[self.load_spec.buses].add(-Q_load)
+            P_residual_i = P_residual + P_implied
+            Q_residual_i = Q_residual + Q_implied
 
             # Filter down to the buses we care about at this stage. We need to balance
             # active power at all buses except the slack buses, and we need to balance
             # reactive power at all buses without generators
-            P_residual = P_residual[self.nonref_buses]
-            Q_residual = Q_residual[self.nongen_buses]
+            P_residual_i = P_residual_i[self.nonref_buses]
+            Q_residual_i = Q_residual_i[self.nongen_buses]
 
             # Stack the residuals to minimize
-            residuals = jnp.hstack((P_residual, Q_residual))
+            residuals = jnp.hstack((P_residual_i, Q_residual_i))
 
             return residuals
 
@@ -250,25 +258,38 @@ class ACOPF(eqx.Module):
         V_nongen_init = jnp.ones(n_nongen)
         voltage_angles_nonref_init = jnp.zeros(n_nonref)
         x_init = jnp.hstack((V_nongen_init, voltage_angles_nonref_init))
-        solver = jaxopt.GaussNewton(
-            residual_fun=power_flow_residuals,
-            tol=self.tolerance,
-            maxiter=self.maxsteps,
+        solver = diffrax.NewtonNonlinearSolver(
+            rtol=self.tolerance, atol=self.tolerance, max_steps=self.maxsteps
         )
-        sol = solver.run(
+        sol = solver(
+            power_flow_residuals,
             x_init,
-            network,
-            P_gen,
-            V_gen,
-            P_load,
-            Q_load,
+            (
+                network,
+                voltage_amplitudes,
+                voltage_angles,
+                P_residual,
+                Q_residual,
+            ),
         )
 
         # Extract solution
-        x_sol = sol.params
+        x_sol = sol.root
         V_nongen = x_sol[:n_nongen]
         voltage_angles_nonref = x_sol[n_nongen:]
-        acopf_residual = (sol.state.residual ** 2).sum()
+        acopf_residual = (
+            power_flow_residuals(
+                x_sol,
+                (
+                    network,
+                    voltage_amplitudes,
+                    voltage_angles,
+                    P_residual,
+                    Q_residual,
+                ),
+            )
+            ** 2
+        ).sum()
 
         return V_nongen, voltage_angles_nonref, acopf_residual
 

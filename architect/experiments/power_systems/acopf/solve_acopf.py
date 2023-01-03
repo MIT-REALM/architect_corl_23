@@ -14,6 +14,7 @@ from jaxtyping import Array, Shaped
 from architect.engines import predict_and_mitigate_failure_modes
 from architect.systems.power_systems.load_test_network import load_test_network
 
+
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
