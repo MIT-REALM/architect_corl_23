@@ -4,14 +4,15 @@ Failure mode prediction and mitigation code.
 Provides system-agnostic code for failure mode prediction and mitigation.
 """
 import jax
+import jax.numpy as jnp
 import jax.random as jrandom
-from jax.nn import logsumexp
 from beartype import beartype
-from beartype.typing import Tuple, Callable, Optional
+from beartype.typing import Callable, Optional, Tuple
+from jax.nn import logsumexp
 from jaxtyping import Array, Float, Integer, jaxtyped
 
-from architect.types import Params, Sampler, LogLikelihood
 from architect.engines.samplers import SamplerState, init_sampler, make_kernel
+from architect.types import LogLikelihood, Params, Sampler
 
 
 def softmax(x: Float[Array, "..."], smoothing: float = 5):
@@ -82,6 +83,7 @@ def predict_and_mitigate_failure_modes(
     predict: bool = True,
     quench_rounds: int = 0,
     quench_step_size: Optional[float] = None,
+    tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
 ) -> Tuple[
     Params,
     Params,
@@ -114,6 +116,8 @@ def predict_and_mitigate_failure_modes(
         quench_rounds: if True, turn off stochasticity for the last round
         quench_step_size: step size to use during quenching. If not provided, defaults
             to mcmc_step_size
+        tempering_schedule: a monotonically increasing array of positive tempering
+            values. If not provided, defaults to all 1s (no tempering).
     returns:
         - A trace of updated populations of design parameters
         - A trace of updated populations of exogenous parameters
@@ -125,9 +129,14 @@ def predict_and_mitigate_failure_modes(
     if quench_step_size is None:
         quench_step_size = mcmc_step_size
 
+    if tempering_schedule is None:
+        tempering_schedule = jnp.ones(num_rounds)
+
     # Make the function to run one round of repair/predict
     @jax.jit
-    def one_smc_step(carry, prng_key):
+    def one_smc_step(carry, scan_input):
+        # Unpack the input
+        prng_key, tempering = scan_input
         # Unpack the carry
         i, current_dps, current_eps = carry
 
@@ -225,8 +234,8 @@ def predict_and_mitigate_failure_modes(
     # Run the appropriate number of steps
     initial_carry = (0, design_params, exogenous_params)
     keys = jrandom.split(prng_key, num_rounds)
-    _, results = jax.lax.scan(one_smc_step, initial_carry, keys)
+    _, results = jax.lax.scan(one_smc_step, initial_carry, (keys, tempering_schedule))
 
     # Unpack the results and return
-    _, dispatches, dispatch_logprobs, networks, network_logprobs = results
-    return dispatches, dispatch_logprobs, networks, network_logprobs
+    _, design_params, dp_logprobs, exogenous_params, ep_logprobs = results
+    return design_params, dp_logprobs, exogenous_params, ep_logprobs

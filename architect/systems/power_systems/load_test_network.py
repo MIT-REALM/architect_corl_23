@@ -214,7 +214,7 @@ if __name__ == "__main__":
     # case14, case57, case118, case_ACTIVSg200
     # Cases that load but don't solve
     # case_ACTIVSg500
-    case_name = "case_ACTIVSg200"
+    case_name = "case14"
     sys = load_test_network(case_name)
     print(
         f"Successfully loaded {case_name} with {sys.n_bus} buses and {sys.n_line} lines"
