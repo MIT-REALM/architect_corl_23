@@ -170,7 +170,9 @@ def predict_and_mitigate_failure_modes(
             dp_potential_fn = lambda dp: -jax.vmap(potential_fn, in_axes=(None, 0))(
                 dp, current_eps
             ).mean()
-            dp_logprob_fn = lambda dp: dp_logprior_fn(dp) + dp_potential_fn(dp)
+            dp_logprob_fn = lambda dp: dp_logprior_fn(dp) + tempering * dp_potential_fn(
+                dp
+            )
 
             # Initialize the chains for this kernel
             initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
@@ -204,7 +206,9 @@ def predict_and_mitigate_failure_modes(
             ep_potential_fn = lambda ep: softmin(
                 jax.vmap(potential_fn, in_axes=(0, None))(current_dps, ep)
             )
-            ep_logprob_fn = lambda ep: ep_logprior_fn(ep) + ep_potential_fn(ep)
+            ep_logprob_fn = lambda ep: ep_logprior_fn(ep) + tempering * ep_potential_fn(
+                ep
+            )
 
             # Initialize the chains for this kernel
             initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(

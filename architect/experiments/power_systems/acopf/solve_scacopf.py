@@ -202,7 +202,7 @@ if __name__ == "__main__":
     filename = (
         f"results/{experiment_type}/{case_name}/sc_dispatch_L_{L:0.1e}_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
-        f"{quench_rounds}_quench_rounds_"
+        f"{quench_rounds}_quench_rounds_{'tempered_' if temper else ''}"
         f"{num_chains}_chains_mala_step_{mcmc_step_size:0.1e}"
     )
     print(f"Saving results to: {filename}")
@@ -227,6 +227,7 @@ if __name__ == "__main__":
                 "repair": repair,
                 "predict": predict,
                 "quench_rounds": quench_rounds,
+                "tempering_schedule": tempering_schedule,
             },
             f,
             default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
