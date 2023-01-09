@@ -17,7 +17,7 @@ from architect.systems.power_systems.acopf_types import (
     GenerationDispatch,
     InterconnectionSpecification,
     LoadDispatch,
-    Network,
+    NetworkState,
     NetworkSpecification,
 )
 
@@ -85,7 +85,7 @@ class ACOPF(eqx.Module):
     @beartype
     def power_injections(
         self,
-        network: Network,
+        network_state: NetworkState,
         voltage_amplitudes: Float[Array, " n_bus"],
         voltage_angles: Float[Array, " n_bus"],
     ) -> Tuple[Float[Array, " n_bus"], Float[Array, " n_bus"]]:
@@ -93,7 +93,7 @@ class ACOPF(eqx.Module):
         Compute the real and reactive power injections at each bus.
 
         args:
-            network: the network to use to solve the injections
+            network_state: the network state to use to solve the injections
             voltage_amplitudes: voltage amplitudes at each bus
             voltage_angles: voltage angles at each bus
 
@@ -104,14 +104,7 @@ class ACOPF(eqx.Module):
         V = voltage_amplitudes * jnp.exp(voltage_angles * 1j)
 
         # Compute the complex current and power that results from the proposed voltages
-        Y = network.Y(
-            self.network_spec.lines,
-            self.network_spec.shunt_conductances,
-            self.network_spec.shunt_susceptances,
-            self.network_spec.transformer_tap_ratios,
-            self.network_spec.transformer_phase_shifts,
-            self.network_spec.charging_susceptances,
-        )
+        Y = self.network_spec.Y(network_state)
         current = jsparse.sparsify(lambda Y, V: Y @ V)(Y, V)
         # Y = Y.todense()
         # current = jnp.dot(Y, V)
@@ -178,7 +171,7 @@ class ACOPF(eqx.Module):
     @beartype
     def complete_voltages(
         self,
-        network: Network,
+        network_state: NetworkState,
         P_gen: Float[Array, " n_gen"],
         V_gen: Float[Array, " n_gen"],
         P_load: Float[Array, " n_load"],
@@ -190,7 +183,7 @@ class ACOPF(eqx.Module):
         Solve for free voltage amplitudes and angles.
 
         args:
-            network: the network to use to solve the power flow
+            network_state: the network to use to solve the power flow
             P_gen: generator active power injection
             V_gen: generator active power injection
             P_load: load active power injection
@@ -219,7 +212,13 @@ class ACOPF(eqx.Module):
 
         def power_flow_residuals(x, args):
             # Extract parameters
-            network, voltage_amplitudes, voltage_angles, P_residual, Q_residual = args
+            (
+                network_state,
+                voltage_amplitudes,
+                voltage_angles,
+                P_residual,
+                Q_residual,
+            ) = args
 
             # Extract voltage amplitudes and angles from the inputs
             V_nongen = x[:n_nongen]
@@ -233,7 +232,7 @@ class ACOPF(eqx.Module):
 
             # Get the power injections implied by these voltages
             P_implied, Q_implied = self.power_injections(
-                network, voltage_amplitudes, voltage_angles
+                network_state, voltage_amplitudes, voltage_angles
             )
 
             # Compute the difference between these power injections and the dispatched
@@ -265,7 +264,7 @@ class ACOPF(eqx.Module):
             power_flow_residuals,
             x_init,
             (
-                network,
+                network_state,
                 voltage_amplitudes,
                 voltage_angles,
                 P_residual,
@@ -281,7 +280,7 @@ class ACOPF(eqx.Module):
             power_flow_residuals(
                 x_sol,
                 (
-                    network,
+                    network_state,
                     voltage_amplitudes,
                     voltage_angles,
                     P_residual,
@@ -297,7 +296,7 @@ class ACOPF(eqx.Module):
     @beartype
     def complete_powers(
         self,
-        network: Network,
+        network_state: NetworkState,
         P_gen: Float[Array, " n_gen"],
         P_load: Float[Array, " n_load"],
         Q_load: Float[Array, " n_load"],
@@ -308,7 +307,7 @@ class ACOPF(eqx.Module):
         Solve for the free power injections.
 
         args:
-            network: the network to use to solve the power flow
+            network_state: the network to use to solve the power flow
             P_gen: generator active power injection
             P_load: load active power injection
             Q_load: load reactive power injection
@@ -322,7 +321,7 @@ class ACOPF(eqx.Module):
         """
         # Make a forward pass through the power flow equations to get the net power
         # injections at each bus
-        P, Q = self.power_injections(network, voltage_amplitudes, voltage_angles)
+        P, Q = self.power_injections(network_state, voltage_amplitudes, voltage_angles)
 
         # Subtract known power injections
         P = P.at[self.gen_spec.buses].add(-P_gen)
@@ -343,14 +342,14 @@ class ACOPF(eqx.Module):
     def __call__(
         self,
         dispatch: Dispatch,
-        network: Network,
+        network_state: NetworkState,
     ) -> ACOPFResult:
         """
         Computes the power flows associated with the proposed bus voltages and angles.
 
         args:
             dispatch: the voltage dispatch to use when solving power flow
-            network: the network to use for solving power flow
+            network_state: the network to use for solving power flow
             repair_steps: how many steps to take to correct infeasible dispatches
             repair_lr: the size of the repair steps
         returns:
@@ -377,7 +376,7 @@ class ACOPF(eqx.Module):
         #   - voltage angle at all non-reference buses
         # also track any error in the ACOPF power flow
         V_nongen, voltage_angles_nonref, acopf_residual = self.complete_voltages(
-            network, P_gen, V_gen, P_load, Q_load
+            network_state, P_gen, V_gen, P_load, Q_load
         )
 
         # Save these into some convenient arrays
@@ -394,7 +393,7 @@ class ACOPF(eqx.Module):
         #   - Q at each generator
         #   - Q and P injected from reference bus
         Q_gen, P_ref, Q_ref = self.complete_powers(
-            network, P_gen, P_load, Q_load, voltage_amplitudes, voltage_angles
+            network_state, P_gen, P_load, Q_load, voltage_amplitudes, voltage_angles
         )
 
         # Compute constraint violations
@@ -411,7 +410,7 @@ class ACOPF(eqx.Module):
 
         result = ACOPFResult(
             dispatch,
-            network,
+            network_state,
             voltage_amplitudes,
             voltage_angles,
             Q_gen,
@@ -500,152 +499,54 @@ class ACOPF(eqx.Module):
 
     @jaxtyped
     @beartype
-    def network_prior_logprob(self, network: Network) -> Float[Array, ""]:
+    def network_state_prior_logprob(
+        self, network_state: NetworkState
+    ) -> Float[Array, ""]:
         """
-        Compute the prior log probability of the given network.
+        Compute the prior log probability of the given network state.
 
-        Probability is not necessarily normalized.
+        Line states are positive in the absence of failure and negative when failure
+        occurs. We can represent this as a Gaussian distribution with the mean shifted
+        so that there is network_spec.prob_line_failure probability mass for negative
+        values.
 
-        We use a mixture model for failures:
-
-            With probability 1 - network_spec.prob_line_failure, the conductance and
-            susceptance are sampled from Gaussians with mean at the nominal value and
-            standard deviation network_spec.line_conductance_stddev and
-            network_spec.line_susceptance_stddev.
-
-            With probability 1 - network_spec.prob_line_failure, the conductance and
-            susceptance are sampled from Gaussians with zero mean at the nominal value
-            and standard deviation network_spec.line_conductance_stddev and
-            network_spec.line_susceptance_stddev.
-
-        Conductances are clipped to be non-negative
-
-        Failures are assumed to be indepedendent.
+        Failures are assumed to be indepedendent. Probability density is not necessarily
+        normalized.
 
         We assume that shunt admittances are not subject to failures.
         """
-        # Unpack the network conductances and susceptances
-        line_conductances = network.line_conductances
-        line_susceptances = network.line_susceptances
+        # Figure out how much to shift a standard Gaussian so that there is the right
+        # probability of negative values
+        shift = -jax.scipy.stats.norm.ppf(self.network_spec.prob_line_failure)
 
-        # Get the nominal line conductance and susceptance
-        nominal_line_conductances = self.network_spec.nominal_network.line_conductances
-        nominal_line_susceptances = self.network_spec.nominal_network.line_susceptances
-
-        # The PDF of the mixture is a convex combination of the nominal- and
-        # failure-case PDFs. Both have a similar form based on a element-wise Gaussian
-        gaussian_pdf = lambda y, y_nom, sigma: jax.scipy.stats.norm.pdf(
-            y, loc=y_nom, scale=sigma
-        )
-
-        # Compute the nominal-case likelihood
-        nominal_likelihood = jax.vmap(gaussian_pdf)(
-            line_conductances,
-            nominal_line_conductances,
-            self.network_spec.line_conductance_stddev,
-        ) * jax.vmap(gaussian_pdf)(
-            line_susceptances,
-            nominal_line_susceptances,
-            self.network_spec.line_susceptance_stddev,
-        )
-
-        # Compute the failure-case likelihood, where we add a term to smoothly clip
-        # conductances to be non-negative
-        def smooth_clip(x, x_min):
-            b = 50.0  # smoothing
-            return sigmoid(b * (x - x_min))
-
-        failure_likelihood = (
-            jax.vmap(gaussian_pdf)(
-                line_conductances,
-                jnp.zeros_like(nominal_line_conductances),
-                self.network_spec.line_conductance_stddev,
-            )
-            * jax.vmap(gaussian_pdf)(
-                line_susceptances,
-                jnp.zeros_like(nominal_line_susceptances),
-                self.network_spec.line_susceptance_stddev,
-            )
-            * smooth_clip(line_conductances, 0.0)
-        )
-
-        # Combine the likeihoods by weighting the probability of failure of each line
-        p_failure = self.network_spec.prob_line_failure
-        p_nominal = 1 - p_failure
-        likelihood = p_nominal * nominal_likelihood + p_failure * failure_likelihood
-
-        # Return the overall log likelihood
-        logprob = jnp.log(likelihood).sum()
+        # Get the log likelihood for this shifted Gaussian
+        logprob = jax.scipy.stats.norm.cdf(network_state.line_states, loc=shift).sum()
 
         return logprob
 
     @jaxtyped
     @beartype
-    def sample_random_network(self, key: PRNGKeyArray) -> Network:
+    def sample_random_network_state(self, key: PRNGKeyArray) -> NetworkState:
         """
-        Sample a random network.
+        Sample a random network state
 
-        We use a mixture model for failures:
+        Line states are positive in the absence of failure and negative when failure
+        occurs. We can represent this as a Gaussian distribution with the mean shifted
+        so that there is network_spec.prob_line_failure probability mass for negative
+        values.
 
-            With probability 1 - network_spec.prob_line_failure, the conductance and
-            susceptance are sampled from Gaussians with mean at the nominal value and
-            standard deviation network_spec.line_conductance_stddev and
-            network_spec.line_susceptance_stddev.
-
-            With probability 1 - network_spec.prob_line_failure, the conductance and
-            susceptance are sampled from Gaussians with zero mean at the nominal value
-            and standard deviation network_spec.line_conductance_stddev and
-            network_spec.line_susceptance_stddev.
+        Failures are assumed to be indepedendent.
 
         args:
             key: PRNG key to use for sampling
         """
-        failure_key, nominal_key, failed_key = jrandom.split(key, 3)
+        # Figure out how much to shift a standard Gaussian so that there is the right
+        # probability of negative values
+        shift = -jax.scipy.stats.norm.ppf(self.network_spec.prob_line_failure)
 
-        # Sample failure states for each line
-        line_failures = jrandom.bernoulli(
-            failure_key,
-            self.network_spec.prob_line_failure,
-            shape=(self.network_spec.nominal_network.n_line,),
-        )
+        # Sample line states (positive = no failure, negative = failure)
+        n_line = self.network_spec.n_line
+        line_states = jrandom.normal(key, shape=(n_line,)) + shift
 
-        # Sample nominal- and failure-case scale factors for each line
-        conductance_key, susceptance_key = jrandom.split(nominal_key)
-        nominal_conductances = jrandom.multivariate_normal(
-            conductance_key,
-            mean=self.network_spec.nominal_network.line_conductances,
-            cov=self.network_spec.line_conductance_stddev * jnp.eye(self.n_line),
-        )
-        nominal_susceptances = jrandom.multivariate_normal(
-            susceptance_key,
-            mean=self.network_spec.nominal_network.line_susceptances,
-            cov=self.network_spec.line_susceptance_stddev * jnp.eye(self.n_line),
-        )
-        conductance_key, susceptance_key = jrandom.split(failed_key)
-        failure_conductances = jrandom.multivariate_normal(
-            conductance_key,
-            mean=jnp.zeros(self.n_line),
-            cov=self.network_spec.line_conductance_stddev * jnp.eye(self.n_line),
-        )
-        failure_susceptances = jrandom.multivariate_normal(
-            susceptance_key,
-            mean=jnp.zeros(self.n_line),
-            cov=self.network_spec.line_susceptance_stddev * jnp.eye(self.n_line),
-        )
-
-        # Combine the nominal and failure-mode parameters
-        conductances = jnp.where(
-            line_failures, failure_conductances, nominal_conductances
-        )
-        susceptances = jnp.where(
-            line_failures, failure_susceptances, nominal_susceptances
-        )
-
-        # Clip conductances to be positive
-        conductances = jnp.clip(conductances, a_min=0.0)
-
-        # Return a new network (shunt admittances are unchanged from nominal)
-        return Network(
-            conductances,
-            susceptances,
-        )
+        # Return a new network state
+        return NetworkState(line_states)

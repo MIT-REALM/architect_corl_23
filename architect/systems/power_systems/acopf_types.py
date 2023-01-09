@@ -1,7 +1,7 @@
 import jax.experimental.sparse as jsparse
 import jax.numpy as jnp
 from beartype.typing import NamedTuple, Tuple
-from jax.nn import relu
+from jax.nn import relu, sigmoid
 from jaxtyping import (
     Array,
     Float,
@@ -111,123 +111,15 @@ class InterconnectionSpecification(NamedTuple):
 
 # @jaxtyped
 # @beartype  # Commented out until beartype 0.12.0 release (TODO@dawsonc)
-class Network(NamedTuple):
+class NetworkState(NamedTuple):
     """
     Representation of network connectivity for AC power flow.
 
-    Includes admittances between nodes, but not shunt admittances.
-
     args:
-        line_conductances: n_lines-element array of conductances connecting buses.
-            If [i, j] is the k-th row of `lines`, then the k-th entry of `conductances`
-            contains the conductance connecting bus i and bus j.
-        line_susceptances: n_lines-element array of susceptances connecting buses.
-            If [i, j] is the k-th row of `lines`, then the k-th entry of `susceptances`
-            contains the susceptance connecting bus i and bus j.
+        line_states: float indicating the strength of the corresponding line. Positive
+            indicates that the line is nominal, negative indicates that it has failed.
     """
-
-    line_conductances: Float[Array, " n_lines"]
-    line_susceptances: Float[Array, " n_lines"]
-
-    @property
-    def n_line(self):
-        """Return the number of lines in this network"""
-        return self.line_conductances.shape[0]
-
-    def Y(
-        self,
-        lines: Integer[Array, "n_lines 2"],
-        shunt_conductances: Float[Array, " n_bus"],
-        shunt_susceptances: Float[Array, " n_bus"],
-        transformer_tap_ratios: Float[Array, " n_lines"],
-        transformer_phase_shifts: Float[Array, " n_lines"],
-        charging_susceptances: Float[Array, " n_lines"],
-    ):
-        """
-        Compute the nodal admittance matrix for this network.
-
-        args:
-            lines: n_lines x 2 array of integers specifying bus connections. If [i, j]
-                is a row in this array, then buses i and j will be connected. Each
-                connection should be specified only once (so if [i, j] is included,
-                it is not necessary to include [j, i] as well)
-            shunt_conductances: n_lines-element array of shunt conductances connecting
-                buses to ground.
-            shunt_susceptances: n_lines-element array of shunt susceptances connecting
-                buses to ground.
-            transformer_tap_ratios: tap ratios of all lines (1 if no transformer)
-            transformer_phase_shifts: phase shifts of all lines (0 if no transformer)
-                Units should be in radians.
-            charging_susceptances: n_lines-element array of charging susceptances of
-                lines.
-        """
-        n_bus = shunt_conductances.shape[0]
-
-        # Clip all line and shunt conductances to make sure they're non-negative
-        line_conductances = jnp.clip(self.line_conductances, a_min=0.0)
-        shunt_conductances = jnp.clip(shunt_conductances, a_min=0.0)
-
-        # Assemble conductance and susceptance into complex admittance
-        line_admittances = line_conductances + 1j * self.line_susceptances
-        shunt_admittances = shunt_conductances + 1j * shunt_susceptances
-
-        # The following is based on the code in MATPOWER, PyPower, and Pandapower
-        # see github.com/e2nIEE/pandapower/blob/develop/pandapower/pypower/makeYbus.py
-        # and https://matpower.org/docs/manual.pdf
-
-        # Assemble the branch admittance matrices, which give the current injections
-        # at the from and to ends of each branch (If, It) as a function of the voltages
-        # at the from and to ends (Vf, Vt)
-        #
-        #      | If |   | Yff  Yft |   | Vf |
-        #      |    | = |          | * |    |
-        #      | It |   | Ytf  Ytt |   | Vt |
-
-        # Make complex tap ratio
-        tap = transformer_tap_ratios * jnp.exp(1j * transformer_phase_shifts)
-
-        # Assume no line charging susceptance
-        Ytt = line_admittances + 0.5j * charging_susceptances
-        Yff = Ytt / transformer_tap_ratios ** 2
-        Yft = -line_admittances / jnp.conj(tap)
-        Ytf = -line_admittances / tap
-
-        # To go from branch admittances to bus admittances, we need connection matrices,
-        # Cf (from connections) and Ct (to connections). These each have n_lines rows
-        # and n_buses columns, and are zero everywhere except that the (i, j) element of
-        # Cf and the (i, k) element of Ct are 1 iff line i connects from bus j to bus k
-        from_b = lines[:, 0]
-        to_b = lines[:, 1]
-        # Turns out we don't need this (they can maybe be used in a performance boost?)
-        # line_indices = jnp.arange(0, n_line).reshape(-1, 1)
-        # Cf_indices = jnp.hstack((line_indices, from_b.reshape(-1, 1)))
-        # Ct_indices = jnp.hstack((line_indices, to_b.reshape(-1, 1)))
-        # Cf = jsparse.BCOO((jnp.ones(n_line), Cf_indices), shape=(n_line, n_bus))
-        # Ct = jsparse.BCOO((jnp.ones(n_line), Ct_indices), shape=(n_line, n_bus))
-
-        # Make the sparse bus admittance matrix by assembling all of the
-        # branch admittances and the shunt admittances (duplicate indices are summed)
-        diag_i = jnp.arange(0, n_bus)
-        Y_bus = jsparse.BCOO(
-            (
-                jnp.concatenate((Yff, Yft, Ytf, Ytt, shunt_admittances)),  # data
-                jnp.hstack(
-                    (
-                        # Row indices
-                        jnp.concatenate((from_b, from_b, to_b, to_b, diag_i)).reshape(
-                            -1, 1
-                        ),
-                        # Column indices
-                        jnp.concatenate((from_b, to_b, from_b, to_b, diag_i)).reshape(
-                            -1, 1
-                        ),
-                    )
-                ),
-            ),
-            shape=(n_bus, n_bus),
-        )
-
-        return Y_bus
+    line_states: Float[Array, " n_lines"]
 
 
 # @jaxtyped
@@ -237,11 +129,17 @@ class NetworkSpecification(NamedTuple):
     Specification of network parameters.
 
     args:
-        nominal_network: the nominal admittances of the network lines
+        nominal_network_state: the nominal admittances of the network lines
         lines: n_lines x 2 array of integers specifying bus connections. If [i, j]
             is a row in this array, then buses i and j will be connected. Each
             connection should be specified only once (so if [i, j] is included,
             it is not necessary to include [j, i] as well)
+        line_conductances: n_lines-element array of nominal conductances between buses.
+            If [i, j] is the k-th row of `lines`, then the k-th entry of `conductances`
+            contains the conductance connecting bus i and bus j.
+        line_susceptances: n_lines-element array of nominal susceptances between buses.
+            If [i, j] is the k-th row of `lines`, then the k-th entry of `susceptances`
+            contains the susceptance connecting bus i and bus j.
         shunt_conductances: n_bus-element array of shunt conductances connecting
             buses to ground.
         shunt_susceptances: n_bus-element array of shunt susceptances connecting
@@ -257,8 +155,10 @@ class NetworkSpecification(NamedTuple):
             susceptances in both the nominal and failure cases.
     """
 
-    nominal_network: Network
+    nominal_network_state: NetworkState
     lines: Integer[Array, "n_lines 2"]
+    line_conductances: Float[Array, " n_lines"]
+    line_susceptances: Float[Array, " n_lines"]
     shunt_conductances: Float[Array, " n_bus"]
     shunt_susceptances: Float[Array, " n_bus"]
     transformer_tap_ratios: Float[Array, " n_lines"]
@@ -277,7 +177,88 @@ class NetworkSpecification(NamedTuple):
     @property
     def n_line(self) -> int:
         """Return the number of lines in the network"""
-        return self.nominal_network.n_line
+        return self.line_conductances.shape[0]
+    
+    def Y(
+        self,
+        network_state: NetworkState,
+        smoothing: float = 50.0
+    ):
+        """
+        Compute the nodal admittance matrix for this network.
+
+        args:
+            network_state: state of all lines in the network
+        """
+        # Clip all line and shunt conductances to make sure they're non-negative
+        line_conductances = jnp.clip(self.line_conductances, a_min=0.0)
+        shunt_conductances = jnp.clip(self.shunt_conductances, a_min=0.0)
+
+        # Assemble conductance and susceptance into complex admittance
+        line_admittances = self.line_conductances + 1j * self.line_susceptances
+        shunt_admittances = self.shunt_conductances + 1j * self.shunt_susceptances
+
+        # Incorporate line failures
+        line_strength = sigmoid(smoothing * network_state.line_states)
+        line_admittances = line_admittances * line_strength
+
+        # The following is based on the code in MATPOWER, PyPower, and Pandapower
+        # see github.com/e2nIEE/pandapower/blob/develop/pandapower/pypower/makeYbus.py
+        # and https://matpower.org/docs/manual.pdf
+
+        # Assemble the branch admittance matrices, which give the current injections
+        # at the from and to ends of each branch (If, It) as a function of the voltages
+        # at the from and to ends (Vf, Vt)
+        #
+        #      | If |   | Yff  Yft |   | Vf |
+        #      |    | = |          | * |    |
+        #      | It |   | Ytf  Ytt |   | Vt |
+
+        # Make complex tap ratio
+        tap = self.transformer_tap_ratios * jnp.exp(1j * self.transformer_phase_shifts)
+
+        # Assume no line charging susceptance
+        Ytt = line_admittances + 0.5j * self.charging_susceptances
+        Yff = Ytt / self.transformer_tap_ratios ** 2
+        Yft = -line_admittances / jnp.conj(tap)
+        Ytf = -line_admittances / tap
+
+        # To go from branch admittances to bus admittances, we need connection matrices,
+        # Cf (from connections) and Ct (to connections). These each have n_lines rows
+        # and n_buses columns, and are zero everywhere except that the (i, j) element of
+        # Cf and the (i, k) element of Ct are 1 iff line i connects from bus j to bus k
+        from_b = self.lines[:, 0]
+        to_b = self.lines[:, 1]
+        # Turns out we don't need this (they can maybe be used in a performance boost?)
+        # line_indices = jnp.arange(0, n_line).reshape(-1, 1)
+        # Cf_indices = jnp.hstack((line_indices, from_b.reshape(-1, 1)))
+        # Ct_indices = jnp.hstack((line_indices, to_b.reshape(-1, 1)))
+        # Cf = jsparse.BCOO((jnp.ones(n_line), Cf_indices), shape=(n_line, n_bus))
+        # Ct = jsparse.BCOO((jnp.ones(n_line), Ct_indices), shape=(n_line, n_bus))
+
+        # Make the sparse bus admittance matrix by assembling all of the
+        # branch admittances and the shunt admittances (duplicate indices are summed)
+        diag_i = jnp.arange(0, self.n_bus)
+        Y_bus = jsparse.BCOO(
+            (
+                jnp.concatenate((Yff, Yft, Ytf, Ytt, shunt_admittances)),  # data
+                jnp.hstack(
+                    (
+                        # Row indices
+                        jnp.concatenate((from_b, from_b, to_b, to_b, diag_i)).reshape(
+                            -1, 1
+                        ),
+                        # Column indices
+                        jnp.concatenate((from_b, to_b, from_b, to_b, diag_i)).reshape(
+                            -1, 1
+                        ),
+                    )
+                ),
+            ),
+            shape=(self.n_bus, self.n_bus),
+        )
+
+        return Y_bus
 
 
 # @jaxtyped
@@ -300,7 +281,7 @@ class ACOPFResult(NamedTuple):
     """
 
     dispatch: Dispatch
-    network: Network
+    network: NetworkState
 
     voltage_amplitudes: Float[Array, " n_bus"]
     voltage_angles: Float[Array, " n_bus"]

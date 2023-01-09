@@ -9,7 +9,7 @@ from architect.systems.power_systems.acopf_types import (
     GenerationDispatch,
     InterconnectionSpecification,
     LoadDispatch,
-    Network,
+    NetworkState,
     NetworkSpecification,
 )
 
@@ -17,13 +17,12 @@ from architect.systems.power_systems.acopf_types import (
 @pytest.fixture
 def test_system():
     """Define a 2-bus test system"""
-    nominal_network = Network(
+    nominal_network_state = NetworkState(jnp.ones((1,)))
+    network_spec = NetworkSpecification(
+        nominal_network_state,
+        lines=jnp.array([[0, 1]]),
         line_conductances=jnp.array([1.0]),
         line_susceptances=jnp.array([1.0]),
-    )
-    network_spec = NetworkSpecification(
-        nominal_network,
-        lines=jnp.array([[0, 1]]),
         shunt_conductances=jnp.array([0.1, 0.1]),
         shunt_susceptances=jnp.array([0.0, 0.0]),
         transformer_tap_ratios=jnp.array([1.0]),
@@ -78,7 +77,7 @@ def test_ACOPF___call__(test_system: ACOPF):
             Q=jnp.array([1.0]),
         ),
     )
-    result = test_system(dispatch, test_system.network_spec.nominal_network)
+    result = test_system(dispatch, test_system.network_spec.nominal_network_state)
 
     assert result is not None
 
@@ -114,13 +113,13 @@ def test_ACOPF_dispatch_prior_logprob(test_system: ACOPF):
     assert jnp.allclose(logprob_1, logprob_2)
 
 
-def test_ACOPF_network_prior_logprob(test_system: ACOPF):
+def test_ACOPF_network_state_prior_logprob(test_system: ACOPF):
     """Test the network prior logprobability"""
     # TODO make a more sophisticated test.
     # Test to make sure the function runs and returns the correct thing
     # (it's typeguarded so if we avoid an error here we're all good)
-    logprob = test_system.network_prior_logprob(
-        test_system.network_spec.nominal_network
+    logprob = test_system.network_state_prior_logprob(
+        test_system.network_spec.nominal_network_state
     )
     assert logprob is not None
 
@@ -134,10 +133,10 @@ def test_ACOPF_sample_random_dispatch(test_system: ACOPF):
     assert dispatch is not None
 
 
-def test_ACOPF_sample_random_network(test_system: ACOPF):
+def test_ACOPF_sample_random_network_state(test_system: ACOPF):
     """Test the network sampling function"""
     # TODO make a more sophisticated test.
     # Test to make sure the function runs and returns the correct thing
     # (it's typeguarded so if we avoid an error here we're all good)
-    network = test_system.sample_random_network(jrandom.PRNGKey(0))
+    network = test_system.sample_random_network_state(jrandom.PRNGKey(0))
     assert network is not None

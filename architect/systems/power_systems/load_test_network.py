@@ -9,7 +9,7 @@ from beartype import beartype
 from architect.systems.power_systems.acopf import ACOPF
 from architect.systems.power_systems.acopf_types import (
     InterconnectionSpecification,
-    Network,
+    NetworkState,
     NetworkSpecification,
 )
 
@@ -101,13 +101,12 @@ def load_test_network(
     line_susceptance_stddev = jnp.zeros(n_line) + b_stddev
 
     # Now we can load this data into our representation
-    nominal_network = Network(
-        line_conductances=line_conductances,
-        line_susceptances=line_susceptances,
-    )
+    nominal_network_state = NetworkState(jnp.ones((n_line,)))
     network_spec = NetworkSpecification(
-        nominal_network,
+        nominal_network_state,
         lines,
+        line_conductances,
+        line_susceptances,
         shunt_conductances,
         shunt_susceptances,
         tap_ratios,
@@ -222,7 +221,7 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     dispatch = sys.sample_random_dispatch(key)
     start = time.perf_counter()
-    r = sys(dispatch, sys.network_spec.nominal_network)
+    r = sys(dispatch, sys.network_spec.nominal_network_state)
     end = time.perf_counter()
 
     print(

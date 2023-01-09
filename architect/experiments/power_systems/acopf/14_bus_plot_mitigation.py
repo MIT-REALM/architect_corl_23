@@ -51,12 +51,12 @@ if __name__ == "__main__":
     # Allow local repair
     steps = 10_000
     lr = 1e-6
-    old_dispatch = sys.repair_dispatch(old_dispatch, sys.nominal_network, steps, lr)
-    dispatch = sys.repair_dispatch(dispatch, sys.nominal_network, steps, lr)
+    old_dispatch = sys.repair_dispatch(old_dispatch, sys.nominal_network_state, steps, lr)
+    dispatch = sys.repair_dispatch(dispatch, sys.nominal_network_state, steps, lr)
 
     # Get the power injections for old and mitigated dispatches on the nominal network
-    P_old, _ = sys.power_injections(old_dispatch, sys.nominal_network)
-    P_new, _ = sys.power_injections(dispatch, sys.nominal_network)
+    P_old, _ = sys.power_injections(old_dispatch, sys.nominal_network_state)
+    P_new, _ = sys.power_injections(dispatch, sys.nominal_network_state)
 
     # Print the dispatches
     P_min, P_max = sys.bus_active_limits.T
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     print("---------------------")
 
     # Print the outages in the repaired case
-    nominal_conductances = sys.nominal_network.line_conductances
-    nominal_susceptances = sys.nominal_network.line_susceptances
+    nominal_conductances = sys.nominal_network_state.line_conductances
+    nominal_susceptances = sys.nominal_network_state.line_susceptances
     results = jax.vmap(sys, in_axes=(None, 0, None, None))(
         dispatch, networks, steps, lr
     )

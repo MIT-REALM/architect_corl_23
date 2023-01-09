@@ -64,7 +64,7 @@ if __name__ == "__main__":
     prng_key = jrandom.PRNGKey(0)
 
     # Start by solving for an optimal dispatch with the nominal network
-    network = sys.network_spec.nominal_network
+    network = sys.network_spec.nominal_network_state
     # Add a batch dimension so we have a "population" of 1 network
     exogenous_params = jtu.tree_map(lambda leaf: jnp.expand_dims(leaf, 0), network)
 
