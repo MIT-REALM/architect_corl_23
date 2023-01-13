@@ -119,6 +119,7 @@ class NetworkState(NamedTuple):
         line_states: float indicating the strength of the corresponding line. Positive
             indicates that the line is nominal, negative indicates that it has failed.
     """
+
     line_states: Float[Array, " n_lines"]
 
 
@@ -178,12 +179,8 @@ class NetworkSpecification(NamedTuple):
     def n_line(self) -> int:
         """Return the number of lines in the network"""
         return self.line_conductances.shape[0]
-    
-    def Y(
-        self,
-        network_state: NetworkState,
-        smoothing: float = 50.0
-    ):
+
+    def Y(self, network_state: NetworkState, smoothing: float = 20.0):
         """
         Compute the nodal admittance matrix for this network.
 
@@ -195,8 +192,8 @@ class NetworkSpecification(NamedTuple):
         shunt_conductances = jnp.clip(self.shunt_conductances, a_min=0.0)
 
         # Assemble conductance and susceptance into complex admittance
-        line_admittances = self.line_conductances + 1j * self.line_susceptances
-        shunt_admittances = self.shunt_conductances + 1j * self.shunt_susceptances
+        line_admittances = line_conductances + 1j * self.line_susceptances
+        shunt_admittances = shunt_conductances + 1j * self.shunt_susceptances
 
         # Incorporate line failures
         line_strength = sigmoid(smoothing * network_state.line_states)

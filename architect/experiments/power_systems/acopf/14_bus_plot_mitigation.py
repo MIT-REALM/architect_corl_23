@@ -51,7 +51,9 @@ if __name__ == "__main__":
     # Allow local repair
     steps = 10_000
     lr = 1e-6
-    old_dispatch = sys.repair_dispatch(old_dispatch, sys.nominal_network_state, steps, lr)
+    old_dispatch = sys.repair_dispatch(
+        old_dispatch, sys.nominal_network_state, steps, lr
+    )
     dispatch = sys.repair_dispatch(dispatch, sys.nominal_network_state, steps, lr)
 
     # Get the power injections for old and mitigated dispatches on the nominal network

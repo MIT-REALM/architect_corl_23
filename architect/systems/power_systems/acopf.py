@@ -7,7 +7,7 @@ import jax.random as jrandom
 from dataclasses import field
 from beartype import beartype
 from beartype.typing import Tuple, Dict
-from jax.nn import log_sigmoid, relu, sigmoid
+from jax.nn import log_sigmoid, relu
 from jaxtyping import Array, Float, Bool, jaxtyped
 
 from architect.types import PRNGKeyArray
@@ -520,7 +520,9 @@ class ACOPF(eqx.Module):
         shift = -jax.scipy.stats.norm.ppf(self.network_spec.prob_line_failure)
 
         # Get the log likelihood for this shifted Gaussian
-        logprob = jax.scipy.stats.norm.cdf(network_state.line_states, loc=shift).sum()
+        logprob = jax.scipy.stats.norm.logpdf(
+            network_state.line_states, loc=shift
+        ).sum()
 
         return logprob
 

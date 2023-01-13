@@ -26,9 +26,10 @@ if __name__ == "__main__":
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=5)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
-    parser.add_argument("--repair", nargs="?", const=True, default=True)
-    parser.add_argument("--predict", nargs="?", const=True, default=True)
-    parser.add_argument("--temper", nargs="?", const=True, default=False)
+    boolean_action = argparse.BooleanOptionalAction
+    parser.add_argument("--repair", action=boolean_action, default=True)
+    parser.add_argument("--predict", action=boolean_action, default=True)
+    parser.add_argument("--temper", action=boolean_action, default=False)
     args = parser.parse_args()
 
     # Hyperparameters
@@ -71,21 +72,21 @@ if __name__ == "__main__":
     # Initialize the dispatch randomly
     prng_key, dispatch_key = jrandom.split(prng_key)
     dispatch_keys = jrandom.split(dispatch_key, num_chains)
-    design_params = jax.vmap(sys.sample_random_dispatch)(dispatch_keys)
+    init_design_params = jax.vmap(sys.sample_random_dispatch)(dispatch_keys)
 
     # Initialize the network randomly
     prng_key, network_key = jrandom.split(prng_key)
     network_keys = jrandom.split(network_key, num_chains)
-    exogenous_params = jax.vmap(sys.sample_random_network)(network_keys)
+    init_exogenous_params = jax.vmap(sys.sample_random_network_state)(network_keys)
 
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
         prng_key,
-        design_params,
-        exogenous_params,
+        init_design_params,
+        init_exogenous_params,
         dp_logprior_fn=sys.dispatch_prior_logprob,
-        ep_logprior_fn=sys.network_prior_logprob,
+        ep_logprior_fn=sys.network_state_prior_logprob,
         potential_fn=lambda dp, ep: sys(dp, ep).potential,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
@@ -215,7 +216,7 @@ if __name__ == "__main__":
             {
                 "case": case_name,
                 "dispatch": final_dps._asdict(),
-                "network": final_eps._asdict(),
+                "network_state": final_eps._asdict(),
                 "time": t_end - t_start,
                 "L": L,
                 "mcmc_step_size": mcmc_step_size,
