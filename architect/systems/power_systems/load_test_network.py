@@ -17,11 +17,12 @@ from architect.systems.power_systems.acopf_types import (
 @beartype
 def load_test_network(
     case_name: str,
-    p_failure: float = 0.1,
+    p_failure: float = 0.01,
     g_stddev: float = 0.1,
     b_stddev: float = 0.1,
     penalty: float = 10.0,
     load_dispatchability: float = 0.3,
+    maxsteps: int = 30,
 ) -> ACOPF:
     """
     Load a test network from the MATPOWER suite.
@@ -36,6 +37,7 @@ def load_test_network(
         b_stddev: the standard deviation in line susceptance
         L: penalty coefficient
         load_dispatchability: what fraction of demand we can dispatch.
+        maxsteps: maximum number of GaussNewton steps to take when solving PF.
     """
     ############################
     # Load data from file
@@ -203,7 +205,7 @@ def load_test_network(
         bus_voltage_limits,
         ref_bus_idx=0,
         constraint_penalty=penalty,
-        maxsteps=30,
+        maxsteps=maxsteps,
         tolerance=1e-3,
     )
 

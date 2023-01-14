@@ -406,7 +406,9 @@ class ACOPF(eqx.Module):
         generation_cost = self.generation_cost(dispatch)
 
         # Combine cost and violations to get the potential
-        potential = generation_cost + self.constraint_penalty * total_violation
+        potential = (
+            generation_cost + self.constraint_penalty * total_violation + acopf_residual
+        )
 
         result = ACOPFResult(
             dispatch,

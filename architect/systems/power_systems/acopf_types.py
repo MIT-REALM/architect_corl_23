@@ -180,7 +180,7 @@ class NetworkSpecification(NamedTuple):
         """Return the number of lines in the network"""
         return self.line_conductances.shape[0]
 
-    def Y(self, network_state: NetworkState, smoothing: float = 20.0):
+    def Y(self, network_state: NetworkState, smoothing: float = 2.0):
         """
         Compute the nodal admittance matrix for this network.
 
@@ -278,7 +278,7 @@ class ACOPFResult(NamedTuple):
     """
 
     dispatch: Dispatch
-    network: NetworkState
+    network_state: NetworkState
 
     voltage_amplitudes: Float[Array, " n_bus"]
     voltage_angles: Float[Array, " n_bus"]

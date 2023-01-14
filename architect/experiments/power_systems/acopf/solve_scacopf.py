@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
+from jax.nn import sigmoid
 import matplotlib.pyplot as plt
 import seaborn as sns
 from jaxtyping import Array, Shaped
@@ -118,6 +119,7 @@ if __name__ == "__main__":
             ["constraints", "cost"],
             ["trace", "trace"],
             ["generation", "voltage"],
+            ["network", "network"],
         ]
     )
 
@@ -129,10 +131,11 @@ if __name__ == "__main__":
             result.P_load_violation.sum(axis=-1),
             result.Q_load_violation.sum(axis=-1),
             result.V_violation.sum(axis=-1),
+            result.acopf_residual,
         ],
         ax=axs["constraints"],
     )
-    axs["constraints"].set_xticklabels(["Pg", "Qg", "Pd", "Qd", "V"])
+    axs["constraints"].set_xticklabels(["Pg", "Qg", "Pd", "Qd", "V", "ACOPF error"])
     axs["constraints"].set_ylabel("Constraint Violation")
 
     # Plot generation cost vs constraint violation
@@ -199,15 +202,28 @@ if __name__ == "__main__":
         )
     axs["voltage"].set_ylabel("$|V|$ (p.u.)")
 
+    # Plot the network states
+    line = jnp.arange(sys.n_line)
+    for i in range(num_chains):
+        line_states = result.network_state.line_states[i, :]
+        axs["network"].scatter(
+            line,
+            sigmoid(20 * line_states),
+            marker="o",
+            s=100 * total_constraint_violation[i] + 5,
+        )
+    axs["network"].set_ylabel("Line strength")
+    axs["network"].set_xticks(line)
+
     experiment_type = "scacopf" if predict else "acopf"
     filename = (
-        f"results/{experiment_type}/{case_name}/sc_dispatch_L_{L:0.1e}_"
+        f"results/{experiment_type}/{case_name}/L_{L:0.1e}_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
         f"{quench_rounds}_quench_rounds_{'tempered_' if temper else ''}"
         f"{num_chains}_chains_mala_step_{mcmc_step_size:0.1e}"
     )
     print(f"Saving results to: {filename}")
-    os.makedirs(f"results/scacopf/{case_name}", exist_ok=True)
+    os.makedirs(f"results/{experiment_type}/{case_name}", exist_ok=True)
     plt.savefig(filename + ".png")
 
     # Save the dispatch

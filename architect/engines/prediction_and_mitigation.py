@@ -6,6 +6,7 @@ Provides system-agnostic code for failure mode prediction and mitigation.
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+import jax.tree_util as jtu
 from beartype import beartype
 from beartype.typing import Callable, Optional, Tuple
 from jax.nn import logsumexp
@@ -65,8 +66,8 @@ def run_chain(
     return final_state.position, final_state.logdensity
 
 
-@jaxtyped
-@beartype
+# @jaxtyped
+# @beartype
 def predict_and_mitigate_failure_modes(
     prng_key: Integer[Array, "..."],
     design_params: Params,
@@ -236,10 +237,29 @@ def predict_and_mitigate_failure_modes(
         return output[:3], output
 
     # Run the appropriate number of steps
-    initial_carry = (0, design_params, exogenous_params)
+    carry = (0, design_params, exogenous_params)
     keys = jrandom.split(prng_key, num_rounds)
-    _, results = jax.lax.scan(one_smc_step, initial_carry, (keys, tempering_schedule))
+    results = []
+    for key, tempering in zip(keys, tempering_schedule):
+        carry, y = one_smc_step(carry, (key, tempering))
+        results.append(y)
+    
+    # The python for loop above is faster than this scan, since we skip a long
+    # compilation
+    # _, results = jax.lax.scan(one_smc_step, carry, (keys, tempering_schedule))
+
+    # Stack the results as a pytree
+    leaves_list = []
+    treedef_list = []
+    for tree in results:
+        leaves, treedef = jtu.tree_flatten(tree)
+        leaves_list.append(leaves)
+        treedef_list.append(treedef)
+
+    grouped_leaves = zip(*leaves_list)
+    result_leaves = [jnp.stack(l) for l in grouped_leaves]
+    results = treedef_list[0].unflatten(result_leaves)
 
     # Unpack the results and return
-    _, design_params, dp_logprobs, exogenous_params, ep_logprobs = results
-    return design_params, dp_logprobs, exogenous_params, ep_logprobs
+    _, design_params, exogenous_params, dp_logprobs, ep_logprobs = results
+    return design_params, exogenous_params, dp_logprobs, ep_logprobs
