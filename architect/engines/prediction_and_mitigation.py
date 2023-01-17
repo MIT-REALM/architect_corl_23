@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
-from beartype.typing import Callable, Optional, Tuple
+from beartype.typing import Callable, Optional, Tuple, Union
 from jax.nn import logsumexp
 from jaxtyping import Array, Float, Integer, jaxtyped
 
@@ -16,12 +16,12 @@ from architect.engines.samplers import SamplerState, init_sampler, make_kernel
 from architect.types import LogLikelihood, Params, Sampler
 
 
-def softmax(x: Float[Array, "..."], smoothing: float = 5):
+def softmax(x: Float[Array, "..."], smoothing: float = 0.05):
     """Return the soft maximum of the given vector"""
     return 1 / smoothing * logsumexp(smoothing * x)
 
 
-def softmin(x: Float[Array, "..."], smoothing: float = 5):
+def softmin(x: Float[Array, "..."], smoothing: float = 0.05):
     """Return the soft minimum of the given vector"""
     return -softmax(-x, smoothing)
 
@@ -54,10 +54,10 @@ def run_chain(
 
         # Take a step
         prng_key, subkey = jrandom.split(prng_key)
-        state = kernel(subkey, state)
+        new_state = kernel(subkey, state)
 
         # Re-pack the carry and return
-        carry = (state, prng_key)
+        carry = (new_state, prng_key)
         return carry
 
     initial_carry = (initial_state, prng_key)
@@ -77,14 +77,16 @@ def predict_and_mitigate_failure_modes(
     potential_fn: Callable[[Params, Params], Float[Array, ""]],
     num_rounds: int,
     num_mcmc_steps_per_round: int,
-    mcmc_step_size: float,
+    dp_mcmc_step_size: float,
+    ep_mcmc_step_size: float,
     use_gradients: bool = True,
     use_stochasticity: bool = True,
     repair: bool = True,
     predict: bool = True,
     quench_rounds: int = 0,
-    quench_step_size: Optional[float] = None,
     tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
+    dp_grad_clip: Union[float, Float[Array, ""]] = float("inf"),
+    ep_grad_clip: Union[float, Float[Array, ""]] = float("inf"),
 ) -> Tuple[
     Params,
     Params,
@@ -109,16 +111,17 @@ def predict_and_mitigate_failure_modes(
         num_rounds: how many steps to take for the top-level predict-repair algorithm
         num_mcmc_steps_per_round: the number of steps to run for each set of MCMC chains
             within each round
-        mcmc_step_size: the size of MCMC steps
+        dp_mcmc_step_size: the size of MCMC steps for design parameters
+        ep_mcmc_step_size: the size of MCMC steps for exogenous parameters
         use_gradients: if True, use gradients in the proposal and acceptance steps
         use_stochasticity: if True, add a Gaussian to the proposal and acceptance steps
         repair: if True, run the repair steps
         predict: if True, run the predict steps
         quench_rounds: if True, turn off stochasticity for the last round
-        quench_step_size: step size to use during quenching. If not provided, defaults
-            to mcmc_step_size
         tempering_schedule: a monotonically increasing array of positive tempering
             values. If not provided, defaults to all 1s (no tempering).
+        dp_grad_clip: clip design param gradients at this value
+        ep_grad_clip: clip exogenous param gradients at this value
     returns:
         - A trace of updated populations of design parameters
         - A trace of updated populations of exogenous parameters
@@ -127,9 +130,6 @@ def predict_and_mitigate_failure_modes(
         - A trace of overall log probabilities for the exogenous parameters
     """
     # Provide defaults
-    if quench_step_size is None:
-        quench_step_size = mcmc_step_size
-
     if tempering_schedule is None:
         tempering_schedule = jnp.ones(num_rounds)
 
@@ -154,13 +154,6 @@ def predict_and_mitigate_failure_modes(
             lambda: use_stochasticity,
         )
 
-        # Modify the step size during quenching
-        step_size = jax.lax.cond(
-            i > num_rounds - quench_rounds,
-            lambda: quench_step_size,
-            lambda: mcmc_step_size,
-        )
-
         ###############################################
         # Repair the currently predicted failure modes
         ###############################################
@@ -182,7 +175,11 @@ def predict_and_mitigate_failure_modes(
 
             # Make the sampling kernel
             dp_kernel = make_kernel(
-                dp_logprob_fn, step_size, use_gradients, stochasticity
+                dp_logprob_fn,
+                dp_mcmc_step_size,
+                use_gradients,
+                stochasticity,
+                dp_grad_clip,
             )
 
             # Run the chains and update the design parameters
@@ -218,7 +215,11 @@ def predict_and_mitigate_failure_modes(
 
             # Make the sampling kernel
             ep_kernel = make_kernel(
-                ep_logprob_fn, step_size, use_gradients, stochasticity
+                ep_logprob_fn,
+                ep_mcmc_step_size,
+                use_gradients,
+                stochasticity,
+                ep_grad_clip,
             )
 
             # Run the chains and update the design parameters
@@ -243,7 +244,7 @@ def predict_and_mitigate_failure_modes(
     for key, tempering in zip(keys, tempering_schedule):
         carry, y = one_smc_step(carry, (key, tempering))
         results.append(y)
-    
+
     # The python for loop above is faster than this scan, since we skip a long
     # compilation
     # _, results = jax.lax.scan(one_smc_step, carry, (keys, tempering_schedule))
@@ -257,7 +258,7 @@ def predict_and_mitigate_failure_modes(
         treedef_list.append(treedef)
 
     grouped_leaves = zip(*leaves_list)
-    result_leaves = [jnp.stack(l) for l in grouped_leaves]
+    result_leaves = [jnp.stack(leaf) for leaf in grouped_leaves]
     results = treedef_list[0].unflatten(result_leaves)
 
     # Unpack the results and return

@@ -20,7 +20,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--case_name", type=str, nargs="?", default="case14")
     parser.add_argument("--L", type=float, nargs="?", default=100.0)
-    parser.add_argument("--mcmc_step_size", type=float, nargs="?", default=1e-6)
+    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-6)
+    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=10)
     parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=20)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
@@ -31,12 +32,15 @@ if __name__ == "__main__":
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=False)
+    parser.add_argument("--dp_grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--ep_grad_clip", type=float, nargs="?", default=float("inf"))
     args = parser.parse_args()
 
     # Hyperparameters
     case_name = args.case_name
     L = args.L
-    mcmc_step_size = args.mcmc_step_size
+    dp_mcmc_step_size = args.dp_mcmc_step_size
+    ep_mcmc_step_size = args.ep_mcmc_step_size
     num_rounds = args.num_rounds
     num_mcmc_steps_per_round = args.num_mcmc_steps_per_round
     num_chains = args.num_chains
@@ -46,11 +50,14 @@ if __name__ == "__main__":
     predict = args.predict
     temper = args.temper
     quench_rounds = args.quench_rounds
+    dp_grad_clip = args.dp_grad_clip
+    ep_grad_clip = args.ep_grad_clip
 
     print(f"Running SC-ACOPF on {case_name} with hyperparameters:")
     print(f"\tcase_name = {case_name}")
     print(f"\tL = {L}")
-    print(f"\tmcmc_step_size = {mcmc_step_size}")
+    print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
+    print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
     print(f"\tnum_rounds = {num_rounds}")
     print(f"\tnum_mcmc_steps_per_round = {num_mcmc_steps_per_round}")
     print(f"\tnum_chains = {num_chains}")
@@ -60,9 +67,12 @@ if __name__ == "__main__":
     print(f"\tpredict = {predict}")
     print(f"\ttemper = {temper}")
     print(f"\tquench_rounds = {quench_rounds}")
+    print(f"\tdp_grad_clip = {dp_grad_clip}")
+    print(f"\tep_grad_clip = {ep_grad_clip}")
 
-    # Add linear tempering if using
-    tempering_schedule = jnp.linspace(0, 1, num_rounds) if temper else None
+    # Add exponential tempering if using
+    t = jnp.linspace(0, 1, num_rounds)
+    tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
 
     # Load the test case
     sys = load_test_network(case_name, penalty=L)
@@ -91,13 +101,16 @@ if __name__ == "__main__":
         potential_fn=lambda dp, ep: sys(dp, ep).potential,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
-        mcmc_step_size=mcmc_step_size,
+        dp_mcmc_step_size=dp_mcmc_step_size,
+        ep_mcmc_step_size=ep_mcmc_step_size,
         use_gradients=use_gradients,
         use_stochasticity=use_stochasticity,
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
+        dp_grad_clip=dp_grad_clip,
+        ep_grad_clip=ep_grad_clip,
     )
     t_end = time.perf_counter()
     print(
@@ -106,8 +119,12 @@ if __name__ == "__main__":
 
     # Select the dispatch that performs best against all contingencies predicted before
     # the final round (choose from all chains)
-    most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-    final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    if repair:
+        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    else:
+        # Just pick one dispatch arbitrarily
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
     # Evaluate this against all contingencies
     final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
     result = jax.vmap(sys, in_axes=(None, 0))(final_dps, final_eps)
@@ -208,7 +225,7 @@ if __name__ == "__main__":
         line_states = result.network_state.line_states[i, :]
         axs["network"].scatter(
             line,
-            sigmoid(20 * line_states),
+            sigmoid(2 * line_states),
             marker="o",
             s=100 * total_constraint_violation[i] + 5,
         )
@@ -216,11 +233,20 @@ if __name__ == "__main__":
     axs["network"].set_xticks(line)
 
     experiment_type = "scacopf" if predict else "acopf"
+    if use_gradients and use_stochasticity:
+        alg_type = "mala"
+    elif use_gradients and not use_stochasticity:
+        alg_type = "gd"
+    elif not use_gradients and use_stochasticity:
+        alg_type = "rmh"
+    else:
+        alg_type = "static"
     filename = (
         f"results/{experiment_type}/{case_name}/L_{L:0.1e}_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
-        f"{quench_rounds}_quench_rounds_{'tempered_' if temper else ''}"
-        f"{num_chains}_chains_mala_step_{mcmc_step_size:0.1e}"
+        f"{quench_rounds}_quench_{'tempered_' if temper else ''}"
+        f"{num_chains}_chains_step_dp_{dp_mcmc_step_size:0.1e}_"
+        f"ep_{ep_mcmc_step_size:0.1e}_{alg_type}"
     )
     print(f"Saving results to: {filename}")
     os.makedirs(f"results/{experiment_type}/{case_name}", exist_ok=True)
@@ -235,7 +261,8 @@ if __name__ == "__main__":
                 "network_state": final_eps._asdict(),
                 "time": t_end - t_start,
                 "L": L,
-                "mcmc_step_size": mcmc_step_size,
+                "dp_mcmc_step_size": dp_mcmc_step_size,
+                "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,
                 "num_mcmc_steps_per_round": num_mcmc_steps_per_round,
                 "num_chains": num_chains,

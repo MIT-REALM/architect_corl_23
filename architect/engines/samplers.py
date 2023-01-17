@@ -38,6 +38,7 @@ def make_kernel(
     step_size: Union[float, Float[Array, ""]],
     use_gradients: Union[bool, Bool[Array, ""]] = True,
     use_stochasticity: Union[bool, Bool[Array, ""]] = True,
+    grad_clip: Union[float, Float[Array, ""]] = float("inf"),
 ) -> Sampler:
     """
     Build a kernel for a sampling algorithm (either MALA, RMH, or MLE).
@@ -56,6 +57,7 @@ def make_kernel(
         step_size: the size of the step to take
         use_gradients: if True, use gradients in the proposal and acceptance steps
         use_stochasticity: if True, add a Gaussian to the proposal and acceptance steps
+        grad_clip: maximum value to clip gradients
     """
     # A generic Metropolis-Hastings-style MCMC algorithm has 2 steps: a proprosal and
     # an accept/reject step.
@@ -75,7 +77,9 @@ def make_kernel(
         # If we're not using gradients, zero out the gradient in a JIT compatible way
         grad = jax.lax.cond(
             use_gradients,
-            lambda x: x,
+            lambda x: jtu.tree_map(
+                lambda v: jnp.clip(v, a_min=-grad_clip, a_max=grad_clip), x
+            ),
             lambda x: jtu.tree_map(jnp.zeros_like, x),
             state.logdensity_grad,
         )
@@ -136,11 +140,7 @@ def make_kernel(
         )
 
         # Make the state proposal
-        new_position = jtu.tree_map(
-            lambda x, dx: x + dx,
-            state.position,
-            delta_x,
-        )
+        new_position = jtu.tree_map(lambda x, dx: x + dx, state.position, delta_x)
         new_logdensity, new_logdensity_grad = jax.value_and_grad(logdensity_fn)(
             new_position
         )
@@ -162,10 +162,7 @@ def make_kernel(
             lambda: jnp.array(True),
         )
 
-        return jax.lax.cond(
-            do_accept,
-            lambda: new_state,
-            lambda: state,
-        )
+        accepted_state = jax.lax.cond(do_accept, lambda: new_state, lambda: state)
+        return accepted_state
 
     return one_step

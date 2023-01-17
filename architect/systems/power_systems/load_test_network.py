@@ -35,7 +35,7 @@ def load_test_network(
         p_failure: the probability of any single line failing
         g_stddev: the standard deviation in line conductance
         b_stddev: the standard deviation in line susceptance
-        L: penalty coefficient
+        penalty: penalty coefficient
         load_dispatchability: what fraction of demand we can dispatch.
         maxsteps: maximum number of GaussNewton steps to take when solving PF.
     """
@@ -222,8 +222,9 @@ if __name__ == "__main__":
     )
     key = jax.random.PRNGKey(0)
     dispatch = sys.sample_random_dispatch(key)
+    network_state = sys.network_spec.nominal_network_state
     start = time.perf_counter()
-    r = sys(dispatch, sys.network_spec.nominal_network_state)
+    r = sys(dispatch, network_state)
     end = time.perf_counter()
 
     print(
