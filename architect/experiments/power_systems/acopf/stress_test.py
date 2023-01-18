@@ -18,11 +18,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--filename", type=str)
     parser.add_argument("--N", type=int, nargs="?", default=1_000)
+    parser.add_argument("--batches", type=int, nargs="?", default=1)
     args = parser.parse_args()
 
     # Hyperparameters
     filename = args.filename
     N = args.N
+    batches = args.batches
 
     prng_key = jrandom.PRNGKey(0)
 
@@ -68,19 +70,30 @@ if __name__ == "__main__":
     print(f"\tGauss-Newton failed on {pct_opf_failues:.2f}%")
 
     # See how the chosen dispatch performs against a BUNCH of test cases
-    prng_key, stress_test_key = jrandom.split(prng_key)
-    stress_test_keys = jrandom.split(stress_test_key, N)
-    stress_test_eps = jax.vmap(sys.sample_random_network_state)(stress_test_keys)
-    stress_test_result = jax.vmap(sys, in_axes=(None, 0))(final_dps, stress_test_eps)
-    stress_test_violation = (
-        stress_test_result.P_gen_violation.sum(axis=-1)
-        + stress_test_result.Q_gen_violation.sum(axis=-1)
-        + stress_test_result.P_load_violation.sum(axis=-1)
-        + stress_test_result.Q_load_violation.sum(axis=-1)
-        + stress_test_result.V_violation.sum(axis=-1)
-    )
-    stress_test_worst_case = stress_test_violation.max()
-    num_opf_failues = (stress_test_result.acopf_residual > 1e-3).sum()
-    pct_opf_failues = 100 * num_opf_failues / N
-    print(f"Worst case identified by stress test: {stress_test_worst_case}")
+    stress_test_worst_case = []
+    n_gt_predicted = []
+    num_opf_failues = []
+    print("Running stress test", end="")
+    for _ in range(batches):
+        prng_key, stress_test_key = jrandom.split(prng_key)
+        stress_test_keys = jrandom.split(stress_test_key, N)
+        stress_test_eps = jax.vmap(sys.sample_random_network_state)(stress_test_keys)
+        stress_test_result = jax.vmap(sys, in_axes=(None, 0))(
+            final_dps, stress_test_eps
+        )
+        stress_test_violation = (
+            stress_test_result.P_gen_violation.sum(axis=-1)
+            + stress_test_result.Q_gen_violation.sum(axis=-1)
+            + stress_test_result.P_load_violation.sum(axis=-1)
+            + stress_test_result.Q_load_violation.sum(axis=-1)
+            + stress_test_result.V_violation.sum(axis=-1)
+        )
+        stress_test_worst_case.append(stress_test_violation.max())
+        n_gt_predicted.append((stress_test_violation > predicted_worst_case).sum())
+        num_opf_failues.append((stress_test_result.acopf_residual > 1e-3).sum())
+        print(".", end="")
+    print("")
+    print(f"Worst case identified by stress test: {max(stress_test_worst_case)}")
+    print(f"\t{100 * sum(n_gt_predicted) / (N * batches)}% are worse than predicted")
+    pct_opf_failues = 100 * sum(num_opf_failues) / (N * batches)
     print(f"\tGauss-Newton failed on {pct_opf_failues:.2f}%")
