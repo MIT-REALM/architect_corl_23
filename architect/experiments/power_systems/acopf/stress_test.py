@@ -70,11 +70,12 @@ if __name__ == "__main__":
     print(f"\tGauss-Newton failed on {pct_opf_failues:.2f}%")
 
     # See how the chosen dispatch performs against a BUNCH of test cases
+    stress_test_potentials = []
     stress_test_worst_case = []
     n_gt_predicted = []
     num_opf_failues = []
     print("Running stress test", end="")
-    for _ in range(batches):
+    for i in range(batches):
         prng_key, stress_test_key = jrandom.split(prng_key)
         stress_test_keys = jrandom.split(stress_test_key, N)
         stress_test_eps = jax.vmap(sys.sample_random_network_state)(stress_test_keys)
@@ -91,9 +92,16 @@ if __name__ == "__main__":
         stress_test_worst_case.append(stress_test_violation.max())
         n_gt_predicted.append((stress_test_violation > predicted_worst_case).sum())
         num_opf_failues.append((stress_test_result.acopf_residual > 1e-3).sum())
+        stress_test_potentials.append(stress_test_result.potential)
+
         print(".", end="")
     print("")
     print(f"Worst case identified by stress test: {max(stress_test_worst_case)}")
     print(f"\t{100 * sum(n_gt_predicted) / (N * batches)}% are worse than predicted")
     pct_opf_failues = 100 * sum(num_opf_failues) / (N * batches)
     print(f"\tGauss-Newton failed on {pct_opf_failues:.2f}%")
+
+    # Save the first round to a file
+    save_filename = filename[:-5] + "_stress_test.npz"
+    with open(save_filename, "wb") as f:
+        jnp.save(f, jnp.array(stress_test_potentials).reshape(-1))
