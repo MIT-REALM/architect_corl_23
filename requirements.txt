@@ -16,6 +16,7 @@ ipywidgets==7.6.5
 tqdm==4.62.3
 # JAX
 jax==0.3.25
+jaxlib==0.3.25
 jaxtyping==0.2.8
 # Optimization
 jaxopt==0.5.5
