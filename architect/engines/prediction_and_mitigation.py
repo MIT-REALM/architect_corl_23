@@ -241,7 +241,8 @@ def predict_and_mitigate_failure_modes(
     carry = (0, design_params, exogenous_params)
     keys = jrandom.split(prng_key, num_rounds)
     results = []
-    for key, tempering in zip(keys, tempering_schedule):
+    for i, (key, tempering) in enumerate(zip(keys, tempering_schedule)):
+        print(f"Iteration {i}")
         carry, y = one_smc_step(carry, (key, tempering))
         results.append(y)
 

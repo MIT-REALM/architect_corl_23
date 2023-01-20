@@ -10,6 +10,7 @@ data = [
         "Worst case (observed)": 2.689948,
         "Likelihood of underestimate": 0.33210,
         "generation_cost": 0.54969215,
+        "predicted_failures": "results/acopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_gd_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/acopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_gd_stress_test.npz",  # noqa
     },
     {
@@ -18,6 +19,7 @@ data = [
         "Worst case (observed)": 2.6572380,
         "Likelihood of underestimate": 0.17741300,
         "generation_cost": 0.549297,
+        "predicted_failures": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_gd_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_gd_stress_test.npz",  # noqa
     },
     {
@@ -26,6 +28,7 @@ data = [
         "Worst case (observed)": 5.32660293,
         "Likelihood of underestimate": 0.0002,
         "generation_cost": 1.487012,
+        "predicted_failures": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_rmh_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_rmh_stress_test.npz",  # noqa
     },
     {
@@ -34,6 +37,7 @@ data = [
         "Worst case (observed)": 0.2735613,
         "Likelihood of underestimate": 0.00,
         "generation_cost": 1.4132679,
+        "predicted_failures": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_mala_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_mala_stress_test.npz",  # noqa
     },
 ]
@@ -64,46 +68,97 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(9, 4), constrained_layout=True)
 
     # Load distributions from files
-    potentials = []
+    stress_test_potentials = []
+    predicted_potentials = []
+    potentials = pd.Series([], dtype=float)
+    algs = pd.Series([], dtype=str)
+    types = pd.Series([], dtype=str)
     for entry in data:
-        potentials.append(jnp.load(entry["stress_test_results"]))
-    potentials = jnp.array(potentials)
-    N = potentials.shape[1]
-    potentials_labels = (
-        ["GD-NoAdv" for i in range(N)]
-        + ["GD" for i in range(N)]
-        + ["RMH" for i in range(N)]
-        + ["Ours" for i in range(N)]
-    )
+        # Load predicted failures
+        new_potentials = jnp.load(entry["predicted_failures"])
+        N = new_potentials.shape[0]
+        potentials = pd.concat(
+            [potentials, pd.Series(new_potentials)],
+            ignore_index=True,
+        )
+        algs = pd.concat(
+            [algs, pd.Series([entry["Algorithm"] for _ in range(N)])], ignore_index=True
+        )
+        types = pd.concat(
+            [types, pd.Series(["Predicted" for _ in range(N)])], ignore_index=True
+        )
+
+        # Load stress test results
+        new_potentials = jnp.load(entry["stress_test_results"])
+        N = new_potentials.shape[0]
+        potentials = pd.concat(
+            [potentials, pd.Series(new_potentials)],
+            ignore_index=True,
+        )
+        algs = pd.concat(
+            [algs, pd.Series([entry["Algorithm"] for _ in range(N)])], ignore_index=True
+        )
+        types = pd.concat(
+            [types, pd.Series(["Observed" for _ in range(N)])], ignore_index=True
+        )
+
+    plotting_df = pd.DataFrame()
+    plotting_df["Algorithm"] = algs
+    plotting_df["Type"] = types
+    plotting_df["Cost"] = potentials
 
     # Plot the distributions of potentials
-    ax = sns.boxenplot(
-        x=potentials_labels,
-        y=potentials.reshape(-1),
-        # showfliers=False,
-        flier_kws={"s": 20},
+    observed_df = plotting_df[plotting_df["Type"] == "Observed"]
+    sns.boxenplot(
+        x="Algorithm",
+        y="Cost",
+        hue="Type",
+        showfliers=False,
+        outlier_prop=1e-7,
+        # flier_kws={"s": 20},
+        data=observed_df,
     )
 
+    predicted_df = plotting_df[plotting_df["Type"] == "Predicted"]
+    min_predicted = predicted_df.groupby("Algorithm", sort=False)["Cost"].min()
+    max_predicted = predicted_df.groupby("Algorithm", sort=False)["Cost"].max()
+    mean_predicted = predicted_df.groupby("Algorithm", sort=False)["Cost"].mean()
     plt.scatter(
-        results["Algorithm"],
-        L * results["Worst case (predicted)"] + results["generation_cost"],
-        marker="X",
-        s=100,
-        linewidth=4,
-        label="Predicted worst-case",
+        min_predicted.index,
+        min_predicted,
+        marker="^",
+        s=50,
+        linewidth=2,
         color="orangered",
     )
-    # plt.scatter(
-    #     results["Algorithm"],
-    #     L * results["Worst case (observed)"] + results["generation_cost"],
-    #     marker="_",
-    #     s=300,
-    #     linewidth=4,
-    #     label="Worst-case (observed)",
-    # )
-    ax.scatter([], [], s=20, color="k", marker="d", label="Observed worst-case")
+    plt.scatter(
+        mean_predicted.index,
+        mean_predicted,
+        marker="_",
+        s=100,
+        linewidth=2,
+        color="orangered",
+    )
+    plt.scatter(
+        max_predicted.index,
+        max_predicted,
+        marker="v",
+        s=50,
+        linewidth=2,
+        color="orangered",
+    )
+    plt.scatter(
+        [],
+        [],
+        # marker="$⧗$",
+        marker=r"$\frac{\blacktriangledown}{\blacktriangle}$",
+        label="Predicted min/mean/max",
+        color="orangered",
+        s=50,
+    )
+
     plt.ylabel("Cost")
     plt.yscale("log")
-    plt.legend()
+    plt.legend(markerscale=1.5)
 
     plt.show()

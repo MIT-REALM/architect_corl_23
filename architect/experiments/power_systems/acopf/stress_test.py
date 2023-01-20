@@ -17,8 +17,8 @@ if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--filename", type=str)
-    parser.add_argument("--N", type=int, nargs="?", default=1_000)
-    parser.add_argument("--batches", type=int, nargs="?", default=1)
+    parser.add_argument("--N", type=int, nargs="?", default=100_000)
+    parser.add_argument("--batches", type=int, nargs="?", default=10)
     args = parser.parse_args()
 
     # Hyperparameters
@@ -69,12 +69,17 @@ if __name__ == "__main__":
     print(f"Predicted worst case constraint violation: {predicted_worst_case}")
     print(f"\tGauss-Newton failed on {pct_opf_failues:.2f}%")
 
+    # Save the results to a file
+    save_filename = filename[:-5] + "_predicted_failures.npz"
+    with open(save_filename, "wb") as f:
+        jnp.save(f, jnp.array(result.potential).reshape(-1))
+
     # See how the chosen dispatch performs against a BUNCH of test cases
     stress_test_potentials = []
     stress_test_worst_case = []
     n_gt_predicted = []
     num_opf_failues = []
-    print("Running stress test", end="")
+    print("Running stress test")
     for i in range(batches):
         prng_key, stress_test_key = jrandom.split(prng_key)
         stress_test_keys = jrandom.split(stress_test_key, N)
@@ -94,14 +99,14 @@ if __name__ == "__main__":
         num_opf_failues.append((stress_test_result.acopf_residual > 1e-3).sum())
         stress_test_potentials.append(stress_test_result.potential)
 
-        print(".", end="")
+        print(f"Iteration {i}")
     print("")
     print(f"Worst case identified by stress test: {max(stress_test_worst_case)}")
     print(f"\t{100 * sum(n_gt_predicted) / (N * batches)}% are worse than predicted")
     pct_opf_failues = 100 * sum(num_opf_failues) / (N * batches)
     print(f"\tGauss-Newton failed on {pct_opf_failues:.2f}%")
 
-    # Save the first round to a file
+    # Save the results to a file
     save_filename = filename[:-5] + "_stress_test.npz"
     with open(save_filename, "wb") as f:
         jnp.save(f, jnp.array(stress_test_potentials).reshape(-1))
