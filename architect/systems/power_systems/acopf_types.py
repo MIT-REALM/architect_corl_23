@@ -274,7 +274,6 @@ class ACOPFResult(NamedTuple):
         The net generation cost
         The augmented cost ("potential") = cost + penalty * total violation
         The residual that remains in the ACOPF flow constraints
-
     """
 
     dispatch: Dispatch

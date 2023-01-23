@@ -276,3 +276,16 @@ if __name__ == "__main__":
             f,
             default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
         )
+
+    # Save the trace of design parameters
+    with open(filename + "_dp_trace.json", "w") as f:
+        json.dump(
+            {
+                "case": case_name,
+                "dispatch": dps._asdict(),
+                "num_rounds": num_rounds,
+                "num_chains": num_chains,
+            },
+            f,
+            default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
+        )

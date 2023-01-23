@@ -84,7 +84,7 @@ if __name__ == "__main__":
         prng_key, stress_test_key = jrandom.split(prng_key)
         stress_test_keys = jrandom.split(stress_test_key, N)
         stress_test_eps = jax.vmap(sys.sample_random_network_state)(stress_test_keys)
-        stress_test_result = jax.vmap(sys, in_axes=(None, 0))(
+        stress_test_result = jax.jit(jax.vmap(sys, in_axes=(None, 0)))(
             final_dps, stress_test_eps
         )
         stress_test_violation = (
