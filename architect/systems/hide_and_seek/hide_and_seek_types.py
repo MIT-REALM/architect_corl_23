@@ -1,21 +1,20 @@
-from dataclasses import field
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+import numpy as np
 from beartype import beartype
 from beartype.typing import List, NamedTuple
 from jax.nn import log_sigmoid
-from jaxtyping import Array, Float, Integer, jaxtyped
+from jaxtyping import Array, Float, jaxtyped
 from scipy.special import binom
 
 from architect.types import PRNGKeyArray
 
 
-@jaxtyped
-@beartype
-class Trajectory2D(eqx.Module):
+# @jaxtyped
+# @beartype
+class Trajectory2D(NamedTuple):
     """
     The trajectory for a single robot, represented by a fixed-degree Bezier curve.
 
@@ -27,19 +26,20 @@ class Trajectory2D(eqx.Module):
 
     p: Float[Array, "T 2"]
 
-    # Pre-compute the coefficients of the curve (these are a fixed function of degree)
-    coefficients: Float[Array, " T"] = field(init=False)
-    i: Integer[Array, " T"] = field(init=False)  # indices of coefficients
-
     @property
     def n(self):
         """Return the degree of this Bezier curve"""
         return self.p.shape[0] - 1
 
-    def __post_init__(self):
-        # Populate convenience fields
-        self.i = jnp.arange(self.n + 1)
-        self.coefficients = binom(self.n, self.i)
+    @property
+    def i(self):
+        """Return the degree indices"""
+        return np.arange(self.n + 1)
+
+    @property
+    def coefficients(self):
+        """Return the degree indices"""
+        return binom(self.n, self.i)
 
     @jax.jit
     @jaxtyped
@@ -54,9 +54,9 @@ class Trajectory2D(eqx.Module):
         )
 
 
-@jaxtyped
-@beartype
-class MultiAgentTrajectory(eqx.Module):
+# @jaxtyped
+# @beartype
+class MultiAgentTrajectory(NamedTuple):
     """
     The trajectory for a swarm of robots.
 
@@ -111,8 +111,8 @@ class Arena(eqx.Module):
             )
 
         # The arena coordinates are centered at (0, 0)
-        x_min, x_max = -self.width / 2.0, self.width
-        y_min, y_max = -self.height / 2.0, self.height
+        x_min, x_max = -self.width / 2.0 + self.buffer, self.width / 2.0 - self.buffer
+        y_min, y_max = -self.height / 2.0 + self.buffer, self.height / 2.0 - self.buffer
 
         logprob_x = log_smooth_uniform(traj.p[:, 0], x_min, x_max).sum()
         logprob_y = log_smooth_uniform(traj.p[:, 1], y_min, y_max).sum()
@@ -125,7 +125,7 @@ class Arena(eqx.Module):
         self,
         key: PRNGKeyArray,
         start_p: Float[Array, " 2"],
-        T: int = 10,
+        T: int = 4,
     ) -> Trajectory2D:
         """
         Sample a random trajectory from the uniform distribution within the arena
@@ -136,8 +136,8 @@ class Arena(eqx.Module):
             T: number of steps to include in the trajectory
         """
         # The arena coordinates are centered at (0, 0)
-        x_min, x_max = -self.width / 2.0, self.width
-        y_min, y_max = -self.height / 2.0, self.height
+        x_min, x_max = -self.width / 2.0 + self.buffer, self.width / 2.0 - self.buffer
+        y_min, y_max = -self.height / 2.0 + self.buffer, self.height / 2.0 - self.buffer
 
         # Sample all points except the start point randomly
         x_key, y_key = jrandom.split(key)
@@ -158,13 +158,15 @@ class Arena(eqx.Module):
         """
         Compute the prior log probability of the given multi-agent trajectory.
         """
-        return sum([self.trajectory_prior_logprob(traj) for traj in multi_traj])
+        return sum(
+            [self.trajectory_prior_logprob(traj) for traj in multi_traj.trajectories]
+        )
 
     @jaxtyped
     @beartype
     def sample_random_multi_trajectory(
-        self, key: PRNGKeyArray, start_ps: Float[Array, "n 2"], T: int = 10
-    ) -> Trajectory2D:
+        self, key: PRNGKeyArray, start_ps: Float[Array, "n 2"], T: int = 4
+    ) -> MultiAgentTrajectory:
         """
         Sample a random multi-agent trajectory
 
@@ -192,7 +194,6 @@ class HideAndSeekResult(NamedTuple):
         The duration of the game
         The positions of all seekers and hiders throughout the game
         The potential value (i.e. cost for seekers)
-        The distance from each hider to each seeker over time
     """
 
     seeker_trajectory: MultiAgentTrajectory
@@ -204,5 +205,3 @@ class HideAndSeekResult(NamedTuple):
     hider_positions: Float[Array, "T 2"]
 
     potential: Float[Array, ""]
-
-    hiding_margin: Float[Array, "n_hiders n_seeker T"]
