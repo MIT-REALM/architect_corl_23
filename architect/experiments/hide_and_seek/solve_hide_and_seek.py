@@ -126,7 +126,7 @@ if __name__ == "__main__":
     seeker_keys = jrandom.split(seeker_key, num_chains)
     init_seeker_trajectories = jax.vmap(
         lambda key: arena.sample_random_multi_trajectory(
-            key, initial_seeker_positions, T=T
+            key, initial_seeker_positions, T=T, fixed=True
         )
     )(seeker_keys)
 
@@ -276,7 +276,7 @@ if __name__ == "__main__":
         f"{num_chains}_chains_step_dp_{dp_mcmc_step_size:0.1e}_"
         f"ep_{ep_mcmc_step_size:0.1e}_{alg_type}"
         f"{'_repair' if repair else ''}"
-        f"{'_predict' if predict else ''}"
+        f"{'_predict' if predict else ''}_fixed_init"
     )
     print(f"Saving results to: {filename}")
     os.makedirs(f"results/{experiment_type}/{case_name}", exist_ok=True)

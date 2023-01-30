@@ -126,6 +126,7 @@ class Arena(eqx.Module):
         key: PRNGKeyArray,
         start_p: Float[Array, " 2"],
         T: int = 4,
+        fixed: bool = False,
     ) -> Trajectory2D:
         """
         Sample a random trajectory from the uniform distribution within the arena
@@ -134,6 +135,7 @@ class Arena(eqx.Module):
             key: PRNG key to use for sampling
             start_p: the starting position for the trajectory
             T: number of steps to include in the trajectory
+            fixed: if True, sample the trajectory in a straight line.
         """
         # The arena coordinates are centered at (0, 0)
         x_min, x_max = -self.width / 2.0 + self.buffer, self.width / 2.0 - self.buffer
@@ -143,6 +145,11 @@ class Arena(eqx.Module):
         x_key, y_key = jrandom.split(key)
         x = jrandom.uniform(x_key, shape=(T - 1, 1), minval=x_min, maxval=x_max)
         y = jrandom.uniform(y_key, shape=(T - 1, 1), minval=y_min, maxval=y_max)
+
+        if fixed:
+            x = jnp.linspace(x_min, x_max, T - 1).reshape(-1, 1)
+            y = jnp.zeros((T - 1, 1)) + start_p[1]
+
         p = jnp.hstack((x, y))
 
         # Prepend the start point
@@ -165,7 +172,11 @@ class Arena(eqx.Module):
     @jaxtyped
     @beartype
     def sample_random_multi_trajectory(
-        self, key: PRNGKeyArray, start_ps: Float[Array, "n 2"], T: int = 4
+        self,
+        key: PRNGKeyArray,
+        start_ps: Float[Array, "n 2"],
+        T: int = 4,
+        fixed: bool = False,
     ) -> MultiAgentTrajectory:
         """
         Sample a random multi-agent trajectory
@@ -174,12 +185,13 @@ class Arena(eqx.Module):
             key: PRNG key to use for sampling
             start_ps: n_agents x 2 array of starting positions
             T: number of steps to include in the trajectory
+            fixed: if True, sample the trajectory in a straight line.
         """
         n = start_ps.shape[0]
         keys = jrandom.split(key, n)
         return MultiAgentTrajectory(
             [
-                self.sample_random_trajectory(k, start_p, T=T)
+                self.sample_random_trajectory(k, start_p, T=T, fixed=fixed)
                 for k, start_p in zip(keys, start_ps)
             ]
         )
