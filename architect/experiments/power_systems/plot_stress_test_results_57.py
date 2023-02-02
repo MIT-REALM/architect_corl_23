@@ -30,7 +30,7 @@ data = [
 if __name__ == "__main__":
     results = pd.DataFrame(data)
 
-    sns.set_theme(style="whitegrid", context="paper")
+    sns.set_theme(style="whitegrid", context="paper", font_scale=2.0)
     fig = plt.figure(figsize=(9, 4), constrained_layout=True)
 
     # Load distributions from files
@@ -126,6 +126,6 @@ if __name__ == "__main__":
     plt.ylabel("Cost")
     plt.yscale("log")
     plt.ylim([1.0, 500.0])
-    plt.legend(markerscale=1.5)
+    plt.legend(markerscale=1.5, loc="lower right")
 
     plt.show()

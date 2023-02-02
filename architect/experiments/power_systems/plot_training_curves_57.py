@@ -21,7 +21,7 @@ data = [
 if __name__ == "__main__":
     results = pd.DataFrame(data)
 
-    sns.set_theme(style="whitegrid", context="paper")
+    sns.set_theme(style="whitegrid", context="paper", font_scale=2.0)
     fig = plt.figure(figsize=(9, 4), constrained_layout=True)
 
     # Load distributions from files
