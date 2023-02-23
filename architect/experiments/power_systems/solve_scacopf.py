@@ -249,43 +249,43 @@ if __name__ == "__main__":
         f"ep_{ep_mcmc_step_size:0.1e}_{alg_type}"
     )
     print(f"Saving results to: {filename}")
-    os.makedirs(f"results/{experiment_type}/{case_name}", exist_ok=True)
-    plt.savefig(filename + ".png")
+    # os.makedirs(f"results/{experiment_type}/{case_name}", exist_ok=True)
+    # plt.savefig(filename + ".png")
 
-    # Save the dispatch
-    with open(filename + ".json", "w") as f:
-        json.dump(
-            {
-                "case": case_name,
-                "dispatch": final_dps._asdict(),
-                "network_state": final_eps._asdict(),
-                "time": t_end - t_start,
-                "L": L,
-                "dp_mcmc_step_size": dp_mcmc_step_size,
-                "ep_mcmc_step_size": ep_mcmc_step_size,
-                "num_rounds": num_rounds,
-                "num_mcmc_steps_per_round": num_mcmc_steps_per_round,
-                "num_chains": num_chains,
-                "use_gradients": use_gradients,
-                "use_stochasticity": use_stochasticity,
-                "repair": repair,
-                "predict": predict,
-                "quench_rounds": quench_rounds,
-                "tempering_schedule": tempering_schedule,
-            },
-            f,
-            default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
-        )
+    # # Save the dispatch
+    # with open(filename + ".json", "w") as f:
+    #     json.dump(
+    #         {
+    #             "case": case_name,
+    #             "dispatch": final_dps._asdict(),
+    #             "network_state": final_eps._asdict(),
+    #             "time": t_end - t_start,
+    #             "L": L,
+    #             "dp_mcmc_step_size": dp_mcmc_step_size,
+    #             "ep_mcmc_step_size": ep_mcmc_step_size,
+    #             "num_rounds": num_rounds,
+    #             "num_mcmc_steps_per_round": num_mcmc_steps_per_round,
+    #             "num_chains": num_chains,
+    #             "use_gradients": use_gradients,
+    #             "use_stochasticity": use_stochasticity,
+    #             "repair": repair,
+    #             "predict": predict,
+    #             "quench_rounds": quench_rounds,
+    #             "tempering_schedule": tempering_schedule,
+    #         },
+    #         f,
+    #         default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
+    #     )
 
-    # Save the trace of design parameters
-    with open(filename + "_dp_trace.json", "w") as f:
-        json.dump(
-            {
-                "case": case_name,
-                "dispatch": dps._asdict(),
-                "num_rounds": num_rounds,
-                "num_chains": num_chains,
-            },
-            f,
-            default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
-        )
+    # # Save the trace of design parameters
+    # with open(filename + "_dp_trace.json", "w") as f:
+    #     json.dump(
+    #         {
+    #             "case": case_name,
+    #             "dispatch": dps._asdict(),
+    #             "num_rounds": num_rounds,
+    #             "num_chains": num_chains,
+    #         },
+    #         f,
+    #         default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,
+    #     )

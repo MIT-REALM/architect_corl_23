@@ -3,6 +3,8 @@ Failure mode prediction and mitigation code.
 
 Provides system-agnostic code for failure mode prediction and mitigation.
 """
+import time
+
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
@@ -242,8 +244,11 @@ def predict_and_mitigate_failure_modes(
     keys = jrandom.split(prng_key, num_rounds)
     results = []
     for i, (key, tempering) in enumerate(zip(keys, tempering_schedule)):
-        print(f"Iteration {i}")
+        print(f"Iteration {i}", end="")
+        start = time.perf_counter()
         carry, y = one_smc_step(carry, (key, tempering))
+        end = time.perf_counter()
+        print(f" ({end - start:.2f} s)")
         results.append(y)
 
     # The python for loop above is faster than this scan, since we skip a long

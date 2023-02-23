@@ -215,7 +215,7 @@ if __name__ == "__main__":
     # case14, case57, case118, case_ACTIVSg200
     # Cases that load but don't solve
     # case_ACTIVSg500
-    case_name = "case14"
+    case_name = "case_ACTIVSg200"
     sys = load_test_network(case_name)
     print(
         f"Successfully loaded {case_name} with {sys.n_bus} buses and {sys.n_line} lines"
@@ -223,13 +223,37 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     dispatch = sys.sample_random_dispatch(key)
     network_state = sys.network_spec.nominal_network_state
-    import pdb
 
-    pdb.set_trace()
+    # Test without JIT
     start = time.perf_counter()
     r = sys(dispatch, network_state)
     end = time.perf_counter()
-
     print(
-        f"ACOPF completion residual {r.acopf_residual:.2e} (took {end - start:.2f} s)"
+        (
+            f"ACOPF completion residual {r.acopf_residual:.2e} "
+            f"(took {end - start:.2f} s without JIT)"
+        )
     )
+
+    # Test with JIT
+    completion_fn = lambda d, ns: sys(d, ns)
+    start = time.perf_counter()
+    jax.jit(completion_fn)(dispatch, network_state)
+    end = time.perf_counter()
+    print(f"First call with JIT took {end - start:.2f} s")
+
+    N = 100
+    start = time.perf_counter()
+    for _ in range(N):
+        jax.jit(completion_fn)(dispatch, network_state)
+    end = time.perf_counter()
+    print(f"Second call with JIT took {(end - start) / N:.3f} s")
+
+    # Test with autodiff
+    potential_fn = lambda d, ns: sys(d, ns).potential
+    potential_and_grad_fn = jax.value_and_grad(potential_fn)
+    start = time.perf_counter()
+    potential_and_grad_fn(dispatch, network_state)
+    end = time.perf_counter()
+    print("Value and grad")
+    print(f"First call without JIT took {end - start:.2f} s")
