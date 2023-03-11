@@ -11,7 +11,7 @@ from architect.engines.samplers import init_sampler, make_kernel
 @jaxtyped
 @beartype
 def quadratic_potential(x: Float[Array, " n"]):
-    return -0.5 * (x ** 2).sum()
+    return -0.5 * (x**2).sum()
 
 
 def test_init_sampler():

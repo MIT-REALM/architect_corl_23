@@ -90,7 +90,7 @@ class InterconnectionSpecification(NamedTuple):
 
     def cost(self, P: Float[Array, " n_connected"]) -> Float[Array, ""]:
         """Compute the cost of the given dispatch."""
-        quad_cost = self.P_quadratic_costs * P ** 2
+        quad_cost = self.P_quadratic_costs * P**2
         lin_cost = self.P_linear_costs * P
         return quad_cost.sum() + lin_cost.sum()
 
@@ -216,7 +216,7 @@ class NetworkSpecification(NamedTuple):
 
         # Assume no line charging susceptance
         Ytt = line_admittances + 0.5j * self.charging_susceptances
-        Yff = Ytt / self.transformer_tap_ratios ** 2
+        Yff = Ytt / self.transformer_tap_ratios**2
         Yft = -line_admittances / jnp.conj(tap)
         Ytf = -line_admittances / tap
 

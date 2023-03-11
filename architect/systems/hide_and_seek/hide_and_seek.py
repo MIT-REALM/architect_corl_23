@@ -69,6 +69,7 @@ class Game(eqx.Module):
             seeker_trajectory: trajectories for the seekers to follow
             hider_trajectory: trajectories for the hiders to follow
         """
+
         # Define a function to execute one step in the game
         def step(carry, t):
             # Unpack carry

@@ -12,7 +12,7 @@ MU = 3.986e14  # Earth's gravitational parameter (m^3 / s^2)
 A_GEO = 42164e3  # GEO semi-major axis (m)
 A_LEO = 353e3  # GEO semi-major axis (m)
 M_CHASER = 500  # chaser satellite mass
-N = jnp.sqrt(MU / A_LEO ** 3)  # mean-motion parameter
+N = jnp.sqrt(MU / A_LEO**3)  # mean-motion parameter
 
 
 @jax.jit
@@ -22,10 +22,10 @@ def linear_satellite_dt_AB(dt: float) -> Tuple[jnp.ndarray, jnp.ndarray]:
     A = A.at[0, 3].set(1.0)
     A = A.at[1, 4].set(1.0)
     A = A.at[2, 5].set(1.0)
-    A = A.at[3, 0].set(3 * N ** 2)
+    A = A.at[3, 0].set(3 * N**2)
     A = A.at[3, 4].set(2 * N)
     A = A.at[4, 3].set(-2 * N)
-    A = A.at[5, 2].set(-(N ** 2))
+    A = A.at[5, 2].set(-(N**2))
 
     B = jnp.zeros((6, 3))
     B = B.at[3, 0].set(1 / M_CHASER)
@@ -75,9 +75,9 @@ def linear_satellite_next_state(
     # Velocities follow CHW dynamics (See Jewison & Erwin CDC 2016)
     # Note that the dynamics in z are decoupled from those in xy,
     # so we can also consider just the xy projection if we need to.
-    dx2_dt2 = 2 * N * vy + 3 * N ** 2 * px + ux / M_CHASER
+    dx2_dt2 = 2 * N * vy + 3 * N**2 * px + ux / M_CHASER
     dy2_dt2 = -2 * N * vx + uy / M_CHASER
-    dz2_dt2 = -(N ** 2) * pz + uz / M_CHASER
+    dz2_dt2 = -(N**2) * pz + uz / M_CHASER
     next_state = next_state.at[3].add(dt * dx2_dt2)
     next_state = next_state.at[4].add(dt * dy2_dt2)
     next_state = next_state.at[5].add(dt * dz2_dt2)

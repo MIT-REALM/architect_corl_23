@@ -49,7 +49,7 @@ class Trajectory2D(NamedTuple):
         # Bezier curves have an explicit form
         # see https://en.wikipedia.org/wiki/B%C3%A9zier_curve
         return jnp.sum(
-            self.coefficients * (1 - t) ** (self.n - self.i) * t ** self.i * self.p.T,
+            self.coefficients * (1 - t) ** (self.n - self.i) * t**self.i * self.p.T,
             axis=-1,
         )
 

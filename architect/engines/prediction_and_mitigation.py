@@ -11,21 +11,11 @@ import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
 from beartype.typing import Callable, Optional, Tuple, Union
-from jax.nn import logsumexp
 from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.engines.samplers import SamplerState, init_sampler, make_kernel
 from architect.types import LogLikelihood, Params, Sampler
-
-
-def softmax(x: Float[Array, "..."], smoothing: float = 0.05):
-    """Return the soft maximum of the given vector"""
-    return 1 / smoothing * logsumexp(smoothing * x)
-
-
-def softmin(x: Float[Array, "..."], smoothing: float = 0.05):
-    """Return the soft minimum of the given vector"""
-    return -softmax(-x, smoothing)
+from architect.utils import softmin
 
 
 @jaxtyped
@@ -204,7 +194,8 @@ def predict_and_mitigate_failure_modes(
             # across all current design parameters. Need to make this positive so that
             # large potentials/costs -> higher likelihoods
             ep_potential_fn = lambda ep: softmin(
-                jax.vmap(potential_fn, in_axes=(0, None))(current_dps, ep)
+                jax.vmap(potential_fn, in_axes=(0, None))(current_dps, ep),
+                sharpness=0.05,
             )
             ep_logprob_fn = lambda ep: ep_logprior_fn(ep) + tempering * ep_potential_fn(
                 ep

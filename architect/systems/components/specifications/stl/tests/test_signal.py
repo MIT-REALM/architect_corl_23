@@ -7,10 +7,10 @@ from architect.systems.components.specifications.stl.signal import stack, max1d
 def test_stack():
     # Create two signals to test
     t1 = jnp.arange(0.0, 3, 0.3)
-    x1 = t1 ** 2
+    x1 = t1**2
     signal1 = jnp.vstack((t1, x1))
     t2 = jnp.arange(0.0, 3, 0.5)
-    x2 = t2 ** 0.5
+    x2 = t2**0.5
     signal2 = jnp.vstack((t2, x2))
 
     signal = stack(signal1, signal2)
@@ -37,10 +37,10 @@ def test_stack_grad():
 def test_stack_vmap():
     # Create two signals to test
     t1 = jnp.arange(0.0, 3, 0.3)
-    x1 = t1 ** 2
+    x1 = t1**2
     signal1 = jnp.vstack((t1, x1))
     t2 = jnp.arange(0.0, 3, 0.5)
-    x2 = t2 ** 0.5
+    x2 = t2**0.5
 
     stack_f = lambda x: stack(signal1, jnp.vstack((t2, x)))
     stacked_x_vmap = jax.vmap(stack_f, in_axes=0)(jnp.vstack([x2] * 2))
