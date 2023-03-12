@@ -5,28 +5,58 @@ import jax.numpy as jnp
 
 from jaxtyping import Float, Integer, Array, jaxtyped
 from beartype import beartype
-from beartype.typing import Callable
+from beartype.typing import Callable, NamedTuple
+
+
+@beartype
+class CameraIntrinsics(NamedTuple):
+    """Represent the intrinsic parameters of a camera.
+
+    Attributes:
+        focal_length: The focal length of the camera, in meters.
+        sensor_size: The (x, y) size of the camera sensor, in meters.
+        resolution: The (x, y) resolution of the camera, in pixels.
+    """
+
+    focal_length: Float[Array, ""]
+    sensor_size: Float[Array, " 2"]
+    resolution: Integer[Array, " 2"]
+
+
+@beartype
+class CameraExtrinsics(NamedTuple):
+    """Represent the extrinsic parameters of a camera.
+
+    Attributes:
+        camera_R_to_world: The rotation matrix from camera to world coordinates.
+        camera_origin: The location of the camera origin in world coordinates.
+    """
+
+    camera_R_to_world: Float[Array, "3 3"]
+    camera_origin: Float[Array, " 3"]
 
 
 @jaxtyped
 @beartype
 def pinhole_camera_rays(
-    camera_R_to_world: Float[Array, "3 3"],
-    sensor_size: Float[Array, " 2"],
-    resolution: Integer[Array, " 2"],
-    focal_length: Float[Array, ""],
+    intrinsics: CameraIntrinsics,
+    extrinsics: CameraExtrinsics,
 ) -> Float[Array, "n_rays 3"]:
     """Return the rays originating from a pinhole camera, in world coordinates.
 
     Args:
-        camera_R_to_world: The rotation matrix from camera to world coordinates.
-        sensor_size: The (x, y) size of the camera sensor, in meters.
-        resolution: The (x, y) resolution of the camera, in pixels/m.
-        focal_length: The focal length of the camera, in meters.
+        intrinsics: The intrinsic parameters of the camera.
+        extrinsics: The extrinsic parameters of the camera.
 
     Returns:
         The rays originating from the camera, in world coordinates.
     """
+    # Unpack camera parameters
+    camera_R_to_world = extrinsics.camera_R_to_world
+    sensor_size = intrinsics.sensor_size
+    resolution = intrinsics.resolution
+    focal_length = intrinsics.focal_length
+
     # Get the points where the rays pass through the image plane of the camera,
     # in camera coordinates.
     sensor_x, sensor_y = sensor_size
@@ -75,24 +105,26 @@ def raycast(
 
 def render_depth(
     hit_pts: Float[Array, "n_rays 3"],
-    camera_origin: Float[Array, " 3"],
-    camera_R_to_world: Float[Array, "3 3"],
-    resolution: Integer[Array, " 2"],
+    intrinsics: CameraIntrinsics,
+    extrinsics: CameraExtrinsics,
     max_dist: float = 10.0,
 ) -> Float[Array, " n_rays"]:
     """Render the depth of the given hit points.
 
     Args:
         hit_pts: The hit points of the rays, in world coordinates.
-        camera_origin: The origin of the camera, in world coordinates.
-        camera_R_to_world: The rotation matrix from camera to world coordinates.
-        resolution: The (x, y) resolution of the camera, in pixels.
+        intrinsics: The intrinsic parameters of the camera.
+        extrinsics: The extrinsic parameters of the camera.
         max_dist: The maximum distance to render, in meters. Set the depth for all rays
             without an intersection within this distance to 0.
 
     Returns:
         The depth of the hit points, in meters
     """
+    # Unpack camera parameters
+    camera_R_to_world = extrinsics.camera_R_to_world
+    camera_origin = extrinsics.camera_origin
+
     # Get the depth image by getting the distance along the camera z axis to each hit
     # point
     depth_values = jax.vmap(jnp.dot, in_axes=(0, None))(

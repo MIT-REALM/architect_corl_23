@@ -79,6 +79,8 @@ class Sphere(SDFShape):
         return jnp.linalg.norm(x - self.center) - self.radius
 
 
+@jaxtyped
+@beartype
 class Halfspace(SDFShape):
     """Represent a halfspace using a SDF.
 
@@ -88,7 +90,7 @@ class Halfspace(SDFShape):
     """
 
     normal: Float[Array, " 3"]
-    point: Float[Array, ""]
+    point: Float[Array, " 3"]
 
     def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
         """Compute the SDF at a given point.
@@ -102,6 +104,8 @@ class Halfspace(SDFShape):
         return jnp.dot(x - self.point, self.normal)
 
 
+@jaxtyped
+@beartype
 class Box(SDFShape):
     """Represent a box using a SDF.
 
