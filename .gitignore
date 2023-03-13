@@ -1,5 +1,6 @@
 # Project-specific
 *.gif
+tmp/*
 
 # Editor stuff
 .vscode

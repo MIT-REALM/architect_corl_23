@@ -107,7 +107,12 @@ class HighwayScene:
     def _get_shapes(
         self, car_states: Float[Array, "n_car 3"], sharpness: float = 100.0
     ) -> SDFShape:
-        """Return an SDF representation this scene."""
+        """Return an SDF representation this scene.
+
+        Args:
+            car_states: the [x, y, heading] state of each car in the scene
+            sharpness: the sharpness of the SDF shapes
+        """
         car_shapes = [self.car.get_shapes(state) for state in car_states]
         shapes = (
             [self.ground]
@@ -115,6 +120,51 @@ class HighwayScene:
             + [shape for sublist in car_shapes for shape in sublist]
         )
         return Scene(shapes=shapes, sharpness=sharpness)
+
+    @jaxtyped
+    @beartype
+    def check_for_collision(
+        self,
+        collider_state: Float[Array, " 3"],
+        scene_car_states: Float[Array, "n_car 3"],
+        sharpness: float = 100.0,
+    ) -> Float[Array, ""]:
+        """Check for collision with any obstacle in the scene.
+
+        Args:
+            collider_state: the [x, y, heading] state of the car to check (note:
+                this should not be one of the cars included in the scene, otherwise
+                there will always be a collision).
+            scene_car_states: the [x, y, heading] state of each car in the scene
+            sharpness: the sharpness of the SDF shapes
+
+        Returns:
+            The minimum distance from the car to any obstacle in the scene.
+        """
+        # Make the scene (a composite of SDF shapes)
+        scene = self._get_shapes(scene_car_states)
+
+        # Check for collision at four points on the car
+        car_R_to_world = jnp.array(
+            [
+                [jnp.cos(collider_state[2]), -jnp.sin(collider_state[2]), 0],
+                [jnp.sin(collider_state[2]), jnp.cos(collider_state[2]), 0],
+                [0, 0, 1],
+            ]
+        )
+        collider_pts_car_frame = jnp.array(
+            [
+                [-self.car.length / 2, self.car.width / 2, self.car.height / 2],
+                [self.car.length / 2, self.car.width / 2, self.car.height / 2],
+                [-self.car.length / 2, -self.car.width / 2, self.car.height / 2],
+                [self.car.length / 2, -self.car.width / 2, self.car.height / 2],
+            ]
+        )
+        collider_pts_world = collider_pts_car_frame @ car_R_to_world.T
+        collider_pts_world = collider_pts_world.at[:, :2].add(collider_state[:2])
+
+        # Return the minimum distance to any obstacle (negative if there's a collision)
+        return jax.vmap(scene)(collider_pts_world).min()
 
     @jaxtyped
     @beartype

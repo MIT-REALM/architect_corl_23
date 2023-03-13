@@ -1,6 +1,7 @@
 """Test the highway environment."""
 import pytest
 import jax.numpy as jnp
+import jax.random as jrandom
 
 from architect.systems.components.sensing.vision.render import CameraIntrinsics
 from architect.systems.highway.highway_scene import HighwayScene
@@ -60,3 +61,23 @@ def test_highway_env_step(highway_env):
     assert obs is not None
     assert reward is not None
     assert done is not None
+
+
+def test_highway_env_sample_non_ego_action(highway_env):
+    """Test sampling a non-ego action."""
+    key = jrandom.PRNGKey(0)
+    n_non_ego = 3
+    n_actions = 2  # per agent
+    noise_cov = jnp.diag(0.1 * jnp.ones(n_actions))
+    non_ego_actions = highway_env.sample_non_ego_actions(key, noise_cov, n_non_ego)
+    assert non_ego_actions.shape == (n_non_ego, n_actions)
+
+
+def test_highway_env_non_ego_action_prior_logprob(highway_env):
+    """Test computing the log probability of a non-ego action."""
+    n_non_ego = 3
+    n_actions = 2  # per agent
+    non_ego_actions = jnp.zeros((n_non_ego, n_actions))
+    noise_cov = jnp.diag(0.1 * jnp.ones(n_actions))
+    logprob = highway_env.non_ego_actions_prior_logprob(non_ego_actions, noise_cov)
+    assert logprob.shape == ()

@@ -1,10 +1,12 @@
 """Manage the state of the ego car and all other vehicles on the highway."""
 import jax
+import jax.nn
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import NamedTuple, Tuple
-from jaxtyping import Float, Array, jaxtyped
+from jaxtyping import Float, Bool, Array, jaxtyped
 
+from architect.types import PRNGKeyArray
 from architect.systems.components.sensing.vision.render import (
     CameraIntrinsics,
     CameraExtrinsics,
@@ -55,6 +57,8 @@ class HighwayEnv:
         highway_scene: a representation of the underlying highway scene.
         camera_intrinsics: the intrinsics of the camera mounted to the ego agent.
         dt: the time step to use for simulation.
+        collision_penalty: the penalty to apply when the ego vehicle collides with
+            any obstacle in the scene.
         max_render_dist: the maximum distance to render in the depth image.
         render_sharpness: the sharpness of the scene.
     """
@@ -62,6 +66,7 @@ class HighwayEnv:
     _highway_scene: HighwayScene
     _camera_intrinsics: CameraIntrinsics
     _dt: float
+    _collision_penalty: float
     _max_render_dist: float
     _render_sharpness: float
 
@@ -72,6 +77,7 @@ class HighwayEnv:
         highway_scene: HighwayScene,
         camera_intrinsics: CameraIntrinsics,
         dt: float,
+        collision_penalty: float = 100.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
     ):
@@ -79,6 +85,7 @@ class HighwayEnv:
         self._highway_scene = highway_scene
         self._camera_intrinsics = camera_intrinsics
         self._dt = dt
+        self._collision_penalty = collision_penalty
         self._max_render_dist = max_render_dist
         self._render_sharpness = render_sharpness
 
@@ -103,13 +110,19 @@ class HighwayEnv:
         a, delta = action
 
         # Clip the steering angle
-        delta = jnp.clip(delta, -0.4 * jnp.pi, 0.4 * jnp.pi)
+        delta = jnp.clip(delta, -0.1, 0.1)
+
+        # Clip the acceleration
+        a = jnp.clip(a, -2.0, 2.0)
 
         # Compute the next state
         x_next = x + v * jnp.cos(theta) * self._dt
         y_next = y + v * jnp.sin(theta) * self._dt
         theta_next = theta + v * jnp.tan(delta) / self._axle_length * self._dt
         v_next = v + a * self._dt
+
+        # Clip the velocity to some maximum
+        v_next = jnp.clip(v_next, 0.0, 20.0)
 
         return jnp.array([x_next, y_next, theta_next, v_next])
 
@@ -120,8 +133,11 @@ class HighwayEnv:
         state: HighwayState,
         ego_action: Float[Array, " n_actions"],
         non_ego_actions: Float[Array, "n_non_ego n_actions"],
-    ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""], bool]:
+    ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""], Bool[Array, ""]]:
         """Take a step in the environment.
+
+        The reward is the distance travelled in the positive x direction, minus a
+        penalty if the ego vehicle collides with any other object in the scene.
 
         Args:
             state: the current state of the environment
@@ -145,9 +161,18 @@ class HighwayEnv:
         )
         next_state = HighwayState(next_ego_state, next_non_ego_states)
 
-        # Compute the reward
-        # reward = self.reward(next_state)  # TODO@dawsonc
-        reward = jnp.array(0.0)
+        # Compute the reward, which increases as the vehicle travels farther in
+        # the positive x direction and decreases if it collides with anything
+        min_distance_to_obstacle = self._highway_scene.check_for_collision(
+            next_ego_state[:3],  # trim out speed; not needed for collision checking
+            next_non_ego_states[:, :3],
+            self._render_sharpness,
+        )
+        collision_reward = -self._collision_penalty * jax.nn.sigmoid(
+            -25 * min_distance_to_obstacle
+        )
+        distance_reward = (next_ego_state[0] - ego_state[0]) / self._dt
+        reward = distance_reward + collision_reward
 
         # Compute the observations from a camera placed on the ego vehicle
         ego_x, ego_y, ego_theta, ego_v = next_ego_state
@@ -170,12 +195,101 @@ class HighwayEnv:
         )
         obs = HighwayObs(ego_v, depth_image)
 
-        # TODO@dawsonc
-        # crashed = self._highway_scene.check_for_collision(
-        #     next_ego_state[:3],  # trim out speed; not needed for collision checking
-        #     next_non_ego_states[:, :3],
-        # )
-        # done = crashed
-        done = False
+        # The episode ends when a collision occurs
+        done = min_distance_to_obstacle < 0.0
 
         return next_state, obs, reward, done
+
+    @jaxtyped
+    @beartype
+    def sample_initial_ego_state(
+        self, key: PRNGKeyArray, noise_cov: Float[Array, "n_states n_states"]
+    ) -> Float[Array, " n_states"]:
+        """Sample an initial state for the ego vehicle.
+
+        The ego vehicle is placed in the middle of the scene, facing forward, and
+        with velocity 10 m/s, and then a small Gaussian noise is added to its state.
+
+        Args:
+            key: the random number generator key.
+            noise_cov: the covariance matrix of the Gaussian noise to add to the
+                initial state.
+
+        Returns:
+            The initial state of the ego vehicle.
+        """
+        initial_state_mean = jnp.array([-50.0, 0.0, 0.0, 10.0])
+        initial_state = jax.random.multivariate_normal(
+            key, initial_state_mean, noise_cov
+        )
+        return initial_state
+
+    @jaxtyped
+    @beartype
+    def initial_ego_state_prior_logprob(
+        self,
+        state: Float[Array, " n_states"],
+        noise_cov: Float[Array, "n_states n_states"],
+    ) -> Float[Array, ""]:
+        """Compute the prior log probability of an initial state for the ego vehicle.
+
+        Args:
+            state: the state of the ego vehicle at which to compute the log probability.
+            noise_cov: the covariance matrix of the Gaussian noise added to the initial
+                state.
+
+        Returns:
+            The prior log probability of the givens state.
+        """
+        initial_state_mean = jnp.array([-50.0, 0.0, 0.0, 10.0])
+        logprob = jax.scipy.stats.multivariate_normal.logpdf(
+            state, initial_state_mean, noise_cov
+        )
+        return logprob
+
+    @jaxtyped
+    @beartype
+    def sample_non_ego_actions(
+        self,
+        key: PRNGKeyArray,
+        noise_cov: Float[Array, "n_actions n_actions"],
+        n_non_ego: int,
+    ) -> Float[Array, "n_non_ego n_actions"]:
+        """Sample an action for the non-ego vehicles.
+
+        Args:
+            key: the random number generator key.
+            noise_cov: the covariance matrix of the Gaussian noise to add to the
+                zero action.
+            n_non_ego: the number of non-ego vehicles in the scene.
+
+        Returns:
+            The initial state of the ego vehicle.
+        """
+        action = jax.random.multivariate_normal(
+            key, jnp.zeros((2,)), noise_cov, shape=(n_non_ego,)
+        )
+        return action
+
+    @jaxtyped
+    @beartype
+    def non_ego_actions_prior_logprob(
+        self,
+        action: Float[Array, "n_non_ego n_actions"],
+        noise_cov: Float[Array, "n_actions n_actions"],
+    ) -> Float[Array, ""]:
+        """Compute the prior log probability of an action for the non-ego vehicles.
+
+        Args:
+            action: the action of the non-ego vehicles at which to compute the log
+                probability.
+            noise_cov: the covariance matrix of the Gaussian noise added to the action.
+
+        Returns:
+            The prior log probability of the givens action.
+        """
+        logprob_fn = lambda a: jax.scipy.stats.multivariate_normal.logpdf(
+            a, jnp.zeros_like(a), noise_cov
+        )
+        logprobs = jax.vmap(logprob_fn)(action)
+        return logprobs.sum()
