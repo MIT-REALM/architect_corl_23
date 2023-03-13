@@ -1,5 +1,6 @@
 """Define a highway scene with a variable number of lanes and cars."""
 from jaxtyping import Float, Array, jaxtyped
+import jax
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import List, NamedTuple
@@ -103,7 +104,7 @@ class HighwayScene:
 
     @jaxtyped
     @beartype
-    def get_shapes(
+    def _get_shapes(
         self, car_states: Float[Array, "n_car 3"], sharpness: float = 100.0
     ) -> SDFShape:
         """Return an SDF representation this scene."""
@@ -122,8 +123,8 @@ class HighwayScene:
         intrinsics: CameraIntrinsics,
         extrinsics: CameraExtrinsics,
         car_states: Float[Array, "n_car 3"],
-        max_dist=50.0,
-        sharpness=100.0,
+        max_dist: float = 50.0,
+        sharpness: float = 100.0,
     ) -> Float[Array, "res_x res_y"]:
         """Render the depth image of this scene from the given camera pose.
 
@@ -138,7 +139,7 @@ class HighwayScene:
             The depth image of the scene
         """
         # Make the scene (a composite of SDF shapes)
-        scene = self.get_shapes(car_states, sharpness=sharpness)
+        scene = self._get_shapes(car_states, sharpness=sharpness)
 
         # Render the scene
         rays = pinhole_camera_rays(intrinsics, extrinsics)
@@ -152,7 +153,6 @@ class HighwayScene:
 
 
 if __name__ == "__main__":
-    import jax
     import matplotlib.pyplot as plt
 
     from architect.systems.components.sensing.vision.util import look_at
@@ -169,9 +169,9 @@ if __name__ == "__main__":
 
     # Set the camera parameters
     intrinsics = CameraIntrinsics(
-        focal_length=jnp.array(0.1),
-        sensor_size=jnp.array([0.1, 0.1]),
-        resolution=jnp.array([512, 512]),
+        focal_length=0.1,
+        sensor_size=(0.1, 0.1),
+        resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
         camera_origin=jnp.array([-10.0, 0.0, 10.0]),

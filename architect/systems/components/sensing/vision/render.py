@@ -3,9 +3,9 @@
 import jax
 import jax.numpy as jnp
 
-from jaxtyping import Float, Integer, Array, jaxtyped
+from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
-from beartype.typing import Callable, NamedTuple
+from beartype.typing import Callable, NamedTuple, Tuple
 
 
 @beartype
@@ -18,9 +18,9 @@ class CameraIntrinsics(NamedTuple):
         resolution: The (x, y) resolution of the camera, in pixels.
     """
 
-    focal_length: Float[Array, ""]
-    sensor_size: Float[Array, " 2"]
-    resolution: Integer[Array, " 2"]
+    focal_length: float
+    sensor_size: Tuple[float, float]
+    resolution: Tuple[int, int]
 
 
 @beartype
@@ -80,7 +80,7 @@ def raycast(
     sdf: Callable[[Float[Array, " 3"]], Float[Array, ""]],
     origin: Float[Array, " 3"],
     ray: Float[Array, " 3"],
-    max_steps: int = 50,
+    max_steps: int = 40,
 ) -> Float[Array, " 3"]:
     """Find the points at which the given ray intersects the given SDF.
 

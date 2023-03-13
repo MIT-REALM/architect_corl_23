@@ -23,9 +23,9 @@ from architect.systems.components.sensing.vision.util import look_at
 @pytest.fixture
 def intrinsics():
     intrinsics = CameraIntrinsics(
-        sensor_size=jnp.array([0.1, 0.1]),
-        resolution=jnp.array([20, 20]),
-        focal_length=jnp.array(0.1),
+        sensor_size=(0.1, 0.1),
+        resolution=(20, 20),
+        focal_length=0.1,
     )
     return intrinsics
 

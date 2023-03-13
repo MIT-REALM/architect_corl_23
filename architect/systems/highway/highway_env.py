@@ -32,16 +32,11 @@ class HighwayState(NamedTuple):
 
     Attributes:
         ego_state: the state of the ego vehicle
-        other_states: the states of all other vehicles
+        non_ego_states: the states of all other vehicles
     """
 
     ego_state: Float[Array, " n_states"]
-    other_states: Float[Array, "n_other n_states"]
-
-    @property
-    def car_states(self) -> Float[Array, "n_cars n_states"]:
-        """Return the states of all cars in the scene."""
-        return jnp.concatenate([self.ego_state[None], self.other_states], axis=0)
+    non_ego_states: Float[Array, "n_non_ego n_states"]
 
 
 class HighwayEnv:
@@ -60,11 +55,16 @@ class HighwayEnv:
         highway_scene: a representation of the underlying highway scene.
         camera_intrinsics: the intrinsics of the camera mounted to the ego agent.
         dt: the time step to use for simulation.
+        max_render_dist: the maximum distance to render in the depth image.
+        render_sharpness: the sharpness of the scene.
     """
 
     _highway_scene: HighwayScene
     _camera_intrinsics: CameraIntrinsics
     _dt: float
+    _max_render_dist: float
+    _render_sharpness: float
+
     _axle_length: float = 1.0
 
     def __init__(
@@ -72,11 +72,15 @@ class HighwayEnv:
         highway_scene: HighwayScene,
         camera_intrinsics: CameraIntrinsics,
         dt: float,
+        max_render_dist: float = 30.0,
+        render_sharpness: float = 100.0,
     ):
         """Initialize the environment."""
         self._highway_scene = highway_scene
         self._camera_intrinsics = camera_intrinsics
         self._dt = dt
+        self._max_render_dist = max_render_dist
+        self._render_sharpness = render_sharpness
 
     @jaxtyped
     @beartype
@@ -115,33 +119,38 @@ class HighwayEnv:
         self,
         state: HighwayState,
         ego_action: Float[Array, " n_actions"],
-        other_actions: Float[Array, "n_other n_actions"],
-    ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""]]:
+        non_ego_actions: Float[Array, "n_non_ego n_actions"],
+    ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""], bool]:
         """Take a step in the environment.
 
         Args:
             state: the current state of the environment
             ego_action: the control action to take for the ego vehicle (acceleration and
                 steering angle)
-            other_actions: the control action to take for all other vehicles
+            non_ego_actions: the control action to take for all other vehicles
                 (acceleration and steering angle)
 
         Returns:
-            The next state of the environment, the observations, and the reward
+            The next state of the environment, the observations, the reward, and a
+            boolean indicating whether the episode is done. Episodes end when the ego
+            car crashes into any other object in the scene.
         """
         # Unpack the state
-        ego_state, other_states = state
+        ego_state, non_ego_states = state
 
         # Compute the next state of the ego and other vehicles
         next_ego_state = self.car_dynamics(ego_state, ego_action)
-        next_other_states = jax.vmap(self.car_dynamics)(other_states, other_actions)
-        next_state = HighwayState(next_ego_state, next_other_states)
+        next_non_ego_states = jax.vmap(self.car_dynamics)(
+            non_ego_states, non_ego_actions
+        )
+        next_state = HighwayState(next_ego_state, next_non_ego_states)
 
         # Compute the reward
-        reward = self.reward(next_state)
+        # reward = self.reward(next_state)  # TODO@dawsonc
+        reward = jnp.array(0.0)
 
         # Compute the observations from a camera placed on the ego vehicle
-        ego_x, ego_y, ego_theta = next_ego_state
+        ego_x, ego_y, ego_theta, ego_v = next_ego_state
         camera_origin = jnp.array([ego_x, ego_y, self._highway_scene.car.height / 2])
         ego_heading_vector = jnp.array([jnp.cos(ego_theta), jnp.sin(ego_theta), 0])
         extrinsics = CameraExtrinsics(
@@ -150,10 +159,23 @@ class HighwayEnv:
                 camera_origin=camera_origin,
                 target=camera_origin + ego_heading_vector,
                 up=jnp.array([0, 0, 1.0]),
-            )
+            ),
         )
-        obs = self._highway_scene.render_depth(
-            self._camera_intrinsics, extrinsics, next_state.car_states
+        depth_image = self._highway_scene.render_depth(
+            self._camera_intrinsics,
+            extrinsics,
+            next_non_ego_states[:, :3],  # trim out speed; not needed for rendering
+            max_dist=self._max_render_dist,
+            sharpness=self._render_sharpness,
         )
+        obs = HighwayObs(ego_v, depth_image)
 
-        return next_state, obs, reward
+        # TODO@dawsonc
+        # crashed = self._highway_scene.check_for_collision(
+        #     next_ego_state[:3],  # trim out speed; not needed for collision checking
+        #     next_non_ego_states[:, :3],
+        # )
+        # done = crashed
+        done = False
+
+        return next_state, obs, reward, done
