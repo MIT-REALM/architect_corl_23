@@ -73,7 +73,7 @@ class HighwayScene:
     def __init__(
         self,
         num_lanes: int,
-        lane_width: float = 3.7,
+        lane_width: float = 4.0,
         segment_length: float = 100.0,
     ):
         """Initialize the highway scene.

@@ -28,7 +28,22 @@ def intrinsics():
 @pytest.fixture
 def highway_env(highway_scene, intrinsics):
     """Highway environment system under test."""
-    return HighwayEnv(highway_scene, intrinsics, dt=0.1)
+    initial_ego_state = jnp.array([-15.0, 0.0, 0.0, 10.0])
+    initial_non_ego_states = jnp.array(
+        [
+            [7.0, 0.0, 0.0, 10.0],
+            [0.0, 4.0, 0.0, 9.0],
+            [-5.0, -4.0, 0.0, 11.0],
+        ]
+    )
+    return HighwayEnv(
+        highway_scene,
+        intrinsics,
+        0.1,
+        initial_ego_state,
+        initial_non_ego_states,
+        0.1 * jnp.eye(4),
+    )
 
 
 def test_highway_env_init(highway_env):
@@ -55,12 +70,20 @@ def test_highway_env_step(highway_env):
     )
 
     # Take a step
-    next_state, obs, reward, done = highway_env.step(state, ego_action, non_ego_actions)
+    next_state, obs, reward, done = highway_env.step(
+        state, ego_action, non_ego_actions, jrandom.PRNGKey(0)
+    )
 
     assert next_state is not None
     assert obs is not None
     assert reward is not None
     assert done is not None
+
+
+def test_highway_env_reset(highway_env):
+    """Test the highway environment reset."""
+    state = highway_env.reset(jrandom.PRNGKey(0))
+    assert state is not None
 
 
 def test_highway_env_sample_non_ego_action(highway_env):

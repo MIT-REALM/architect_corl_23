@@ -134,5 +134,7 @@ def render_depth(
     # Clip the depth image at a maximum distance
     depth_values = jnp.clip(depth_values, a_min=0.0, a_max=max_dist)
     depth_values = jnp.where(depth_values == max_dist, 0.0, depth_values)
+    # Remove any nans (might happen if a ray doesn't hit anything)
+    depth_values = jnp.where(jnp.isnan(depth_values), 0.0, depth_values)
 
     return depth_values

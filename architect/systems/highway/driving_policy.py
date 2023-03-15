@@ -13,7 +13,7 @@ from architect.systems.highway.highway_env import HighwayObs
 
 
 class DrivingPolicy(eqx.Module):
-    """A neural network policy for driving in the highway environment.
+    """A neural network actor-critic policy for driving in the highway environment.
 
     The policy has a convolutional encoder to compute a latent embedding of the
     given image observation, and a fully-connected final to compute the action
@@ -24,7 +24,8 @@ class DrivingPolicy(eqx.Module):
     encoder_conv_2: eqx.nn.Conv2d
     encoder_conv_3: eqx.nn.Conv2d
 
-    fcn: eqx.nn.MLP
+    actor_fcn: eqx.nn.MLP
+    critic_fcn: eqx.nn.MLP
 
     @jaxtyped
     @beartype
@@ -34,7 +35,7 @@ class DrivingPolicy(eqx.Module):
         image_shape: Tuple[int, int],
         image_channels: int = 1,
         cnn_channels: int = 32,
-        fcn_layers: int = 3,
+        fcn_layers: int = 2,
         fcn_width: int = 32,
     ):
         """Initialize the policy."""
@@ -42,8 +43,8 @@ class DrivingPolicy(eqx.Module):
 
         # Create the convolutional encoder
         cnn_keys = jrandom.split(cnn_key, 3)
-        kernel_size = 16
-        stride = 4
+        kernel_size = 6
+        stride = 2
         self.encoder_conv_1 = eqx.nn.Conv2d(
             key=cnn_keys[0],
             in_channels=image_channels,
@@ -75,16 +76,30 @@ class DrivingPolicy(eqx.Module):
         embedding_size = int(embedding_size)
 
         # Create the fully connected layers
-        self.fcn = eqx.nn.MLP(
+        self.actor_fcn = eqx.nn.MLP(
             in_size=embedding_size + 1,
             out_size=2,
             width_size=fcn_width,
             depth=fcn_layers,
             key=fcn_key,
         )
+        self.critic_fcn = eqx.nn.MLP(
+            in_size=embedding_size + 1,
+            out_size=1,
+            width_size=fcn_width,
+            depth=fcn_layers,
+            key=fcn_key,
+        )
 
-    def __call__(self, obs: HighwayObs) -> Float[Array, " 2"]:
-        """Compute the action for the given state."""
+    def forward(self, obs: HighwayObs) -> Tuple[Float[Array, " 2"], Float[Array, ""]]:
+        """Compute the mean action and value estimate for the given state.
+
+        Args:
+            obs: The observation of the current state.
+
+        Returns:
+            The mean action and value estimate.
+        """
         # Compute the image embedding
         depth_image = obs.depth_image
         depth_image = jnp.expand_dims(depth_image, axis=0)
@@ -96,6 +111,54 @@ class DrivingPolicy(eqx.Module):
         # Concatenate the embedding with the forward velocity
         y = jnp.concatenate((y, obs.speed.reshape(-1)))
 
-        # Compute the action
-        action = self.fcn(y)
-        return action
+        # Compute the action and value estimate
+        value = self.critic_fcn(y)
+        action_mean = self.actor_fcn(y)
+
+        return action_mean, value
+
+    def __call__(
+        self, obs: HighwayObs, key: PRNGKeyArray, action_noise: float = 0.1
+    ) -> Tuple[Float[Array, " 2"], Float[Array, ""], Float[Array, ""]]:
+        """Compute the action and value estimate for the given state.
+
+        Args:
+            obs: The observation of the current state.
+            key: The random key for sampling the action.
+            action_noise: The standard deviation of the Gaussian noise to add
+                to the action.
+
+        Returns:
+            The action, action log probability, and value estimate.
+        """
+        action_mean, value = self.forward(obs)
+
+        action = jrandom.multivariate_normal(
+            key, action_mean, action_noise * jnp.eye(action_mean.shape[0])
+        )
+        action_logp = jax.scipy.stats.multivariate_normal.logpdf(
+            action, action_mean, action_noise * jnp.eye(action_mean.shape[0])
+        )
+
+        return action, action_logp, value
+
+    def action_log_prob_and_value(
+        self, obs: HighwayObs, action: Float[Array, " 2"], action_noise: float = 0.1
+    ) -> Float[Array, ""]:
+        """Compute the log probability of an action with the given observation.
+
+        Args:
+            obs: The observation of the current state.
+            action: The action to compute the log probability of.
+            action_noise: The standard deviation of the Gaussian noise to add
+
+        Returns:
+            The log probability of the action and the value estimate.
+        """
+        action_mean, value = self.forward(obs)
+
+        action_logp = jax.scipy.stats.multivariate_normal.logpdf(
+            action, action_mean, action_noise * jnp.eye(action_mean.shape[0])
+        )
+
+        return action_logp, value
