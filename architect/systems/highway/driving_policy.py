@@ -27,6 +27,8 @@ class DrivingPolicy(eqx.Module):
     actor_fcn: eqx.nn.MLP
     critic_fcn: eqx.nn.MLP
 
+    log_action_std: Float[Array, ""]
+
     @jaxtyped
     @beartype
     def __init__(
@@ -75,21 +77,40 @@ class DrivingPolicy(eqx.Module):
         embedding_size = image_shape[0] * image_shape[1]
         embedding_size = int(embedding_size)
 
-        # Create the fully connected layers
+        # TODO: hack
+        # # Create the fully connected layers
+        # self.actor_fcn = eqx.nn.MLP(
+        #     in_size=embedding_size + 1,
+        #     out_size=2,
+        #     width_size=fcn_width,
+        #     depth=fcn_layers,
+        #     key=fcn_key,
+        # )
+        # self.critic_fcn = eqx.nn.MLP(
+        #     in_size=embedding_size + 1,
+        #     out_size=1,
+        #     width_size=fcn_width,
+        #     depth=fcn_layers,
+        #     key=fcn_key,
+        # )
+        n_states = 4
         self.actor_fcn = eqx.nn.MLP(
-            in_size=embedding_size + 1,
+            in_size=n_states,
             out_size=2,
             width_size=fcn_width,
             depth=fcn_layers,
             key=fcn_key,
         )
         self.critic_fcn = eqx.nn.MLP(
-            in_size=embedding_size + 1,
+            in_size=n_states,
             out_size=1,
             width_size=fcn_width,
             depth=fcn_layers,
             key=fcn_key,
         )
+
+        # Initialize action standard deviation
+        self.log_action_std = jnp.log(jnp.array(1.0))
 
     def forward(self, obs: HighwayObs) -> Tuple[Float[Array, " 2"], Float[Array, ""]]:
         """Compute the mean action and value estimate for the given state.
@@ -100,25 +121,29 @@ class DrivingPolicy(eqx.Module):
         Returns:
             The mean action and value estimate.
         """
-        # Compute the image embedding
-        depth_image = obs.depth_image
-        depth_image = jnp.expand_dims(depth_image, axis=0)
-        y = jax.nn.relu(self.encoder_conv_1(depth_image))
-        y = jax.nn.relu(self.encoder_conv_2(y))
-        y = jax.nn.relu(self.encoder_conv_3(y))
-        y = jnp.reshape(y, (-1,))
+        # TODO: hack
+        # # Compute the image embedding
+        # depth_image = obs.depth_image
+        # depth_image = jnp.expand_dims(depth_image, axis=0)
+        # y = jax.nn.relu(self.encoder_conv_1(depth_image))
+        # y = jax.nn.relu(self.encoder_conv_2(y))
+        # y = jax.nn.relu(self.encoder_conv_3(y))
+        # y = jnp.reshape(y, (-1,))
 
-        # Concatenate the embedding with the forward velocity
-        y = jnp.concatenate((y, obs.speed.reshape(-1)))
+        # # Concatenate the embedding with the forward velocity
+        # y = jnp.concatenate((y, obs.speed.reshape(-1)))
 
-        # Compute the action and value estimate
-        value = self.critic_fcn(y)
-        action_mean = self.actor_fcn(y)
+        # # Compute the action and value estimate
+        # value = self.critic_fcn(y)
+        # action_mean = self.actor_fcn(y)
+
+        action_mean = self.actor_fcn(obs.ego_state)
+        value = self.critic_fcn(obs.ego_state)
 
         return action_mean, value
 
     def __call__(
-        self, obs: HighwayObs, key: PRNGKeyArray, action_noise: float = 0.1
+        self, obs: HighwayObs, key: PRNGKeyArray
     ) -> Tuple[Float[Array, " 2"], Float[Array, ""], Float[Array, ""]]:
         """Compute the action and value estimate for the given state.
 
@@ -132,6 +157,7 @@ class DrivingPolicy(eqx.Module):
             The action, action log probability, and value estimate.
         """
         action_mean, value = self.forward(obs)
+        action_noise = jnp.exp(self.log_action_std)
 
         action = jrandom.multivariate_normal(
             key, action_mean, action_noise * jnp.eye(action_mean.shape[0])
@@ -143,7 +169,7 @@ class DrivingPolicy(eqx.Module):
         return action, action_logp, value
 
     def action_log_prob_and_value(
-        self, obs: HighwayObs, action: Float[Array, " 2"], action_noise: float = 0.1
+        self, obs: HighwayObs, action: Float[Array, " 2"]
     ) -> Float[Array, ""]:
         """Compute the log probability of an action with the given observation.
 
@@ -156,9 +182,17 @@ class DrivingPolicy(eqx.Module):
             The log probability of the action and the value estimate.
         """
         action_mean, value = self.forward(obs)
+        action_noise = jnp.exp(self.log_action_std)
 
         action_logp = jax.scipy.stats.multivariate_normal.logpdf(
             action, action_mean, action_noise * jnp.eye(action_mean.shape[0])
         )
 
         return action_logp, value
+
+    def entropy(self) -> Float[Array, ""]:
+        """Return the entropy of the action distribution."""
+        action_noise = jnp.exp(self.log_action_std)
+        return (
+            0.5 * jnp.linalg.slogdet(2 * jnp.pi * jnp.e * action_noise * jnp.eye(2))[1]
+        )

@@ -27,6 +27,7 @@ class HighwayObs(NamedTuple):
 
     speed: Float[Array, " *batch"]
     depth_image: Float[Array, "*batch res_x res_y"]
+    ego_state: Float[Array, "*batch n_states"]
 
 
 @beartype
@@ -190,7 +191,8 @@ class HighwayEnv:
         )
         distance_reward = (next_ego_state[0] - ego_state[0]) / self._dt
         lane_keeping_reward = -0.2 * next_ego_state[1] ** 2
-        reward = distance_reward + lane_keeping_reward + collision_reward
+        # reward = distance_reward + lane_keeping_reward + collision_reward
+        reward = -next_ego_state[1] ** 2 - next_ego_state[2] ** 2
 
         # The episode ends when a collision occurs, at which point we reset the
         # environment (or if we run out of road)
@@ -257,7 +259,9 @@ class HighwayEnv:
             max_dist=self._max_render_dist,
             sharpness=self._render_sharpness,
         )
-        obs = HighwayObs(speed=ego_v, depth_image=depth_image)
+        obs = HighwayObs(
+            speed=ego_v, depth_image=depth_image, ego_state=state.ego_state
+        )
         return obs
 
     @jaxtyped
