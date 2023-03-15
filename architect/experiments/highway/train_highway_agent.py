@@ -154,6 +154,7 @@ def generate_trajectory(
     # end of the rollout. The key we use doesn't matter here.
     _, _, final_value = policy(jtu.tree_map(lambda x: x[-1], obs), keys[-1])
     values = jnp.concatenate([values, jnp.expand_dims(final_value, 0)], axis=0)
+    values = values.reshape(-1)
     advantage, returns = generalized_advantage_estimate(
         rewards, values, dones, gamma, gae_lambda
     )
@@ -200,7 +201,7 @@ def ppo_clip_loss_fn(
     epsilon: float,
     critic_weight: float,
     action_noise: float,
-) -> Float[Array, ""]:
+) -> Tuple[Float[Array, ""], Tuple[Float[Array, ""], Float[Array, ""]]]:
     """Compute the clipped PPO loss.
 
     Args:
@@ -352,7 +353,7 @@ def train_ppo_driver(
             epoch_critic_loss = 0.0
             for batch_start in range(0, steps_per_epoch, minibatch_size):
                 key, subkey = jrandom.split(key)
-                loss, policy, opt_state, actor_loss, critic_loss = step_fn(
+                loss, policy, opt_state, (actor_loss, critic_loss) = step_fn(
                     opt_state,
                     policy,
                     jtu.tree_map(
@@ -367,17 +368,17 @@ def train_ppo_driver(
         # Log the loss
         print(
             (
-                f"Epoch {epoch}; loss: {epoch_loss} "
-                f"(actor {epoch_actor_loss}, critic {epoch_critic_loss}) "
-                f"total_reward: {trajectory.reward.sum()} "
-                f"total_return: {trajectory.returns.sum()}"
+                f"Epoch {epoch:03d}; loss: {epoch_loss:.2f} "
+                f"(actor {epoch_actor_loss:.2f}, critic {epoch_critic_loss:.2f}) "
+                f"total_reward: {trajectory.rewards.sum():.2f} "
+                f"total_return: {trajectory.returns.sum():.2f}"
             )
         )
         writer.add_scalar("loss", epoch_loss, epoch)
         writer.add_scalar("actor loss", epoch_actor_loss, epoch)
         writer.add_scalar("critic loss", epoch_critic_loss, epoch)
-        writer.add_scalar("episode reward", trajectory.reward.sum(), epoch)
-        writer.add_scalar("episode return", trajectory.returns.sum(), epoch)
+        writer.add_scalar("episode reward", trajectory.rewards.sum().item(), epoch)
+        writer.add_scalar("episode return", trajectory.returns.sum().item(), epoch)
 
 
 if __name__ == "__main__":
