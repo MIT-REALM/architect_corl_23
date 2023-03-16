@@ -6,7 +6,7 @@ import jax.random as jrandom
 import equinox as eqx
 from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
-from beartype.typing import Tuple
+from beartype.typing import Tuple, List
 
 from architect.types import PRNGKeyArray
 from architect.systems.highway.highway_env import HighwayObs
@@ -77,37 +77,37 @@ class DrivingPolicy(eqx.Module):
         embedding_size = image_shape[0] * image_shape[1]
         embedding_size = int(embedding_size)
 
-        # TODO: hack
-        # # Create the fully connected layers
-        # self.actor_fcn = eqx.nn.MLP(
-        #     in_size=embedding_size + 1,
-        #     out_size=2,
-        #     width_size=fcn_width,
-        #     depth=fcn_layers,
-        #     key=fcn_key,
-        # )
-        # self.critic_fcn = eqx.nn.MLP(
-        #     in_size=embedding_size + 1,
-        #     out_size=1,
-        #     width_size=fcn_width,
-        #     depth=fcn_layers,
-        #     key=fcn_key,
-        # )
-        n_states = 4
+        actor_key, critic_key = jrandom.split(fcn_key)
+        # Create the fully connected layers
         self.actor_fcn = eqx.nn.MLP(
-            in_size=n_states,
+            in_size=embedding_size + 1,
             out_size=2,
             width_size=fcn_width,
             depth=fcn_layers,
-            key=fcn_key,
+            key=actor_key,
         )
         self.critic_fcn = eqx.nn.MLP(
-            in_size=n_states,
+            in_size=embedding_size + 1,
             out_size=1,
             width_size=fcn_width,
             depth=fcn_layers,
-            key=fcn_key,
+            key=critic_key,
         )
+        # n_states = 4  # todo delete
+        # self.actor_fcn = eqx.nn.MLP(
+        #     in_size=n_states,
+        #     out_size=2,
+        #     width_size=fcn_width,
+        #     depth=fcn_layers,
+        #     key=actor_key,
+        # )
+        # self.critic_fcn = eqx.nn.MLP(
+        #     in_size=n_states,
+        #     out_size=1,
+        #     width_size=fcn_width,
+        #     depth=fcn_layers,
+        #     key=critic_key,
+        # )
 
         # Initialize action standard deviation
         self.log_action_std = jnp.log(jnp.array(1.0))
@@ -121,24 +121,23 @@ class DrivingPolicy(eqx.Module):
         Returns:
             The mean action and value estimate.
         """
-        # TODO: hack
-        # # Compute the image embedding
-        # depth_image = obs.depth_image
-        # depth_image = jnp.expand_dims(depth_image, axis=0)
-        # y = jax.nn.relu(self.encoder_conv_1(depth_image))
-        # y = jax.nn.relu(self.encoder_conv_2(y))
-        # y = jax.nn.relu(self.encoder_conv_3(y))
-        # y = jnp.reshape(y, (-1,))
+        # Compute the image embedding
+        depth_image = obs.depth_image
+        depth_image = jnp.expand_dims(depth_image, axis=0)
+        y = jax.nn.relu(self.encoder_conv_1(depth_image))
+        y = jax.nn.relu(self.encoder_conv_2(y))
+        y = jax.nn.relu(self.encoder_conv_3(y))
+        y = jnp.reshape(y, (-1,))
 
-        # # Concatenate the embedding with the forward velocity
-        # y = jnp.concatenate((y, obs.speed.reshape(-1)))
+        # Concatenate the embedding with the forward velocity
+        y = jnp.concatenate((y, obs.speed.reshape(-1)))
 
-        # # Compute the action and value estimate
-        # value = self.critic_fcn(y)
-        # action_mean = self.actor_fcn(y)
+        # Compute the action and value estimate
+        value = self.critic_fcn(y)
+        action_mean = self.actor_fcn(y)  # scalar output
 
-        action_mean = self.actor_fcn(obs.ego_state)
-        value = self.critic_fcn(obs.ego_state)
+        # action_mean = self.actor_fcn(obs.ego_state)  # todo delete
+        # value = self.critic_fcn(obs.ego_state).reshape()
 
         return action_mean, value
 
@@ -170,7 +169,7 @@ class DrivingPolicy(eqx.Module):
 
     def action_log_prob_and_value(
         self, obs: HighwayObs, action: Float[Array, " 2"]
-    ) -> Float[Array, ""]:
+    ) -> Tuple[Float[Array, ""], Float[Array, ""]]:
         """Compute the log probability of an action with the given observation.
 
         Args:

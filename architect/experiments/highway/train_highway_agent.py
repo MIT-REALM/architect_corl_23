@@ -12,7 +12,7 @@ from beartype.typing import NamedTuple, Tuple
 from torch.utils.tensorboard import SummaryWriter
 import equinox as eqx
 import optax
-import matplotlib.pyplot as plt
+import matplotlib.image
 
 from architect.types import PRNGKeyArray
 from architect.systems.components.sensing.vision.render import CameraIntrinsics
@@ -76,17 +76,22 @@ def generalized_advantage_estimate(
         delta = reward + gamma * next_value * (1.0 - terminal) - current_value
         # Advantage estimate
         advantage = delta + gamma * lam * advantage * (1.0 - terminal)
+
+        # Reshape to scalars
+        delta = delta.reshape()
         advantage = advantage.reshape()
 
-        return advantage, advantage  # carry and output
+        return advantage, (advantage, delta)  # carry and output
 
     # Compute the advantage estimate for each step in the trajectory
-    _, advantages = jax.lax.scan(
-        gae_step, jnp.array(0.0), (rewards, values[:-1], values[1:], dones)
+    _, (advantages, delta) = jax.lax.scan(
+        gae_step,
+        jnp.array(0.0),
+        (rewards, values[:-1], values[1:], dones),
+        reverse=True,
     )
 
-    # The return is the current state value + the advantage
-    returns = advantages + values[:-1]
+    returns = delta + values[:-1]
 
     return advantages, returns
 
@@ -223,11 +228,10 @@ def ppo_clip_loss_fn(
     likelihood_ratio = jnp.exp(action_logprobs - traj.action_log_probs)
     clipped_likelihood_ratio = jnp.clip(likelihood_ratio, 1 - epsilon, 1 + epsilon)
 
-    # # Normalize the advantage
-    # advantages = (traj.advantages - traj.advantages.mean()) / (
-    #     traj.advantages.std() + 1e-8
-    # )
-    advantages = traj.advantages  # TODO
+    # Normalize the advantage
+    advantages = (traj.advantages - traj.advantages.mean()) / (
+        traj.advantages.std() + 1e-8
+    )
 
     # The PPO loss for the actor is the average minimum of the product of these ratios
     # with the advantage estimate
@@ -252,25 +256,23 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
     img_dir = os.path.join(logdir, f"epoch_{epoch_num}_imgs")
     os.makedirs(img_dir, exist_ok=True)
     for i, img in enumerate(depth_images):
-        plt.imshow(img.T)
-        plt.savefig(os.path.join(img_dir, f"{i:04d}.png"))
-        plt.close()
+        matplotlib.image.imsave(os.path.join(img_dir, f"img_{i}.png"), img.T)
 
 
 def train_ppo_driver(
     image_shape: Tuple[int, int],
-    learning_rate: float = 1e-4,
+    learning_rate: float = 1e-5,
     gamma: float = 0.99,
     gae_lambda: float = 0.97,
     epsilon: float = 0.2,
     critic_weight: float = 1.0,
     entropy_weight: float = 0.1,
     seed: int = 0,
-    steps_per_epoch: int = 640,
-    epochs: int = 100,
-    gd_steps_per_update: int = 100,
-    minibatch_size: int = 32,
-    logdir: str = "./tmp/ppo_1",
+    steps_per_epoch: int = 3200,
+    epochs: int = 200,
+    gd_steps_per_update: int = 50,
+    minibatch_size: int = 64,
+    logdir: str = "./tmp/ppo_32k_1e-5",
 ) -> DrivingPolicy:
     """Train the driver using PPO.
 
@@ -280,18 +282,18 @@ def train_ppo_driver(
     writer = SummaryWriter(logdir)
 
     # Set up the environment
-    scene = HighwayScene(num_lanes=3, lane_width=4.0)
+    scene = HighwayScene(num_lanes=3, lane_width=4.0, segment_length=200.0)
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
         resolution=image_shape,
     )
-    initial_ego_state = jnp.array([-50.0, 0.0, 0.0, 10.0])
+    initial_ego_state = jnp.array([-100.0, 0.0, 0.0, 10.0])
     initial_non_ego_states = jnp.array(
         [
-            [-28.0, 0.0, 0.0, 10.0],
-            [-35, 4.0, 0.0, 9.0],
-            [-40, -4.0, 0.0, 11.0],
+            [-78.0, 0.0, 0.0, 10.0],
+            [-85, 4.0, 0.0, 9.0],
+            [-90, -4.0, 0.0, 11.0],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.5]) ** 2)
@@ -327,13 +329,19 @@ def train_ppo_driver(
     @eqx.filter_jit
     def step_fn(
         opt_state: optax.OptState, policy: DrivingPolicy, trajectory: Trajectory
-    ) -> Tuple[Float[Array, ""], DrivingPolicy, optax.OptState]:
+    ):
         (loss, (actor_loss, critic_loss, entropy_loss)), grad = loss_fn(
             policy, trajectory
         )
         updates, opt_state = optimizer.update(grad, opt_state)
         policy = eqx.apply_updates(policy, updates)
-        return loss, policy, opt_state, (actor_loss, critic_loss, entropy_loss)
+        grad_norm = jtu.tree_reduce(jnp.add, jax.tree_map(jnp.linalg.norm, grad))
+        return (
+            loss,
+            policy,
+            opt_state,
+            (actor_loss, critic_loss, entropy_loss, grad_norm),
+        )
 
     # Training loop
     for epoch in range(epochs):
@@ -349,8 +357,13 @@ def train_ppo_driver(
             gae_lambda,
         )
         if epoch % 20 == 0:
+            # Save trajectory images; can be converted to video using this command:
+            #  ffmpeg -framerate 1/2 -i img%04d.png -c:v libx264 -r 30 out.mp4
             save_traj_imgs(trajectory, logdir, epoch)
-        import pdb; pdb.set_trace()
+            # Save policy
+            eqx.tree_serialise_leaves(
+                os.path.join(logdir, f"policy_{epoch}.eqx"), policy
+            )
 
         # Shuffle the trajectory into minibatches
         key, subkey = jrandom.split(key)
@@ -362,6 +375,7 @@ def train_ppo_driver(
             epoch_actor_loss = 0.0
             epoch_critic_loss = 0.0
             epoch_entropy_loss = 0.0
+            epoch_grad_norm = 0.0
             batches = 0
             for batch_start in range(0, steps_per_epoch, minibatch_size):
                 key, subkey = jrandom.split(key)
@@ -369,7 +383,7 @@ def train_ppo_driver(
                     loss,
                     policy,
                     opt_state,
-                    (actor_loss, critic_loss, entropy_loss),
+                    (actor_loss, critic_loss, entropy_loss, grad_norm),
                 ) = step_fn(
                     opt_state,
                     policy,
@@ -383,12 +397,14 @@ def train_ppo_driver(
                 epoch_actor_loss += actor_loss.item()
                 epoch_critic_loss += critic_loss.item()
                 epoch_entropy_loss += entropy_loss.item()
+                epoch_grad_norm += grad_norm.item()
 
             # Average
             epoch_loss /= batches
             epoch_actor_loss /= batches
             epoch_critic_loss /= batches
             epoch_entropy_loss /= batches
+            epoch_grad_norm /= batches
 
         # Log the loss
         print(
@@ -397,7 +413,8 @@ def train_ppo_driver(
                 f"(actor {epoch_actor_loss:.2f}, critic {epoch_critic_loss:.2f}) "
                 f"total_reward: {trajectory.rewards.mean():.2f} "
                 f"total_return: {trajectory.returns.mean():.2f} "
-                f"entropy loss: {epoch_entropy_loss:.2f}"
+                f"entropy loss: {epoch_entropy_loss:.2f} "
+                f"grad_norm: {epoch_grad_norm:.2f}"
             )
         )
         writer.add_scalar("loss", epoch_loss, epoch)
@@ -406,6 +423,7 @@ def train_ppo_driver(
         writer.add_scalar("episode reward", trajectory.rewards.mean().item(), epoch)
         writer.add_scalar("episode return", trajectory.returns.mean().item(), epoch)
         writer.add_scalar("entropy loss", epoch_entropy_loss, epoch)
+        writer.add_scalar("grad norm", epoch_grad_norm, epoch)
 
 
 if __name__ == "__main__":

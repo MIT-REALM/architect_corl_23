@@ -90,7 +90,7 @@ class HighwayEnv:
         initial_ego_state: Float[Array, " n_states"],
         initial_non_ego_states: Float[Array, "n_non_ego n_states"],
         initial_state_covariance: Float[Array, "n_states n_states"],
-        collision_penalty: float = 100.0,
+        collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
     ):
@@ -190,13 +190,13 @@ class HighwayEnv:
             -25 * min_distance_to_obstacle
         )
         distance_reward = (next_ego_state[0] - ego_state[0]) / self._dt
-        lane_keeping_reward = -0.2 * next_ego_state[1] ** 2
-        # reward = distance_reward + lane_keeping_reward + collision_reward
-        reward = -next_ego_state[1] ** 2 - next_ego_state[2] ** 2
+        lane_keeping_reward = -0.1 * next_ego_state[1] ** 2
+        reward = distance_reward + lane_keeping_reward + collision_reward
+        # reward = -next_ego_state[1] ** 2 - next_ego_state[2] ** 2  # TODO
 
         # The episode ends when a collision occurs, at which point we reset the
         # environment (or if we run out of road)
-        done = jnp.logical_or(min_distance_to_obstacle < 0.0, next_ego_state[0] > 40.0)
+        done = jnp.logical_or(min_distance_to_obstacle < 0.0, next_ego_state[0] > 90.0)
         next_state = jax.lax.cond(
             done,
             lambda: self.reset(key),
@@ -205,6 +205,35 @@ class HighwayEnv:
 
         # Compute the observations from a camera placed on the ego vehicle
         obs = self.get_obs(next_state)
+
+        # # Test case 1: constant reward, single-timestep episodes
+        # next_state = HighwayState(
+        #     ego_state=jnp.zeros_like(state.ego_state),
+        #     non_ego_states=jnp.zeros_like(state.non_ego_states),
+        # )
+        # reward = jnp.array(1.0)
+        # done = jnp.array(True)
+        # obs = HighwayObs(
+        #     speed=jnp.zeros(()),
+        #     depth_image=jnp.zeros((64, 64)),
+        #     ego_state=jnp.zeros(4),
+        # )
+
+        # # Test case 2: random reward = observation, single-timestep episodes
+        # # Next state is randomly 1 or 0, observation is the same as the state,
+        # # reward is equal to whether the current state is 1 or 0. The goal is that
+        # # the next reward should be predicted by the current observation.
+        # next_state = HighwayState(
+        #     ego_state=jnp.zeros_like(state.ego_state) + jrandom.bernoulli(key, 0.5),
+        #     non_ego_states=jnp.zeros_like(state.non_ego_states),
+        # )
+        # reward = state.ego_state.mean()
+        # obs = HighwayObs(
+        #     speed=jnp.zeros(()),
+        #     depth_image=jnp.zeros((64, 64)),
+        #     ego_state=next_state.ego_state,
+        # )
+        # done = jnp.array(True)
 
         return next_state, obs, reward, done
 
