@@ -192,7 +192,6 @@ class HighwayEnv:
         distance_reward = (next_ego_state[0] - ego_state[0]) / self._dt
         lane_keeping_reward = -0.1 * next_ego_state[1] ** 2
         reward = distance_reward + lane_keeping_reward + collision_reward
-        # reward = -next_ego_state[1] ** 2 - next_ego_state[2] ** 2  # TODO
 
         # The episode ends when a collision occurs, at which point we reset the
         # environment (or if we run out of road)

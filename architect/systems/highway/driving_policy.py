@@ -110,7 +110,7 @@ class DrivingPolicy(eqx.Module):
         # )
 
         # Initialize action standard deviation
-        self.log_action_std = jnp.log(jnp.array(1.0))
+        self.log_action_std = jnp.log(jnp.array(0.1))
 
     def forward(self, obs: HighwayObs) -> Tuple[Float[Array, " 2"], Float[Array, ""]]:
         """Compute the mean action and value estimate for the given state.
@@ -133,8 +133,8 @@ class DrivingPolicy(eqx.Module):
         y = jnp.concatenate((y, obs.speed.reshape(-1)))
 
         # Compute the action and value estimate
-        value = self.critic_fcn(y)
-        action_mean = self.actor_fcn(y)  # scalar output
+        value = self.critic_fcn(y).reshape()  # scalar output
+        action_mean = self.actor_fcn(y)
 
         # action_mean = self.actor_fcn(obs.ego_state)  # todo delete
         # value = self.critic_fcn(obs.ego_state).reshape()

@@ -268,11 +268,12 @@ def train_ppo_driver(
     critic_weight: float = 1.0,
     entropy_weight: float = 0.1,
     seed: int = 0,
-    steps_per_epoch: int = 3200,
+    steps_per_epoch: int = 32*30,
     epochs: int = 200,
     gd_steps_per_update: int = 50,
-    minibatch_size: int = 64,
-    logdir: str = "./tmp/ppo_32k_1e-5",
+    minibatch_size: int = 32,
+    max_grad_norm: float = 1.0,
+    logdir: str = "./tmp/ppo2_32x30_1e-5_gradclip_1.0",
 ) -> DrivingPolicy:
     """Train the driver using PPO.
 
@@ -282,7 +283,7 @@ def train_ppo_driver(
     writer = SummaryWriter(logdir)
 
     # Set up the environment
-    scene = HighwayScene(num_lanes=3, lane_width=4.0, segment_length=200.0)
+    scene = HighwayScene(num_lanes=3, lane_width=4.5, segment_length=200.0)
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
@@ -291,9 +292,9 @@ def train_ppo_driver(
     initial_ego_state = jnp.array([-100.0, 0.0, 0.0, 10.0])
     initial_non_ego_states = jnp.array(
         [
-            [-78.0, 0.0, 0.0, 10.0],
-            [-85, 4.0, 0.0, 9.0],
-            [-90, -4.0, 0.0, 11.0],
+            [-78.0, 0.0, 0.0, 8.0],
+            [-85, 4.0, 0.0, 7.0],
+            [-90, -4.0, 0.0, 8.5],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.5]) ** 2)
@@ -304,6 +305,7 @@ def train_ppo_driver(
         initial_ego_state=initial_ego_state,
         initial_non_ego_states=initial_non_ego_states,
         initial_state_covariance=initial_state_covariance,
+        collision_penalty=10.0
     )
 
     # Set up the policy
@@ -314,6 +316,8 @@ def train_ppo_driver(
     # Set up the optimizer
     optimizer = optax.adam(learning_rate)
     opt_state = optimizer.init(eqx.filter(policy, eqx.is_array))
+    grad_clip = optax.clip_by_block_rms(max_grad_norm)
+    grad_clip_state = grad_clip.init(eqx.filter(policy, eqx.is_array))
 
     # Fix non-ego actions to be constant (drive straight at fixed speed)
     n_non_ego = 3
@@ -333,6 +337,7 @@ def train_ppo_driver(
         (loss, (actor_loss, critic_loss, entropy_loss)), grad = loss_fn(
             policy, trajectory
         )
+        grad, _ = grad_clip.update(grad, grad_clip_state)  # empty state
         updates, opt_state = optimizer.update(grad, opt_state)
         policy = eqx.apply_updates(policy, updates)
         grad_norm = jtu.tree_reduce(jnp.add, jax.tree_map(jnp.linalg.norm, grad))
@@ -427,4 +432,4 @@ def train_ppo_driver(
 
 
 if __name__ == "__main__":
-    train_ppo_driver((64, 64))
+    train_ppo_driver((128, 128))
