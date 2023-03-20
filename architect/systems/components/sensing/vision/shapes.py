@@ -6,10 +6,11 @@ return a fully accurate SDF, but they should be sufficient for rendering.
 """
 from abc import ABC, abstractmethod
 
+import jax
 import jax.numpy as jnp
 from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
-from beartype.typing import List
+from beartype.typing import List, Optional
 import equinox as eqx
 
 from architect.utils import softmin
@@ -28,6 +29,22 @@ class SDFShape(ABC, eqx.Module):
         Returns:
             signed distance from the point to the shape
         """
+
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Compute the color at a given point.
+
+        Default behavior is a checkerboard pattern.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            RGB color at the point, scaled to [0, 1]
+        """
+        red = jax.nn.sigmoid(10 * jnp.sin(10 * x[0]))
+        green = jax.nn.sigmoid(10 * jnp.sin(10 * x[1]))
+        blue = jax.nn.sigmoid(10 * jnp.sin(10 * x[2]))
+        return jnp.array([red, green, blue])
 
 
 class Scene(SDFShape):
@@ -52,6 +69,21 @@ class Scene(SDFShape):
         """
         distances = jnp.array([shape(x) for shape in self.shapes])
         return softmin(distances, self.sharpness)
+
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Compute the color at a given point.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            RGB color at the point, scaled to [0, 1]
+        """
+        colors = jnp.array([shape.color(x) for shape in self.shapes])
+        distances = jnp.array([shape(x) for shape in self.shapes])
+        return (jax.nn.softplus(-self.sharpness * distances)[:, None] * colors).sum(
+            axis=0
+        )
 
 
 @jaxtyped
@@ -136,4 +168,43 @@ class Box(SDFShape):
         distance_to_box = jnp.abs(offset) - self.extent / 2.0
 
         sdf = jnp.max(distance_to_box)
+        return sdf
+
+
+@jaxtyped
+@beartype
+class Cylinder(SDFShape):
+    """Represent a capped cylinder using a SDF.
+
+    Attributes:
+        center: the center of the cylinder in world coordinates
+        radius: the radius of the cylinder
+        height: the height of the cylinder
+        R_to_world: the 3D rotation matrix from the box frame to the world frame
+    """
+
+    center: Float[Array, " 3"]
+    radius: Float[Array, ""]
+    height: Float[Array, ""]
+    rotation: Float[Array, "3 3"]
+
+    def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
+        """Compute the SDF at a given point.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            signed distance from the point to the cylinder
+        """
+        # Get the offset from the cylinder center to the point, and rotate it into the
+        # cylinder frame
+        offset = self.rotation.T @ (x - self.center)
+
+        # Compute the distance to the cylinder in the cylinder frame (which is
+        # axis-aligned)
+        distance_to_axis = jnp.linalg.norm(offset[:2]) - self.radius
+        distance_to_caps = jnp.abs(offset[2]) - self.height / 2.0
+
+        sdf = jnp.maximum(distance_to_axis, distance_to_caps)
         return sdf

@@ -5,6 +5,7 @@ from architect.systems.components.sensing.vision.shapes import (
     Sphere,
     Halfspace,
     Box,
+    Cylinder,
     Scene,
 )
 
@@ -20,6 +21,9 @@ def test_sphere():
     assert jnp.isclose(sphere(jnp.array([1.0, 0.0, 0.0])), 0.0)  # on the surface
     assert jnp.isclose(sphere(jnp.array([2.0, 0.0, 0.0])), 1.0)  # outside
     assert jnp.isclose(sphere(jnp.array([0.0, 0.0, 0.0])), -1.0)  # inside
+
+    # Test color
+    assert sphere.color(jnp.array([1.0, 0.0, 0.0])).shape == (3,)
 
 
 def test_halspace():
@@ -88,6 +92,28 @@ def test_box_rotation():
     assert box(jnp.array([-3.0, -3.0, 0.0])) > 0.0
 
 
+def test_cylinder():
+    """Test the cylinder SDF."""
+    # Create a cylinder centered at the origin with radius 1, without rotation
+    cylinder = Cylinder(
+        jnp.array([0.0, 0.0, 0.0]),  # center
+        jnp.array(1.0),  # radius
+        jnp.array(2.0),  # height
+        jnp.eye(3),  # rotation
+    )
+    # Test the SDF at a few points
+    # in the center
+    assert cylinder(jnp.array([0.0, 0.0, 0.0])) < 0
+    # on the face
+    assert jnp.isclose(cylinder(jnp.array([1.0, 0.0, 0.0])), 0.0)
+    assert jnp.isclose(
+        cylinder(jnp.array([1 / jnp.sqrt(2), 1 / jnp.sqrt(2), 0])), 0.0, atol=1e-7
+    )
+    # outside
+    assert cylinder(jnp.array([2.0, 0.0, 0.0])) > 0.0
+    assert cylinder(jnp.array([-3.0, -3.0, 0.0])) > 0.0
+
+
 def test_scene():
     """Test the combining multiple shapes into a single scene."""
     # Create some test shapes
@@ -107,3 +133,6 @@ def test_scene():
     assert scene_sdf(jnp.array([0.0, 0.0, 2.0])) < 0  # inside sphere2
     assert scene_sdf(jnp.array([2.0, 0.0, 0.0])) < 0  # inside box
     assert scene_sdf(jnp.array([0.0, 2.0, 0.0])) > 0  # outside all shapes
+
+    # Test color
+    assert scene_sdf.color(jnp.array([1.0, 0.0, 0.0])).shape == (3,)

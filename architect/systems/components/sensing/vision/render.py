@@ -103,6 +103,49 @@ def raycast(
     return jax.lax.fori_loop(0, max_steps, step_ray, origin)
 
 
+@jaxtyped
+@beartype
+def raycast_shadow(
+    sdf: Callable[[Float[Array, " 3"]], Float[Array, ""]],
+    origin: Float[Array, " 3"],
+    ray: Float[Array, " 3"],
+    shadow_hardness: float = 1.0,
+    max_steps: int = 20,
+) -> Float[Array, ""]:
+    """Accumulate the shading along the given ray.
+
+    Args:
+        sdf: The signed distance function of the scene.
+        origin: The origin of the ray, in world coordinates.
+        ray: The ray to cast, in world coordinates. Should be the direction towards
+            the light source.
+        shadow_hardness: higher values will yield sharper edges to the shadows.
+        max_steps: The maximum number of steps to take along the ray.
+
+    Returns:
+        The total shading of the origin (0 = fully shaded, 1 = fully lit)
+    """
+
+    # At each iteration, we can step the ray a distance equal to the current value
+    # of the SDF without intersecting the surface. The first argument passed by
+    # fori_loop is the iteration number, which we don't need.
+    def step_shadow_ray(
+        _, carry: Tuple[Float[Array, ""], Float[Array, ""]]
+    ) -> Tuple[Float[Array, ""], Float[Array, ""]]:
+        # Unpack
+        distance_along_ray, shading = carry
+
+        # Step the ray according to the SDF at the current point, and make the shadow
+        # darker as we get closer to the surface of the scene.
+        current_pt = origin + distance_along_ray * ray
+        h = sdf(current_pt)
+        shading = jnp.clip(shadow_hardness * h / distance_along_ray, 0, shading)
+
+        return distance_along_ray + h, shading
+
+    return jax.lax.fori_loop(0, max_steps, step_shadow_ray, (1e-2, 1.0))[1]
+
+
 def render_depth(
     hit_pts: Float[Array, "n_rays 3"],
     intrinsics: CameraIntrinsics,
@@ -138,3 +181,57 @@ def render_depth(
     depth_values = jnp.where(jnp.isnan(depth_values), 0.0, depth_values)
 
     return depth_values
+
+
+def render_color(
+    hit_pts: Float[Array, "n_rays 3"],
+    sdf: Callable[[Float[Array, " 3"]], Float[Array, ""]],
+) -> Float[Array, "n_rays 3"]:
+    """Render the color of the given hit points.
+
+    Args:
+        hit_pts: The hit points of the rays, in world coordinates.
+        sdf: The signed distance function of the scene.
+
+    Returns:
+        The RGB color of the hit points, normalized to [0, 1].
+    """
+    # Get the depth image by getting the scene color at each hit point
+    color_values = jax.vmap(sdf.color)(hit_pts)
+
+    return color_values
+
+
+def render_shadows(
+    hit_pts: Float[Array, "n_rays 3"],
+    sdf: Callable[[Float[Array, " 3"]], Float[Array, ""]],
+    light_dir: Float[Array, " 3"],
+    shadow_hardness: float = 1.0,
+    max_steps: int = 20,
+) -> Float[Array, "n_rays 3"]:
+    """Render the shading of the given hit points.
+
+    Args:
+        hit_pts: The hit points of the rays, in world coordinates.
+        sdf: The signed distance function of the scene.
+        light_dir: The direction of the light source, in world coordinates.
+        shadow_hardness: higher values will yield sharper edges to the shadows.
+        max_steps: The maximum number of steps to take along the ray.
+
+    Returns:
+        The shading the hit points (0 = fully shaded, 1 = fully lit).
+    """
+    # Get the depth image by getting the scene color at each hit point
+    shading = jax.vmap(raycast_shadow, in_axes=(None, 0, None, None, None))(
+        sdf,
+        hit_pts,
+        light_dir,
+        shadow_hardness,
+        max_steps,
+    )
+
+    # Remove any nans (might happen if a ray doesn't hit anything, in which case the
+    # point was fully lit and the shading is 1.0)
+    shading = jnp.where(jnp.isnan(shading), 1.0, shading)
+
+    return shading

@@ -9,6 +9,7 @@ from architect.systems.components.sensing.vision.shapes import (
     SDFShape,
     Halfspace,
     Box,
+    Cylinder,
     Scene,
 )
 from architect.systems.components.sensing.vision.render import (
@@ -30,9 +31,19 @@ class Car(NamedTuple):
         length: the length of the car
     """
 
-    height: Float[Array, " 1"] = jnp.array(2.0)
-    width: Float[Array, " 1"] = jnp.array(3.0)
-    length: Float[Array, " 1"] = jnp.array(4.5)
+    w_base: Float[Array, ""] = jnp.array(3.0)  # width at base of car
+    w_top: Float[Array, ""] = jnp.array(2.0)  # width at top of car
+
+    h_base: Float[Array, ""] = jnp.array(0.25)  # height to undecarriage
+    h_chassis: Float[Array, ""] = jnp.array(1.0)  # height of chassis
+    h_top: Float[Array, ""] = jnp.array(0.75)  # height of top of car
+
+    l_hood: Float[Array, ""] = jnp.array(1.0)  # length of hood
+    l_trunk: Float[Array, ""] = jnp.array(1.0)  # length of trunk
+    l_cabin: Float[Array, ""] = jnp.array(2.5)  # length of cabin
+
+    r_wheel: Float[Array, ""] = jnp.array(0.4)  # radius of wheel
+    w_wheel: Float[Array, ""] = jnp.array(0.2)  # width of wheel
 
     @jaxtyped
     @beartype
@@ -45,19 +56,88 @@ class Car(NamedTuple):
         Returns:
             A list of SDF shapes representing the car
         """
+        # Unpack state
+        x, y, theta = state
+        # Most shapes have the same rotation matrix
+        rotation = jnp.array(
+            [
+                [jnp.cos(theta), -jnp.sin(theta), 0],
+                [jnp.sin(theta), jnp.cos(theta), 0],
+                [0, 0, 1],
+            ]
+        )
+
         # Create the primitive shapes that make up the car
-        body = Box(
-            center=jnp.array([state[0], state[1], self.height / 2]),
-            extent=jnp.array([self.length, self.width, self.height]),
-            rotation=jnp.array(
+        chassis = Box(
+            center=jnp.array([x, y, self.h_base + self.h_chassis / 2]),
+            extent=jnp.array(
                 [
-                    [jnp.cos(state[2]), -jnp.sin(state[2]), 0],
-                    [jnp.sin(state[2]), jnp.cos(state[2]), 0],
-                    [0, 0, 1],
+                    self.l_cabin + self.l_hood + self.l_trunk,
+                    self.w_base,
+                    self.h_chassis,
                 ]
             ),
+            rotation=rotation,
         )
-        return [body]
+        cab = Box(
+            center=jnp.array(
+                [
+                    x + (self.l_trunk - self.l_hood) / 2,
+                    y,
+                    self.h_base + self.h_chassis + self.h_top / 2,
+                ]
+            ),
+            extent=jnp.array(
+                [
+                    self.l_cabin,
+                    self.w_top,
+                    self.h_top,
+                ]
+            ),
+            rotation=rotation,
+        )
+
+        wheel_extent = jnp.array([2 * self.r_wheel, 2 * self.r_wheel, 2 * self.r_wheel])
+        l_all = self.l_cabin + self.l_trunk + self.l_hood
+        # The wheels are rotated 90 degrees around the x axis from the car
+        wheel_rotation = (
+            jnp.array(
+                [
+                    [1, 0, 0],
+                    [0, 0, -1],
+                    [0, 1, 0],
+                ]
+            )
+            @ rotation
+        )
+        wheels = [
+            Cylinder(
+                jnp.array([x - 0.3 * l_all, y - 0.5 * self.w_base, self.h_base / 2]),
+                self.r_wheel,
+                self.w_wheel,
+                wheel_rotation,
+            ),
+            Cylinder(
+                jnp.array([x - 0.3 * l_all, y + 0.5 * self.w_base, self.h_base / 2]),
+                self.r_wheel,
+                self.w_wheel,
+                wheel_rotation,
+            ),
+            Cylinder(
+                jnp.array([x + 0.3 * l_all, y - 0.5 * self.w_base, self.h_base / 2]),
+                self.r_wheel,
+                self.w_wheel,
+                wheel_rotation,
+            ),
+            Cylinder(
+                jnp.array([x + 0.3 * l_all, y + 0.5 * self.w_base, self.h_base / 2]),
+                self.r_wheel,
+                self.w_wheel,
+                wheel_rotation,
+            ),
+        ]
+
+        return [chassis, cab] + wheels
 
 
 @beartype
@@ -115,8 +195,9 @@ class HighwayScene:
         """
         car_shapes = [self.car.get_shapes(state) for state in car_states]
         shapes = (
-            [self.ground]
-            + self.walls
+            []
+            # + [self.ground]
+            # + self.walls
             + [shape for sublist in car_shapes for shape in sublist]
         )
         return Scene(shapes=shapes, sharpness=sharpness)
@@ -211,9 +292,9 @@ if __name__ == "__main__":
     highway = HighwayScene(num_lanes=3, lane_width=4.0)
     car_states = jnp.array(
         [
-            [7.0, 0.0, 0.0],
-            [0.0, highway.lane_width, 0.0],
-            [-5.0, -highway.lane_width, 0.0],
+            [0.0, 0.0, 0.0],
+            # [0.0, highway.lane_width, 0.0],
+            # [-5.0, -highway.lane_width, 0.0],
         ]
     )
 
@@ -224,12 +305,12 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([-10.0, 0.0, 10.0]),
-        camera_R_to_world=look_at(jnp.array([-10.0, 0.0, 10.0]), jnp.zeros(3)),
+        camera_origin=jnp.array([2.0, -10.0, 5.0]),
+        camera_R_to_world=look_at(jnp.array([2.0, -10.0, 5.0]), jnp.zeros(3)),
     )
 
     depth_image = highway.render_depth(intrinsics, extrinsics, car_states)
 
-    plt.imshow(depth_image.T, cmap="Greys")
+    plt.imshow(depth_image.T)
     plt.colorbar()
     plt.show()
