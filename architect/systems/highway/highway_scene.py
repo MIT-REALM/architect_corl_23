@@ -3,7 +3,7 @@ from jaxtyping import Float, Array, jaxtyped
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import List, NamedTuple
+from beartype.typing import List, NamedTuple, Optional, Tuple
 
 from architect.systems.components.sensing.vision.shapes import (
     SDFShape,
@@ -16,6 +16,8 @@ from architect.systems.components.sensing.vision.render import (
     pinhole_camera_rays,
     raycast,
     render_depth,
+    render_color,
+    render_shadows,
     CameraIntrinsics,
     CameraExtrinsics,
 )
@@ -32,18 +34,30 @@ class Car(NamedTuple):
     """
 
     w_base: Float[Array, ""] = jnp.array(3.0)  # width at base of car
-    w_top: Float[Array, ""] = jnp.array(2.0)  # width at top of car
+    w_top: Float[Array, ""] = jnp.array(2.5)  # width at top of car
 
-    h_base: Float[Array, ""] = jnp.array(0.25)  # height to undecarriage
+    h_base: Float[Array, ""] = jnp.array(0.4)  # height to undecarriage
     h_chassis: Float[Array, ""] = jnp.array(1.0)  # height of chassis
     h_top: Float[Array, ""] = jnp.array(0.75)  # height of top of car
 
     l_hood: Float[Array, ""] = jnp.array(1.0)  # length of hood
-    l_trunk: Float[Array, ""] = jnp.array(1.0)  # length of trunk
-    l_cabin: Float[Array, ""] = jnp.array(2.5)  # length of cabin
+    l_trunk: Float[Array, ""] = jnp.array(0.5)  # length of trunk
+    l_cabin: Float[Array, ""] = jnp.array(3.0)  # length of cabin
 
     r_wheel: Float[Array, ""] = jnp.array(0.4)  # radius of wheel
     w_wheel: Float[Array, ""] = jnp.array(0.2)  # width of wheel
+
+    @property
+    def length(self):
+        return self.l_hood + self.l_trunk + self.l_cabin
+
+    @property
+    def width(self):
+        return self.w_base
+
+    @property
+    def height(self):
+        return self.h_base + self.h_chassis + self.h_top
 
     @jaxtyped
     @beartype
@@ -78,6 +92,7 @@ class Car(NamedTuple):
                 ]
             ),
             rotation=rotation,
+            c=jnp.array([248, 102, 36]) / 255.0,
         )
         cab = Box(
             center=jnp.array(
@@ -95,6 +110,7 @@ class Car(NamedTuple):
                 ]
             ),
             rotation=rotation,
+            c=jnp.array([255, 244, 236]) / 255.0,
         )
 
         wheel_extent = jnp.array([2 * self.r_wheel, 2 * self.r_wheel, 2 * self.r_wheel])
@@ -110,30 +126,35 @@ class Car(NamedTuple):
             )
             @ rotation
         )
+        wheel_color = jnp.array([45, 48, 71]) / 255.0
         wheels = [
             Cylinder(
                 jnp.array([x - 0.3 * l_all, y - 0.5 * self.w_base, self.h_base / 2]),
                 self.r_wheel,
                 self.w_wheel,
                 wheel_rotation,
+                wheel_color,
             ),
             Cylinder(
                 jnp.array([x - 0.3 * l_all, y + 0.5 * self.w_base, self.h_base / 2]),
                 self.r_wheel,
                 self.w_wheel,
                 wheel_rotation,
+                wheel_color,
             ),
             Cylinder(
                 jnp.array([x + 0.3 * l_all, y - 0.5 * self.w_base, self.h_base / 2]),
                 self.r_wheel,
                 self.w_wheel,
                 wheel_rotation,
+                wheel_color,
             ),
             Cylinder(
                 jnp.array([x + 0.3 * l_all, y + 0.5 * self.w_base, self.h_base / 2]),
                 self.r_wheel,
                 self.w_wheel,
                 wheel_rotation,
+                wheel_color,
             ),
         ]
 
@@ -165,18 +186,22 @@ class HighwayScene:
         """
         # Create the ground plane and walls on each side of the highway
         self.ground = Halfspace(
-            point=jnp.array([0.0, 0.0, 0.0]), normal=jnp.array([0.0, 0.0, 1.0])
+            point=jnp.array([0.0, 0.0, 0.0]),
+            normal=jnp.array([0.0, 0.0, 1.0]),
+            c=jnp.array([229, 220, 197]) / 255.0,
         )
         self.walls = [
             Box(
                 center=jnp.array([0.0, -lane_width * num_lanes / 2.0 - 0.5, 0.0]),
-                extent=jnp.array([segment_length, 1.0, 10.0]),
+                extent=jnp.array([segment_length, 1.0, 3.0]),
                 rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
             ),
             Box(
                 center=jnp.array([0.0, lane_width * num_lanes / 2 + 0.5, 0.0]),
-                extent=jnp.array([segment_length, 1.0, 10.0]),
+                extent=jnp.array([segment_length, 1.0, 3.0]),
                 rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
             ),
         ]
         self.car = Car()  # re-used for all cars
@@ -196,8 +221,8 @@ class HighwayScene:
         car_shapes = [self.car.get_shapes(state) for state in car_states]
         shapes = (
             []
-            # + [self.ground]
-            # + self.walls
+            + [self.ground]
+            + self.walls
             + [shape for sublist in car_shapes for shape in sublist]
         )
         return Scene(shapes=shapes, sharpness=sharpness)
@@ -282,6 +307,53 @@ class HighwayScene:
         ).reshape(intrinsics.resolution)
         return depth_image
 
+    @jaxtyped
+    @beartype
+    def render_rgbd(
+        self,
+        intrinsics: CameraIntrinsics,
+        extrinsics: CameraExtrinsics,
+        car_states: Float[Array, "n_car 3"],
+        shading_light_direction: Optional[Float[Array, "3"]] = None,
+        max_dist: float = 50.0,
+        sharpness: float = 50.0,
+    ) -> Tuple[Float[Array, "res_x res_y"], Float[Array, "res_x res_y 3"]]:
+        """Render the color + depth images of this scene from the given camera pose.
+
+        Args:
+            intrinsics: the camera intrinsics
+            extrinsics: the camera extrinsics
+            car_states: the [x, y, heading] state of each car
+            shading_light_direction: the direction of the light source for shading. If
+                None, no shading is applied.
+            max_dist: the maximum distance to render
+            sharpness: the sharpness of the scene
+
+        Returns:
+            The depth and color images of the scene
+        """
+        # Make the scene (a composite of SDF shapes)
+        scene = self._get_shapes(car_states, sharpness=sharpness)
+
+        # Render the scene
+        rays = pinhole_camera_rays(intrinsics, extrinsics)
+        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None))(
+            scene, extrinsics.camera_origin, rays, 50
+        )
+        depth_image = render_depth(
+            hit_pts, intrinsics, extrinsics, max_dist=max_dist
+        ).reshape(intrinsics.resolution)
+        color_image = render_color(hit_pts, scene).reshape(*intrinsics.resolution, 3)
+
+        # Add shading if requested
+        if shading_light_direction is not None:
+            shadows = render_shadows(
+                hit_pts, scene, shading_light_direction, ambient=0.2
+            ).reshape(intrinsics.resolution)
+            color_image = color_image * shadows[..., None]
+
+        return depth_image, color_image
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -292,9 +364,9 @@ if __name__ == "__main__":
     highway = HighwayScene(num_lanes=3, lane_width=4.0)
     car_states = jnp.array(
         [
-            [0.0, 0.0, 0.0],
-            # [0.0, highway.lane_width, 0.0],
-            # [-5.0, -highway.lane_width, 0.0],
+            [3.0, 0.0, 0.0],
+            [0.0, highway.lane_width, 0.0],
+            [-5.0, -highway.lane_width, 0.0],
         ]
     )
 
@@ -305,12 +377,16 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([2.0, -10.0, 5.0]),
-        camera_R_to_world=look_at(jnp.array([2.0, -10.0, 5.0]), jnp.zeros(3)),
+        camera_origin=jnp.array([-10.0, 0.0, 3.0]),
+        camera_R_to_world=look_at(jnp.array([-10, 0.0, 3.0]), jnp.zeros(3)),
     )
 
-    depth_image = highway.render_depth(intrinsics, extrinsics, car_states)
+    light_direction = jnp.array([0.2, -1.0, 1.5])
+    depth_image, color_image = highway.render_rgbd(
+        intrinsics, extrinsics, car_states, shading_light_direction=light_direction
+    )
 
-    plt.imshow(depth_image.T)
-    plt.colorbar()
+    _, axs = plt.subplots(1, 2)
+    axs[0].imshow(depth_image.T)
+    axs[1].imshow(color_image.transpose(1, 0, 2))
     plt.show()

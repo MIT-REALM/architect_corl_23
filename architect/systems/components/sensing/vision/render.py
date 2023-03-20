@@ -110,7 +110,8 @@ def raycast_shadow(
     origin: Float[Array, " 3"],
     ray: Float[Array, " 3"],
     shadow_hardness: float = 1.0,
-    max_steps: int = 20,
+    max_steps: int = 40,
+    ambient_light: float = 0.1,
 ) -> Float[Array, ""]:
     """Accumulate the shading along the given ray.
 
@@ -121,6 +122,8 @@ def raycast_shadow(
             the light source.
         shadow_hardness: higher values will yield sharper edges to the shadows.
         max_steps: The maximum number of steps to take along the ray.
+        ambient_light: The amount of light that is always present, regardless of
+            occlusion (between 0 and 1).
 
     Returns:
         The total shading of the origin (0 = fully shaded, 1 = fully lit)
@@ -139,7 +142,9 @@ def raycast_shadow(
         # darker as we get closer to the surface of the scene.
         current_pt = origin + distance_along_ray * ray
         h = sdf(current_pt)
-        shading = jnp.clip(shadow_hardness * h / distance_along_ray, 0, shading)
+        shading = jnp.clip(
+            shadow_hardness * h / distance_along_ray, ambient_light, shading
+        )
 
         return distance_along_ray + h, shading
 
@@ -199,6 +204,9 @@ def render_color(
     # Get the depth image by getting the scene color at each hit point
     color_values = jax.vmap(sdf.color)(hit_pts)
 
+    # Default to black if the ray doesn't hit anything
+    color_values = jnp.where(jnp.isnan(color_values), 0.0, color_values)
+
     return color_values
 
 
@@ -207,7 +215,8 @@ def render_shadows(
     sdf: Callable[[Float[Array, " 3"]], Float[Array, ""]],
     light_dir: Float[Array, " 3"],
     shadow_hardness: float = 1.0,
-    max_steps: int = 20,
+    max_steps: int = 40,
+    ambient: float = 0.0,
 ) -> Float[Array, "n_rays 3"]:
     """Render the shading of the given hit points.
 
@@ -217,17 +226,19 @@ def render_shadows(
         light_dir: The direction of the light source, in world coordinates.
         shadow_hardness: higher values will yield sharper edges to the shadows.
         max_steps: The maximum number of steps to take along the ray.
+        ambient: amount of ambient lighting (between 0=none and 1=full)
 
     Returns:
         The shading the hit points (0 = fully shaded, 1 = fully lit).
     """
     # Get the depth image by getting the scene color at each hit point
-    shading = jax.vmap(raycast_shadow, in_axes=(None, 0, None, None, None))(
+    shading = jax.vmap(raycast_shadow, in_axes=(None, 0, None, None, None, None))(
         sdf,
         hit_pts,
         light_dir,
         shadow_hardness,
         max_steps,
+        ambient,
     )
 
     # Remove any nans (might happen if a ray doesn't hit anything, in which case the

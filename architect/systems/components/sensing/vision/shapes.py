@@ -119,10 +119,12 @@ class Halfspace(SDFShape):
     Attributes:
         normal: the normal vector pointing to the exterior of the halfspace
         point: a point on the plane bounding the halfspace
+        c: the color of the halfspace (or None for a checkerboard pattern)
     """
 
     normal: Float[Array, " 3"]
     point: Float[Array, " 3"]
+    c: Optional[Float[Array, " 3"]] = None
 
     def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
         """Compute the SDF at a given point.
@@ -135,6 +137,20 @@ class Halfspace(SDFShape):
         """
         return jnp.dot(x - self.point, self.normal)
 
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Compute the color at a given point.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            RGB color at the point, scaled to [0, 1]
+        """
+        if self.c is not None:
+            return self.c
+
+        return super().color(x)
+
 
 @jaxtyped
 @beartype
@@ -145,11 +161,13 @@ class Box(SDFShape):
         center: the center of the box in world coordinates
         extent: the extent of the box in each dimension
         R_to_world: the 3D rotation matrix from the box frame to the world frame
+        c: the color of the box (or None for a checkerboard pattern)
     """
 
     center: Float[Array, " 3"]
     extent: Float[Array, " 3"]
     rotation: Float[Array, "3 3"]
+    c: Optional[Float[Array, " 3"]] = None
 
     def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
         """Compute the SDF at a given point.
@@ -170,6 +188,20 @@ class Box(SDFShape):
         sdf = jnp.max(distance_to_box)
         return sdf
 
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Compute the color at a given point.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            RGB color at the point, scaled to [0, 1]
+        """
+        if self.c is not None:
+            return self.c
+
+        return super().color(x)
+
 
 @jaxtyped
 @beartype
@@ -181,12 +213,14 @@ class Cylinder(SDFShape):
         radius: the radius of the cylinder
         height: the height of the cylinder
         R_to_world: the 3D rotation matrix from the box frame to the world frame
+        c: the color of the cylinder (if None, use a checkerboard pattern)
     """
 
     center: Float[Array, " 3"]
     radius: Float[Array, ""]
     height: Float[Array, ""]
     rotation: Float[Array, "3 3"]
+    c: Optional[Float[Array, " 3"]] = None
 
     def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
         """Compute the SDF at a given point.
@@ -208,3 +242,17 @@ class Cylinder(SDFShape):
 
         sdf = jnp.maximum(distance_to_axis, distance_to_caps)
         return sdf
+
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Compute the color at a given point.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            RGB color at the point, scaled to [0, 1]
+        """
+        if self.c is not None:
+            return self.c
+
+        return super().color(x)
