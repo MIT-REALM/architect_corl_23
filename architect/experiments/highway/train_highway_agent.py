@@ -153,13 +153,16 @@ def generate_trajectory(
         step, (initial_obs, initial_state), keys
     )
 
+    # Normalize rewards used to compute advantage estimate
+    normalized_rewards = (rewards - jnp.mean(rewards)) / (jnp.std(rewards) + 1e-8)
+
     # Compute the advantage estimate. This requires the value estimate at the
     # end of the rollout. The key we use doesn't matter here.
     _, _, final_value = policy(jtu.tree_map(lambda x: x[-1], obs), keys[-1])
     values = jnp.concatenate([values, jnp.expand_dims(final_value, 0)], axis=0)
     values = values.reshape(-1)
     advantage, returns = generalized_advantage_estimate(
-        rewards, values, dones, gamma, gae_lambda
+        normalized_rewards, values, dones, gamma, gae_lambda
     )
 
     # Save all this information in a trajectory object
@@ -268,12 +271,12 @@ def train_ppo_driver(
     critic_weight: float = 1.0,
     entropy_weight: float = 0.1,
     seed: int = 0,
-    steps_per_epoch: int = 32*30,
+    steps_per_epoch: int = 64 * 10,
     epochs: int = 200,
     gd_steps_per_update: int = 50,
     minibatch_size: int = 32,
     max_grad_norm: float = 1.0,
-    logdir: str = "./tmp/ppo2_32x30_1e-5_gradclip_1.0",
+    logdir: str = "./tmp/overtake_ppo_32x10_1e-5_cw5_noise0.1_normreward",
 ) -> DrivingPolicy:
     """Train the driver using PPO.
 
@@ -283,18 +286,18 @@ def train_ppo_driver(
     writer = SummaryWriter(logdir)
 
     # Set up the environment
-    scene = HighwayScene(num_lanes=3, lane_width=4.5, segment_length=200.0)
+    scene = HighwayScene(num_lanes=3, lane_width=6.0, segment_length=200.0)
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
         resolution=image_shape,
     )
-    initial_ego_state = jnp.array([-100.0, 0.0, 0.0, 10.0])
+    initial_ego_state = jnp.array([-100.0, -5.0, 0.0, 10.0])
     initial_non_ego_states = jnp.array(
         [
-            [-78.0, 0.0, 0.0, 8.0],
-            [-85, 4.0, 0.0, 7.0],
-            [-90, -4.0, 0.0, 8.5],
+            [-85.0, -5.0, 0.0, 8.0],
+            # [-85, 4.0, 0.0, 7.0],
+            # [-90, -4.0, 0.0, 8.5],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.5]) ** 2)
@@ -305,7 +308,7 @@ def train_ppo_driver(
         initial_ego_state=initial_ego_state,
         initial_non_ego_states=initial_non_ego_states,
         initial_state_covariance=initial_state_covariance,
-        collision_penalty=10.0
+        collision_penalty=5.0,
     )
 
     # Set up the policy
@@ -320,7 +323,7 @@ def train_ppo_driver(
     grad_clip_state = grad_clip.init(eqx.filter(policy, eqx.is_array))
 
     # Fix non-ego actions to be constant (drive straight at fixed speed)
-    n_non_ego = 3
+    n_non_ego = 1
     non_ego_actions = jnp.zeros((n_non_ego, 2))
 
     # Compile a loss function and optimization update

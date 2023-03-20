@@ -93,21 +93,6 @@ class DrivingPolicy(eqx.Module):
             depth=fcn_layers,
             key=critic_key,
         )
-        # n_states = 4  # todo delete
-        # self.actor_fcn = eqx.nn.MLP(
-        #     in_size=n_states,
-        #     out_size=2,
-        #     width_size=fcn_width,
-        #     depth=fcn_layers,
-        #     key=actor_key,
-        # )
-        # self.critic_fcn = eqx.nn.MLP(
-        #     in_size=n_states,
-        #     out_size=1,
-        #     width_size=fcn_width,
-        #     depth=fcn_layers,
-        #     key=critic_key,
-        # )
 
         # Initialize action standard deviation
         self.log_action_std = jnp.log(jnp.array(0.1))
@@ -135,9 +120,6 @@ class DrivingPolicy(eqx.Module):
         # Compute the action and value estimate
         value = self.critic_fcn(y).reshape()  # scalar output
         action_mean = self.actor_fcn(y)
-
-        # action_mean = self.actor_fcn(obs.ego_state)  # todo delete
-        # value = self.critic_fcn(obs.ego_state).reshape()
 
         return action_mean, value
 

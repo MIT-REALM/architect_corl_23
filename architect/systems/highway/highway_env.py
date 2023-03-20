@@ -189,8 +189,10 @@ class HighwayEnv:
         collision_reward = -self._collision_penalty * jax.nn.sigmoid(
             -25 * min_distance_to_obstacle
         )
-        distance_reward = (next_ego_state[0] - ego_state[0]) / self._dt
-        lane_keeping_reward = -0.1 * next_ego_state[1] ** 2
+        distance_reward = 1.0 * (next_ego_state[0] - ego_state[0]) / self._dt
+        lane_keeping_reward = (
+            0.0 * (next_ego_state[1] - self._initial_ego_state[1]) ** 2
+        )
         reward = distance_reward + lane_keeping_reward + collision_reward
 
         # The episode ends when a collision occurs, at which point we reset the
