@@ -361,12 +361,12 @@ if __name__ == "__main__":
     from architect.systems.components.sensing.vision.util import look_at
 
     # Create a test highway scene and render it
-    highway = HighwayScene(num_lanes=3, lane_width=4.0)
+    highway = HighwayScene(num_lanes=3, lane_width=4.0, segment_length=100.0)
     car_states = jnp.array(
         [
-            [3.0, 0.0, 0.0],
-            [0.0, highway.lane_width, 0.0],
-            [-5.0, -highway.lane_width, 0.0],
+            [-85.0, -5.0, 0.0],
+            # [0.0, highway.lane_width, 0.0],
+            # [-5.0, -highway.lane_width, 0.0],
         ]
     )
 
@@ -377,8 +377,8 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([-10.0, 0.0, 3.0]),
-        camera_R_to_world=look_at(jnp.array([-10, 0.0, 3.0]), jnp.zeros(3)),
+        camera_origin=jnp.array([-100.0, -5.0, 2.0]),
+        camera_R_to_world=look_at(jnp.array([-100.0, -5.0, 2.0]), jnp.zeros(3)),
     )
 
     light_direction = jnp.array([0.2, -1.0, 1.5])

@@ -28,7 +28,7 @@ from architect.systems.components.sensing.vision.util import look_at
 def intrinsics():
     intrinsics = CameraIntrinsics(
         sensor_size=(0.1, 0.1),
-        resolution=(512, 512),
+        resolution=(256, 256),
         focal_length=0.1,
     )
     return intrinsics
@@ -142,7 +142,7 @@ def test_render_depth_image(intrinsics):
         point=jnp.array([0.0, 0.0, 0.0]),
         normal=jnp.array([0.0, 0.0, 1.0]),
     )
-    sphere = Sphere(center=jnp.array([0.0, -1.0, 0.0]), radius=jnp.array(1.0))
+    sphere = Sphere(center=jnp.array([0.0, -1.0, 2.0]), radius=jnp.array(1.0))
     box = Box(
         center=jnp.array([0.0, 2.0, 1.0]),
         extent=jnp.array([3.0, 0.5, 0.5]),
@@ -160,6 +160,8 @@ def test_render_depth_image(intrinsics):
             ]
         ),
     )
+
+    # Combine into one scene
     scene = Scene(
         [
             ground,
@@ -189,6 +191,13 @@ def test_render_depth_image(intrinsics):
     depth_image = render_depth(hit_pts, intrinsics, extrinsics, max_dist=10.0).reshape(
         intrinsics.resolution
     )
+
+    # # Uncomment to render
+    # import matplotlib.pyplot as plt
+
+    # plt.figure()
+    # plt.imshow(depth_image.T)
+    # plt.show()
 
     # Make sure the depth image has the right shape
     assert depth_image.shape[0] == intrinsics.resolution[0]
