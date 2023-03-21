@@ -33,19 +33,19 @@ class Car(NamedTuple):
         length: the length of the car
     """
 
-    w_base: Float[Array, ""] = jnp.array(3.0)  # width at base of car
-    w_top: Float[Array, ""] = jnp.array(2.5)  # width at top of car
+    w_base: Float[Array, ""] = jnp.array(2.8)  # width at base of car
+    w_top: Float[Array, ""] = jnp.array(2.3)  # width at top of car
 
     h_base: Float[Array, ""] = jnp.array(0.4)  # height to undecarriage
     h_chassis: Float[Array, ""] = jnp.array(1.0)  # height of chassis
     h_top: Float[Array, ""] = jnp.array(0.75)  # height of top of car
 
-    l_hood: Float[Array, ""] = jnp.array(1.0)  # length of hood
-    l_trunk: Float[Array, ""] = jnp.array(0.5)  # length of trunk
+    l_hood: Float[Array, ""] = jnp.array(0.9)  # length of hood
+    l_trunk: Float[Array, ""] = jnp.array(0.4)  # length of trunk
     l_cabin: Float[Array, ""] = jnp.array(3.0)  # length of cabin
 
     r_wheel: Float[Array, ""] = jnp.array(0.4)  # radius of wheel
-    w_wheel: Float[Array, ""] = jnp.array(0.2)  # width of wheel
+    w_wheel: Float[Array, ""] = jnp.array(0.3)  # width of wheel
 
     @property
     def length(self):
@@ -93,6 +93,7 @@ class Car(NamedTuple):
             ),
             rotation=rotation,
             c=jnp.array([248, 102, 36]) / 255.0,
+            rounding=jnp.array(0.1),
         )
         cab = Box(
             center=jnp.array(
@@ -111,9 +112,9 @@ class Car(NamedTuple):
             ),
             rotation=rotation,
             c=jnp.array([255, 244, 236]) / 255.0,
+            rounding=jnp.array(0.3),
         )
 
-        wheel_extent = jnp.array([2 * self.r_wheel, 2 * self.r_wheel, 2 * self.r_wheel])
         l_all = self.l_cabin + self.l_trunk + self.l_hood
         # The wheels are rotated 90 degrees around the x axis from the car
         wheel_rotation = (
@@ -150,7 +151,7 @@ class Car(NamedTuple):
                 wheel_color,
             ),
             Cylinder(
-                jnp.array([x + 0.3 * l_all, y + 0.5 * self.w_base, self.h_base / 2]),
+                jnp.array([x + 0.3 * l_all, y + 0.4 * self.w_base, self.h_base / 2]),
                 self.r_wheel,
                 self.w_wheel,
                 wheel_rotation,
@@ -196,12 +197,14 @@ class HighwayScene:
                 extent=jnp.array([segment_length, 1.0, 3.0]),
                 rotation=jnp.eye(3),
                 c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
             ),
             Box(
                 center=jnp.array([0.0, lane_width * num_lanes / 2 + 0.5, 0.0]),
                 extent=jnp.array([segment_length, 1.0, 3.0]),
                 rotation=jnp.eye(3),
                 c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
             ),
         ]
         self.car = Car()  # re-used for all cars
@@ -337,8 +340,8 @@ class HighwayScene:
 
         # Render the scene
         rays = pinhole_camera_rays(intrinsics, extrinsics)
-        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None))(
-            scene, extrinsics.camera_origin, rays, 50
+        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None, None))(
+            scene, extrinsics.camera_origin, rays, 100, 200.0
         )
         depth_image = render_depth(
             hit_pts, intrinsics, extrinsics, max_dist=max_dist
@@ -361,11 +364,11 @@ if __name__ == "__main__":
     from architect.systems.components.sensing.vision.util import look_at
 
     # Create a test highway scene and render it
-    highway = HighwayScene(num_lanes=3, lane_width=4.0, segment_length=100.0)
+    highway = HighwayScene(num_lanes=3, lane_width=5.0, segment_length=200.0)
     car_states = jnp.array(
         [
-            [-85.0, -5.0, 0.0],
-            # [0.0, highway.lane_width, 0.0],
+            [-90.0, -3.0, 0.0],
+            [-70, 3.0, 0.0],
             # [-5.0, -highway.lane_width, 0.0],
         ]
     )
@@ -377,11 +380,11 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([-100.0, -5.0, 2.0]),
-        camera_R_to_world=look_at(jnp.array([-100.0, -5.0, 2.0]), jnp.zeros(3)),
+        camera_origin=jnp.array([-100.0, 10, 10]),
+        camera_R_to_world=look_at(jnp.array([-100.0, 10, 10]), jnp.zeros(3)),
     )
 
-    light_direction = jnp.array([0.2, -1.0, 1.5])
+    light_direction = jnp.array([-0.2, -1.0, 1.5])
     depth_image, color_image = highway.render_rgbd(
         intrinsics, extrinsics, car_states, shading_light_direction=light_direction
     )

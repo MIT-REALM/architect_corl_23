@@ -27,6 +27,7 @@ class HighwayObs(NamedTuple):
 
     speed: Float[Array, " *batch"]
     depth_image: Float[Array, "*batch res_x res_y"]
+    color_image: Float[Array, "*batch res_x res_y"]
     ego_state: Float[Array, "*batch n_states"]
 
 
@@ -62,6 +63,7 @@ class HighwayEnv:
         initial_ego_state: the initial state of the ego vehicle.
         initial_non_ego_states: the initial states of all non-ego vehicles.
         initial_state_covariance: the initial state covariance of all vehicles.
+        shading_light_direction: the direction of the light source for rendering.
         collision_penalty: the penalty to apply when the ego vehicle collides with
             any obstacle in the scene.
         max_render_dist: the maximum distance to render in the depth image.
@@ -77,6 +79,7 @@ class HighwayEnv:
     _initial_ego_state: Float[Array, " n_states"]
     _initial_non_ego_states: Float[Array, "n_non_ego n_states"]
     _initial_state_covariance: Float[Array, "n_states n_states"]
+    _shading_light_direction: Float[Array, " 3"]
 
     _axle_length: float = 1.0
 
@@ -90,6 +93,7 @@ class HighwayEnv:
         initial_ego_state: Float[Array, " n_states"],
         initial_non_ego_states: Float[Array, "n_non_ego n_states"],
         initial_state_covariance: Float[Array, "n_states n_states"],
+        shading_light_direction: Float[Array, " 3"],
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
@@ -101,6 +105,7 @@ class HighwayEnv:
         self._initial_ego_state = initial_ego_state
         self._initial_non_ego_states = initial_non_ego_states
         self._initial_state_covariance = initial_state_covariance
+        self._shading_light_direction = shading_light_direction
         self._collision_penalty = collision_penalty
         self._max_render_dist = max_render_dist
         self._render_sharpness = render_sharpness
@@ -282,15 +287,19 @@ class HighwayEnv:
                 up=jnp.array([0, 0, 1.0]),
             ),
         )
-        depth_image = self._highway_scene.render_depth(
+        depth_image, color_image = self._highway_scene.render_rgbd(
             self._camera_intrinsics,
             extrinsics,
             state.non_ego_states[:, :3],  # trim out speed; not needed for rendering
             max_dist=self._max_render_dist,
             sharpness=self._render_sharpness,
+            shading_light_direction=self._shading_light_direction,
         )
         obs = HighwayObs(
-            speed=ego_v, depth_image=depth_image, ego_state=state.ego_state
+            speed=ego_v,
+            depth_image=depth_image,
+            color_image=color_image,
+            ego_state=state.ego_state,
         )
         return obs
 

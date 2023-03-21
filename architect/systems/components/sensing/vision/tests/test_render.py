@@ -279,7 +279,9 @@ def test_render_color_image(intrinsics):
     # plt.imshow(color_image.transpose(1, 0, 2))
     # plt.show()
 
-    # Make sure the color image has the right shape
+    # Make sure the color image and shadows have the right shape
     assert color_image.shape[0] == intrinsics.resolution[0]
     assert color_image.shape[1] == intrinsics.resolution[1]
     assert color_image.shape[2] == 3
+    assert shadows.shape[0] == intrinsics.resolution[0]
+    assert shadows.shape[1] == intrinsics.resolution[1]

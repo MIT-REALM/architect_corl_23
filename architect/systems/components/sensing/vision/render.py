@@ -81,6 +81,7 @@ def raycast(
     origin: Float[Array, " 3"],
     ray: Float[Array, " 3"],
     max_steps: int = 40,
+    max_dist: float = 200.0,
 ) -> Float[Array, " 3"]:
     """Find the points at which the given ray intersects the given SDF.
 
@@ -89,6 +90,7 @@ def raycast(
         origin: The origin of the ray, in world coordinates.
         ray: The ray to cast, in world coordinates.
         max_steps: The maximum number of steps to take along the ray.
+        max_dist: The maximum distance to travel along the ray.
 
     Returns:
         The point at which the ray intersects the SDF, in world coordinates.
@@ -97,10 +99,13 @@ def raycast(
     # At each iteration, we can step the ray a distance equal to the current value
     # of the SDF without intersecting the surface. The first argument passed by
     # fori_loop is the iteration number, which we don't need.
-    def step_ray(_, current_pt: Float[Array, " 3"]) -> Float[Array, " 3"]:
-        return current_pt + sdf(current_pt) * ray
+    def step_ray(_, dist_along_ray: Float[Array, ""]) -> Float[Array, ""]:
+        h = sdf(origin + dist_along_ray * ray)
+        new_dist_along_ray = dist_along_ray + h
+        return jnp.clip(new_dist_along_ray, 0.0, max_dist)
 
-    return jax.lax.fori_loop(0, max_steps, step_ray, origin)
+    distance_along_ray = jax.lax.fori_loop(0, max_steps, step_ray, jnp.array(1e-2))
+    return origin + distance_along_ray * ray
 
 
 @jaxtyped
@@ -111,6 +116,7 @@ def raycast_shadow(
     ray: Float[Array, " 3"],
     shadow_hardness: float = 1.0,
     max_steps: int = 40,
+    max_dist: float = 200.0,
     ambient_light: float = 0.1,
 ) -> Float[Array, ""]:
     """Accumulate the shading along the given ray.
@@ -122,6 +128,7 @@ def raycast_shadow(
             the light source.
         shadow_hardness: higher values will yield sharper edges to the shadows.
         max_steps: The maximum number of steps to take along the ray.
+        max_dist: The maximum distance to travel along the ray.
         ambient_light: The amount of light that is always present, regardless of
             occlusion (between 0 and 1).
 
@@ -146,7 +153,8 @@ def raycast_shadow(
             shadow_hardness * h / distance_along_ray, ambient_light, shading
         )
 
-        return distance_along_ray + h, shading
+        # Stop if we've reached the maximum distance
+        return jnp.clip(distance_along_ray + h, -max_dist, max_dist), shading
 
     return jax.lax.fori_loop(0, max_steps, step_shadow_ray, (1e-2, 1.0))[1]
 
@@ -182,8 +190,6 @@ def render_depth(
     # Clip the depth image at a maximum distance
     depth_values = jnp.clip(depth_values, a_min=0.0, a_max=max_dist)
     depth_values = jnp.where(depth_values == max_dist, 0.0, depth_values)
-    # Remove any nans (might happen if a ray doesn't hit anything)
-    depth_values = jnp.where(jnp.isnan(depth_values), 0.0, depth_values)
 
     return depth_values
 
@@ -191,12 +197,16 @@ def render_depth(
 def render_color(
     hit_pts: Float[Array, "n_rays 3"],
     sdf: Callable[[Float[Array, " 3"]], Float[Array, ""]],
+    fog_color: Float[Array, " 3"] = jnp.array([0.5, 0.6, 0.7]),
+    fog_strength: float = 0.005,
 ) -> Float[Array, "n_rays 3"]:
     """Render the color of the given hit points.
 
     Args:
         hit_pts: The hit points of the rays, in world coordinates.
         sdf: The signed distance function of the scene.
+        fog_color: The color to use for fog.
+        fog_strength: The strength of the fog, 0 = no fog.
 
     Returns:
         The RGB color of the hit points, normalized to [0, 1].
@@ -204,8 +214,12 @@ def render_color(
     # Get the depth image by getting the scene color at each hit point
     color_values = jax.vmap(sdf.color)(hit_pts)
 
-    # Default to black if the ray doesn't hit anything
-    color_values = jnp.where(jnp.isnan(color_values), 0.0, color_values)
+    # Add fog
+    distance = jnp.linalg.norm(hit_pts, axis=-1)
+    fog_weight = 1 - jnp.exp(-fog_strength * distance)
+    color_values = (
+        fog_weight[:, None] * fog_color + (1 - fog_weight[:, None]) * color_values
+    )
 
     return color_values
 
@@ -240,9 +254,5 @@ def render_shadows(
         max_steps,
         ambient,
     )
-
-    # Remove any nans (might happen if a ray doesn't hit anything, in which case the
-    # point was fully lit and the shading is 1.0)
-    shading = jnp.where(jnp.isnan(shading), 1.0, shading)
 
     return shading

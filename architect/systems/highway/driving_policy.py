@@ -6,7 +6,7 @@ import jax.random as jrandom
 import equinox as eqx
 from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
-from beartype.typing import Tuple, List
+from beartype.typing import Tuple
 
 from architect.types import PRNGKeyArray
 from architect.systems.highway.highway_env import HighwayObs
@@ -35,7 +35,7 @@ class DrivingPolicy(eqx.Module):
         self,
         key: PRNGKeyArray,
         image_shape: Tuple[int, int],
-        image_channels: int = 1,
+        image_channels: int = 4,
         cnn_channels: int = 32,
         fcn_layers: int = 2,
         fcn_width: int = 32,
@@ -109,7 +109,8 @@ class DrivingPolicy(eqx.Module):
         # Compute the image embedding
         depth_image = obs.depth_image
         depth_image = jnp.expand_dims(depth_image, axis=0)
-        y = jax.nn.relu(self.encoder_conv_1(depth_image))
+        rgbd = jnp.concatenate((depth_image, obs.color_image), axis=0)
+        y = jax.nn.relu(self.encoder_conv_1(rgbd))
         y = jax.nn.relu(self.encoder_conv_2(y))
         y = jax.nn.relu(self.encoder_conv_3(y))
         y = jnp.reshape(y, (-1,))

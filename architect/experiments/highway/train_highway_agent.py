@@ -276,7 +276,7 @@ def train_ppo_driver(
     gd_steps_per_update: int = 50,
     minibatch_size: int = 32,
     max_grad_norm: float = 1.0,
-    logdir: str = "./tmp/overtake_ppo_32x10_1e-5_cw5_noise0.1_normreward",
+    logdir: str = "./tmp/overtake2_ppo_32x10",
 ) -> DrivingPolicy:
     """Train the driver using PPO.
 
@@ -286,7 +286,7 @@ def train_ppo_driver(
     writer = SummaryWriter(logdir)
 
     # Set up the environment
-    scene = HighwayScene(num_lanes=3, lane_width=6.0, segment_length=200.0)
+    scene = HighwayScene(num_lanes=3, lane_width=5.0, segment_length=200.0)
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
@@ -295,12 +295,19 @@ def train_ppo_driver(
     initial_ego_state = jnp.array([-100.0, -5.0, 0.0, 10.0])
     initial_non_ego_states = jnp.array(
         [
-            [-85.0, -5.0, 0.0, 8.0],
-            # [-85, 4.0, 0.0, 7.0],
+            [-90.0, -3.0, 0.0, 7.0],
+            [-70, 3.0, 0.0, 8.0],
             # [-90, -4.0, 0.0, 8.5],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.5]) ** 2)
+    # Fix non-ego actions to be constant (drive straight at fixed speed)
+    n_non_ego = 2
+    non_ego_actions = jnp.zeros((n_non_ego, 2))
+
+    # Set the direction of light shading
+    shading_light_direction = jnp.array([-0.2, -1.0, 1.5])
+
     env = HighwayEnv(
         scene,
         intrinsics,
@@ -309,6 +316,7 @@ def train_ppo_driver(
         initial_non_ego_states=initial_non_ego_states,
         initial_state_covariance=initial_state_covariance,
         collision_penalty=5.0,
+        shading_light_direction=shading_light_direction,
     )
 
     # Set up the policy
@@ -321,10 +329,6 @@ def train_ppo_driver(
     opt_state = optimizer.init(eqx.filter(policy, eqx.is_array))
     grad_clip = optax.clip_by_block_rms(max_grad_norm)
     grad_clip_state = grad_clip.init(eqx.filter(policy, eqx.is_array))
-
-    # Fix non-ego actions to be constant (drive straight at fixed speed)
-    n_non_ego = 1
-    non_ego_actions = jnp.zeros((n_non_ego, 2))
 
     # Compile a loss function and optimization update
     @partial(eqx.filter_value_and_grad, has_aux=True)

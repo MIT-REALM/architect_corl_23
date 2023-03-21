@@ -168,6 +168,7 @@ class Box(SDFShape):
     extent: Float[Array, " 3"]
     rotation: Float[Array, "3 3"]
     c: Optional[Float[Array, " 3"]] = None
+    rounding: Float[Array, ""] = jnp.array(0.1)
 
     def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
         """Compute the SDF at a given point.
@@ -185,7 +186,12 @@ class Box(SDFShape):
         # Compute the distance to the box in the box frame (which is axis-aligned)
         distance_to_box = jnp.abs(offset) - self.extent / 2.0
 
-        sdf = jnp.max(distance_to_box)
+        # Round the corner a bit
+        sdf = (
+            jnp.linalg.norm(jnp.maximum(distance_to_box, 0.0))
+            + jnp.minimum(jnp.max(distance_to_box), 0.0)
+            - self.rounding
+        )
         return sdf
 
     def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
