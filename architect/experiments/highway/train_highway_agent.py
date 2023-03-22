@@ -255,11 +255,13 @@ def ppo_clip_loss_fn(
 
 def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
     """Save the given trajectory to a gif."""
-    depth_images = trajectory.observations.depth_image
+    color_images = trajectory.observations.color_image
     img_dir = os.path.join(logdir, f"epoch_{epoch_num}_imgs")
     os.makedirs(img_dir, exist_ok=True)
-    for i, img in enumerate(depth_images):
-        matplotlib.image.imsave(os.path.join(img_dir, f"img_{i}.png"), img.T)
+    for i, img in enumerate(color_images):
+        matplotlib.image.imsave(
+            os.path.join(img_dir, f"img_{i}.png"), img.transpose(1, 0, 2)
+        )
 
 
 def train_ppo_driver(
@@ -271,7 +273,7 @@ def train_ppo_driver(
     critic_weight: float = 1.0,
     entropy_weight: float = 0.1,
     seed: int = 0,
-    steps_per_epoch: int = 64 * 10,
+    steps_per_epoch: int = 32 * 20,
     epochs: int = 200,
     gd_steps_per_update: int = 50,
     minibatch_size: int = 32,
@@ -292,7 +294,7 @@ def train_ppo_driver(
         sensor_size=(0.1, 0.1),
         resolution=image_shape,
     )
-    initial_ego_state = jnp.array([-100.0, -5.0, 0.0, 10.0])
+    initial_ego_state = jnp.array([-100.0, -3.0, 0.0, 10.0])
     initial_non_ego_states = jnp.array(
         [
             [-90.0, -3.0, 0.0, 7.0],
@@ -370,7 +372,7 @@ def train_ppo_driver(
         )
         if epoch % 20 == 0 or epoch == epochs - 1:
             # Save trajectory images; can be converted to video using this command:
-            #  ffmpeg -framerate 1/2 -i img%04d.png -c:v libx264 -r 30 out.mp4
+            #  ffmpeg -framerate 10 -i img%04d.png -c:v libx264 -r 30 out.mp4
             save_traj_imgs(trajectory, logdir, epoch)
             # Save policy
             eqx.tree_serialise_leaves(

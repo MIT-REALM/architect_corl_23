@@ -13,7 +13,7 @@ def driving_policy():
     return DrivingPolicy(
         key=jax.random.PRNGKey(0),
         image_shape=(128, 128),
-        image_channels=1,
+        image_channels=4,
         cnn_channels=32,
         fcn_layers=3,
         fcn_width=32,
@@ -24,7 +24,9 @@ def driving_policy():
 def obs():
     return HighwayObs(
         depth_image=jnp.zeros((128, 128)),
+        color_image=jnp.zeros((128, 128, 3)),
         speed=jnp.array(10.0),
+        ego_state=jnp.zeros(4),
     )
 
 
@@ -38,4 +40,4 @@ def test_driving_policy(driving_policy, obs, key):
     action, action_logp, value = driving_policy(obs, key)
     assert action.shape == (2,)
     assert action_logp.shape == ()
-    assert value.shape == (1,)
+    assert value.shape == ()

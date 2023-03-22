@@ -109,7 +109,9 @@ class DrivingPolicy(eqx.Module):
         # Compute the image embedding
         depth_image = obs.depth_image
         depth_image = jnp.expand_dims(depth_image, axis=0)
-        rgbd = jnp.concatenate((depth_image, obs.color_image), axis=0)
+        rgbd = jnp.concatenate(
+            (depth_image, obs.color_image.transpose(2, 0, 1)), axis=0
+        )
         y = jax.nn.relu(self.encoder_conv_1(rgbd))
         y = jax.nn.relu(self.encoder_conv_2(y))
         y = jax.nn.relu(self.encoder_conv_3(y))

@@ -93,7 +93,7 @@ class HighwayEnv:
         initial_ego_state: Float[Array, " n_states"],
         initial_non_ego_states: Float[Array, "n_non_ego n_states"],
         initial_state_covariance: Float[Array, "n_states n_states"],
-        shading_light_direction: Float[Array, " 3"],
+        shading_light_direction: Float[Array, " 3"] = jnp.array([0.0, 0.0, 1.0]),
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
@@ -277,7 +277,7 @@ class HighwayEnv:
         """
         # Render the depth image as seen by the ego agent
         ego_x, ego_y, ego_theta, ego_v = state.ego_state
-        camera_origin = jnp.array([ego_x, ego_y, self._highway_scene.car.height / 2])
+        camera_origin = jnp.array([ego_x, ego_y, 0.75 * self._highway_scene.car.height])
         ego_heading_vector = jnp.array([jnp.cos(ego_theta), jnp.sin(ego_theta), 0])
         extrinsics = CameraExtrinsics(
             camera_origin=camera_origin,
