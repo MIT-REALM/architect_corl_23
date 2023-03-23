@@ -47,6 +47,7 @@ def test_box():
         jnp.array([0.0, 0.0, 0.0]),  # center
         jnp.array([1.0, 1.0, 1.0]),  # extent
         jnp.eye(3),  # rotation
+        rounding=jnp.array(0.0),
     )
     # Test the SDF at a few points
     assert box(jnp.array([0.0, 0.0, 0.0])) < 0  # in the center
@@ -71,6 +72,7 @@ def test_box_rotation():
                 [0.0, 0.0, 1.0],
             ]
         ),
+        rounding=jnp.array(0.0)
     )
 
     # Test the SDF at a few points

@@ -230,7 +230,7 @@ def render_shadows(
     light_dir: Float[Array, " 3"],
     shadow_hardness: float = 1.0,
     max_steps: int = 40,
-    ambient: float = 0.0,
+    ambient: float = 0.01,
 ) -> Float[Array, "n_rays 3"]:
     """Render the shading of the given hit points.
 
