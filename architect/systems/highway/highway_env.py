@@ -38,10 +38,14 @@ class HighwayState(NamedTuple):
     Attributes:
         ego_state: the state of the ego vehicle
         non_ego_states: the states of all other vehicles
+        shading_light_direction: the direction of the light source for rendering
+        non_ego_colors: the colors of all non-ego agents
     """
 
     ego_state: Float[Array, " n_states"]
     non_ego_states: Float[Array, "n_non_ego n_states"]
+    shading_light_direction: Float[Array, " 3"]
+    non_ego_colors: Float[Array, "n_non_ego 3"]
 
 
 class HighwayEnv:
@@ -60,10 +64,13 @@ class HighwayEnv:
         highway_scene: a representation of the underlying highway scene.
         camera_intrinsics: the intrinsics of the camera mounted to the ego agent.
         dt: the time step to use for simulation.
-        initial_ego_state: the initial state of the ego vehicle.
-        initial_non_ego_states: the initial states of all non-ego vehicles.
+        initial_ego_state: the mean initial state of the ego vehicle.
+        initial_non_ego_states: the mean initial states of all non-ego vehicles.
         initial_state_covariance: the initial state covariance of all vehicles.
-        shading_light_direction: the direction of the light source for rendering.
+        mean_shading_light_direction: the mean direction of the light source for
+            rendering.
+        shading_light_direction_covariance: the covariance of the position of the light
+            source for rendering.
         collision_penalty: the penalty to apply when the ego vehicle collides with
             any obstacle in the scene.
         max_render_dist: the maximum distance to render in the depth image.
@@ -79,7 +86,8 @@ class HighwayEnv:
     _initial_ego_state: Float[Array, " n_states"]
     _initial_non_ego_states: Float[Array, "n_non_ego n_states"]
     _initial_state_covariance: Float[Array, "n_states n_states"]
-    _shading_light_direction: Float[Array, " 3"]
+    _mean_shading_light_direction: Float[Array, " 3"]
+    _shading_light_direction_covariance: Float[Array, " 3 3"]
 
     _axle_length: float = 1.0
 
@@ -93,7 +101,8 @@ class HighwayEnv:
         initial_ego_state: Float[Array, " n_states"],
         initial_non_ego_states: Float[Array, "n_non_ego n_states"],
         initial_state_covariance: Float[Array, "n_states n_states"],
-        shading_light_direction: Float[Array, " 3"] = jnp.array([0.0, 0.0, 1.0]),
+        mean_shading_light_direction: Float[Array, " 3"] = jnp.array([0.0, 0.0, 1.0]),
+        shading_light_direction_covariance: Float[Array, " 3 3"] = jnp.eye(3),
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
@@ -105,7 +114,8 @@ class HighwayEnv:
         self._initial_ego_state = initial_ego_state
         self._initial_non_ego_states = initial_non_ego_states
         self._initial_state_covariance = initial_state_covariance
-        self._shading_light_direction = shading_light_direction
+        self._mean_shading_light_direction = mean_shading_light_direction
+        self._shading_light_direction_covariance = shading_light_direction_covariance
         self._collision_penalty = collision_penalty
         self._max_render_dist = max_render_dist
         self._render_sharpness = render_sharpness
@@ -175,14 +185,19 @@ class HighwayEnv:
             car crashes into any other object in the scene.
         """
         # Unpack the state
-        ego_state, non_ego_states = state
+        ego_state, non_ego_states, _, _ = state
 
         # Compute the next state of the ego and other vehicles
         next_ego_state = self.car_dynamics(ego_state, ego_action)
         next_non_ego_states = jax.vmap(self.car_dynamics)(
             non_ego_states, non_ego_actions
         )
-        next_state = HighwayState(next_ego_state, next_non_ego_states)
+        next_state = HighwayState(
+            next_ego_state,
+            next_non_ego_states,
+            state.shading_light_direction,
+            state.non_ego_colors,
+        )
 
         # Compute the reward, which increases as the vehicle travels farther in
         # the positive x direction and decreases if it collides with anything
@@ -212,35 +227,6 @@ class HighwayEnv:
         # Compute the observations from a camera placed on the ego vehicle
         obs = self.get_obs(next_state)
 
-        # # Test case 1: constant reward, single-timestep episodes
-        # next_state = HighwayState(
-        #     ego_state=jnp.zeros_like(state.ego_state),
-        #     non_ego_states=jnp.zeros_like(state.non_ego_states),
-        # )
-        # reward = jnp.array(1.0)
-        # done = jnp.array(True)
-        # obs = HighwayObs(
-        #     speed=jnp.zeros(()),
-        #     depth_image=jnp.zeros((64, 64)),
-        #     ego_state=jnp.zeros(4),
-        # )
-
-        # # Test case 2: random reward = observation, single-timestep episodes
-        # # Next state is randomly 1 or 0, observation is the same as the state,
-        # # reward is equal to whether the current state is 1 or 0. The goal is that
-        # # the next reward should be predicted by the current observation.
-        # next_state = HighwayState(
-        #     ego_state=jnp.zeros_like(state.ego_state) + jrandom.bernoulli(key, 0.5),
-        #     non_ego_states=jnp.zeros_like(state.non_ego_states),
-        # )
-        # reward = state.ego_state.mean()
-        # obs = HighwayObs(
-        #     speed=jnp.zeros(()),
-        #     depth_image=jnp.zeros((64, 64)),
-        #     ego_state=next_state.ego_state,
-        # )
-        # done = jnp.array(True)
-
         return next_state, obs, reward, done
 
     @jaxtyped
@@ -254,14 +240,23 @@ class HighwayEnv:
         Returns:
             The initial state of the environment.
         """
-        ego_key, non_ego_key = jrandom.split(key)
+        ego_state_key, non_ego_state_key, light_key, color_key = jrandom.split(key, 4)
 
-        non_ego_state = self.sample_initial_non_ego_states(key)
-        ego_state = self.sample_initial_ego_state(key)
+        # Sample new the initial states
+        non_ego_state = self.sample_initial_non_ego_states(non_ego_state_key)
+        ego_state = self.sample_initial_ego_state(ego_state_key)
+
+        # Sample a new lighting direction
+        shading_light_direction = self.sample_shading_light_direction(light_key)
+
+        # Sample new colors for the non-ego vehicles
+        non_ego_colors = self.sample_non_ego_colors(color_key)
 
         return HighwayState(
             ego_state=ego_state,
             non_ego_states=non_ego_state,
+            shading_light_direction=shading_light_direction,
+            non_ego_colors=non_ego_colors,
         )
 
     @jaxtyped
@@ -293,7 +288,8 @@ class HighwayEnv:
             state.non_ego_states[:, :3],  # trim out speed; not needed for rendering
             max_dist=self._max_render_dist,
             sharpness=self._render_sharpness,
-            shading_light_direction=self._shading_light_direction,
+            shading_light_direction=state.shading_light_direction,
+            car_colors=state.non_ego_colors,
         )
         obs = HighwayObs(
             speed=ego_v,
@@ -430,3 +426,95 @@ class HighwayEnv:
         )
         logprobs = jax.vmap(logprob_fn)(action)
         return logprobs.sum()
+
+    @jaxtyped
+    @beartype
+    def sample_shading_light_direction(self, key: PRNGKeyArray) -> Float[Array, " 3"]:
+        """Sample light direction.
+
+        Args:
+            key: the random number generator key.
+
+        Returns:
+            A direction for the shading light.
+        """
+        direction = jax.random.multivariate_normal(
+            key,
+            self._mean_shading_light_direction,
+            self._shading_light_direction_covariance,
+        )
+        return direction
+
+    @jaxtyped
+    @beartype
+    def shading_light_direction_prior_logprob(
+        self,
+        direction: Float[Array, " 3"],
+    ) -> Float[Array, ""]:
+        """Compute the prior log probability of a shading light direction.
+
+        Args:
+            direction: the lighting direction of which to compute the log probability.
+
+        Returns:
+            The prior log probability of the givens direction.
+        """
+        logprob = jax.scipy.stats.multivariate_normal.logpdf(
+            direction,
+            self._mean_shading_light_direction,
+            self._shading_light_direction_covariance,
+        )
+        return logprob
+
+    @jaxtyped
+    @beartype
+    def sample_non_ego_colors(self, key: PRNGKeyArray) -> Float[Array, "n_non_ego 3"]:
+        """Sample RGB colors for each non-ego agent uniformly at random.
+
+        Args:
+            key: the random number generator key.
+
+        Returns:
+            An array of RGB colors for each non-ego agent.
+        """
+        n_non_ego = self._initial_non_ego_states.shape[0]
+        color = jax.random.uniform(key, shape=(n_non_ego, 3))
+        return color
+
+    @jaxtyped
+    @beartype
+    def non_ego_colors_prior_logprob(
+        self,
+        color: Float[Array, "n_non_ego 3"],
+    ) -> Float[Array, ""]:
+        """Compute the prior log probability of non-ego vehicle colors.
+
+        These colors are sampled uniformly at random with each element between 0 and 1.
+
+        Args:
+            color: the colors of which to compute the log probability.
+
+        Returns:
+            The prior log probability of the given colors.
+        """
+        # Define the smoothing constant
+        b = 50.0
+
+        def log_smooth_uniform(x, x_min, x_max):
+            return jax.nn.log_sigmoid(b * (x - x_min)) + jax.nn.log_sigmoid(
+                b * (x_max - x)
+            )
+
+        logprob = log_smooth_uniform(color, 0.0, 1.0).sum()
+        return logprob
+
+    @jaxtyped
+    @beartype
+    def overall_prior_logprob(self, state: HighwayState) -> Float[Array, ""]:
+        """Compute the overall prior logprobability of the given initial state"""
+        return (
+            self.initial_ego_state_prior_logprob(state.ego_state)
+            + self.initial_non_ego_states_prior_logprob(state.non_ego_states)
+            + self.shading_light_direction_prior_logprob(state.shading_light_direction)
+            + self.non_ego_color_prior_logprob(state.non_ego_colors)
+        )

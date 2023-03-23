@@ -278,7 +278,7 @@ def train_ppo_driver(
     gd_steps_per_update: int = 50,
     minibatch_size: int = 32,
     max_grad_norm: float = 1.0,
-    logdir: str = "./tmp/overtake2_ppo_32x10",
+    logdir: str = "./tmp/overtake2_ppo_32x20_dr",
 ) -> DrivingPolicy:
     """Train the driver using PPO.
 
@@ -299,16 +299,18 @@ def train_ppo_driver(
         [
             [-90.0, -3.0, 0.0, 7.0],
             [-70, 3.0, 0.0, 8.0],
-            # [-90, -4.0, 0.0, 8.5],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.5]) ** 2)
+
     # Fix non-ego actions to be constant (drive straight at fixed speed)
     n_non_ego = 2
     non_ego_actions = jnp.zeros((n_non_ego, 2))
 
     # Set the direction of light shading
     shading_light_direction = jnp.array([-0.2, -1.0, 1.5])
+    shading_light_direction /= jnp.linalg.norm(shading_light_direction)
+    shading_direction_covariance = 0.5 * jnp.eye(3)
 
     env = HighwayEnv(
         scene,
@@ -318,7 +320,8 @@ def train_ppo_driver(
         initial_non_ego_states=initial_non_ego_states,
         initial_state_covariance=initial_state_covariance,
         collision_penalty=5.0,
-        shading_light_direction=shading_light_direction,
+        mean_shading_light_direction=shading_light_direction,
+        shading_light_direction_covariance=shading_direction_covariance,
     )
 
     # Set up the policy
@@ -372,7 +375,7 @@ def train_ppo_driver(
         )
         if epoch % 20 == 0 or epoch == epochs - 1:
             # Save trajectory images; can be converted to video using this command:
-            #  ffmpeg -framerate 10 -i img%04d.png -c:v libx264 -r 30 out.mp4
+            #  ffmpeg -framerate 10 -i img_%d.png -c:v libx264 -r 30 out.mp4
             save_traj_imgs(trajectory, logdir, epoch)
             # Save policy
             eqx.tree_serialise_leaves(

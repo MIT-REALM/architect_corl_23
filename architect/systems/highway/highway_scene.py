@@ -61,11 +61,16 @@ class Car(NamedTuple):
 
     @jaxtyped
     @beartype
-    def get_shapes(self, state: Float[Array, " 3"]) -> List[SDFShape]:
+    def get_shapes(
+        self,
+        state: Float[Array, " 3"],
+        color: Float[Array, " 3"] = jnp.array([0.972549, 0.4, 0.14117648]),
+    ) -> List[SDFShape]:
         """Return a list of primitive shapes representing this car
 
         Args:
             state: the [x, y, heading] state of the car
+            color: the color of the car
 
         Returns:
             A list of SDF shapes representing the car
@@ -92,7 +97,7 @@ class Car(NamedTuple):
                 ]
             ),
             rotation=rotation,
-            c=jnp.array([248, 102, 36]) / 255.0,
+            c=color,
             rounding=jnp.array(0.1),
         )
         cab = Box(
@@ -213,15 +218,26 @@ class HighwayScene:
     @jaxtyped
     @beartype
     def _get_shapes(
-        self, car_states: Float[Array, "n_car 3"], sharpness: float = 100.0
+        self,
+        car_states: Float[Array, "n_car 3"],
+        sharpness: float = 100.0,
+        car_colors: Optional[Float[Array, "n_car 3"]] = None,
     ) -> SDFShape:
         """Return an SDF representation this scene.
 
         Args:
             car_states: the [x, y, heading] state of each car in the scene
             sharpness: the sharpness of the SDF shapes
+            car_colors: the color of each car. If None, the default colors are used.
         """
-        car_shapes = [self.car.get_shapes(state) for state in car_states]
+        if car_colors is None:
+            car_shapes = [self.car.get_shapes(state) for state in car_states]
+        else:
+            car_shapes = [
+                self.car.get_shapes(state, color)
+                for state, color in zip(car_states, car_colors)
+            ]
+
         shapes = (
             []
             + [self.ground]
@@ -318,6 +334,7 @@ class HighwayScene:
         extrinsics: CameraExtrinsics,
         car_states: Float[Array, "n_car 3"],
         shading_light_direction: Optional[Float[Array, "3"]] = None,
+        car_colors: Optional[Float[Array, "n_car 3"]] = None,
         max_dist: float = 50.0,
         sharpness: float = 50.0,
     ) -> Tuple[Float[Array, "res_x res_y"], Float[Array, "res_x res_y 3"]]:
@@ -329,6 +346,7 @@ class HighwayScene:
             car_states: the [x, y, heading] state of each car
             shading_light_direction: the direction of the light source for shading. If
                 None, no shading is applied.
+            car_colors: the color of each car. If None, the default colors are used.
             max_dist: the maximum distance to render
             sharpness: the sharpness of the scene
 
@@ -336,7 +354,7 @@ class HighwayScene:
             The depth and color images of the scene
         """
         # Make the scene (a composite of SDF shapes)
-        scene = self._get_shapes(car_states, sharpness=sharpness)
+        scene = self._get_shapes(car_states, sharpness=sharpness, car_colors=car_colors)
 
         # Render the scene
         rays = pinhole_camera_rays(intrinsics, extrinsics)

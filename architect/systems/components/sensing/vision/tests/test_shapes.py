@@ -72,7 +72,7 @@ def test_box_rotation():
                 [0.0, 0.0, 1.0],
             ]
         ),
-        rounding=jnp.array(0.0)
+        rounding=jnp.array(0.0),
     )
 
     # Test the SDF at a few points
