@@ -46,7 +46,7 @@ class DrivingPolicy(eqx.Module):
         # Create the convolutional encoder
         cnn_keys = jrandom.split(cnn_key, 3)
         kernel_size = 6
-        stride = 2
+        stride = 1  # 2 for 64x64
         self.encoder_conv_1 = eqx.nn.Conv2d(
             key=cnn_keys[0],
             in_channels=image_channels,

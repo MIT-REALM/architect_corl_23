@@ -2,6 +2,7 @@
 import os
 from functools import partial
 
+from jax_tqdm import scan_tqdm
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
@@ -123,7 +124,10 @@ def generate_trajectory(
     """
 
     # Create a function to take one step with the policy
-    def step(carry, key: PRNGKeyArray):
+    @scan_tqdm(rollout_length, message="Rollout")
+    def step(carry, scan_input):
+        # Unpack the input
+        _, key = scan_input  # first element is index for tqdm
         # Unpack the carry
         obs, state = carry
 
@@ -150,7 +154,7 @@ def generate_trajectory(
     # Transform and rollout!
     keys = jrandom.split(rollout_key, rollout_length)
     _, (obs, actions, action_logprobs, rewards, values, dones) = jax.lax.scan(
-        step, (initial_obs, initial_state), keys
+        step, (initial_obs, initial_state), (jnp.arange(rollout_length), keys)
     )
 
     # Normalize rewards used to compute advantage estimate
@@ -264,30 +268,8 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
         )
 
 
-def train_ppo_driver(
-    image_shape: Tuple[int, int],
-    learning_rate: float = 1e-5,
-    gamma: float = 0.99,
-    gae_lambda: float = 0.97,
-    epsilon: float = 0.2,
-    critic_weight: float = 1.0,
-    entropy_weight: float = 0.1,
-    seed: int = 0,
-    steps_per_epoch: int = 32 * 20,
-    epochs: int = 200,
-    gd_steps_per_update: int = 50,
-    minibatch_size: int = 32,
-    max_grad_norm: float = 1.0,
-    logdir: str = "./tmp/overtake2_ppo_32x20_dr",
-) -> DrivingPolicy:
-    """Train the driver using PPO.
-
-    Args: various hyperparameters.
-    """
-    # Set up logging
-    writer = SummaryWriter(logdir)
-
-    # Set up the environment
+def make_highway_env(image_shape: Tuple[int, int]):
+    """Make the highway environment."""
     scene = HighwayScene(num_lanes=3, lane_width=5.0, segment_length=200.0)
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
@@ -303,14 +285,10 @@ def train_ppo_driver(
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.5]) ** 2)
 
-    # Fix non-ego actions to be constant (drive straight at fixed speed)
-    n_non_ego = 2
-    non_ego_actions = jnp.zeros((n_non_ego, 2))
-
     # Set the direction of light shading
     shading_light_direction = jnp.array([-0.2, -1.0, 1.5])
     shading_light_direction /= jnp.linalg.norm(shading_light_direction)
-    shading_direction_covariance = 0.5 * jnp.eye(3)
+    shading_direction_covariance = (0.25) ** 2 * jnp.eye(3)
 
     env = HighwayEnv(
         scene,
@@ -323,6 +301,38 @@ def train_ppo_driver(
         mean_shading_light_direction=shading_light_direction,
         shading_light_direction_covariance=shading_direction_covariance,
     )
+    return env
+
+
+def train_ppo_driver(
+    image_shape: Tuple[int, int],
+    learning_rate: float = 1e-5,
+    gamma: float = 0.99,
+    gae_lambda: float = 0.97,
+    epsilon: float = 0.2,
+    critic_weight: float = 1.0,
+    entropy_weight: float = 0.1,
+    seed: int = 0,
+    steps_per_epoch: int = 32 * 20,
+    epochs: int = 200,
+    gd_steps_per_update: int = 50,
+    minibatch_size: int = 32,
+    max_grad_norm: float = 1.0,
+    logdir: str = "./tmp/overtake2_ppo_32x20_dr_64x64_gpu",
+):
+    """Train the driver using PPO.
+
+    Args: various hyperparameters.
+    """
+    # Set up logging
+    writer = SummaryWriter(logdir)
+
+    # Set up the environment
+    env = make_highway_env(image_shape)
+
+    # Fix non-ego actions to be constant (drive straight at fixed speed)
+    n_non_ego = 2
+    non_ego_actions = jnp.zeros((n_non_ego, 2))
 
     # Set up the policy
     key = jrandom.PRNGKey(seed)
@@ -375,7 +385,7 @@ def train_ppo_driver(
         )
         if epoch % 20 == 0 or epoch == epochs - 1:
             # Save trajectory images; can be converted to video using this command:
-            #  ffmpeg -framerate 10 -i img_%d.png -c:v libx264 -r 30 out.mp4
+            # ffmpeg -framerate 10 -i img_%d.png -c:v libx264 -r 30 -vf scale=320x320:flags=neighbor out.mp4
             save_traj_imgs(trajectory, logdir, epoch)
             # Save policy
             eqx.tree_serialise_leaves(
@@ -444,4 +454,4 @@ def train_ppo_driver(
 
 
 if __name__ == "__main__":
-    train_ppo_driver((128, 128))
+    train_ppo_driver((64, 64))

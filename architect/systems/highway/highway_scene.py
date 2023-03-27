@@ -368,6 +368,10 @@ class HighwayScene:
 
         # Add shading if requested
         if shading_light_direction is not None:
+            # Normalize
+            shading_light_direction = shading_light_direction / (
+                1e-3 + jnp.linalg.norm(shading_light_direction)
+            )
             shadows = render_shadows(
                 hit_pts, scene, shading_light_direction, ambient=0.2
             ).reshape(intrinsics.resolution)

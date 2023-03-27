@@ -31,7 +31,7 @@ class HighwayObs(NamedTuple):
     ego_state: Float[Array, "*batch n_states"]
 
 
-@beartype
+# @beartype
 class HighwayState(NamedTuple):
     """The state of the ego vehicle and all other vehicles on the highway.
 
