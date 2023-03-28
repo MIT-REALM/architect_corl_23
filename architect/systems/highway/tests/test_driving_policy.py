@@ -1,8 +1,8 @@
 """Test the driving policy network."""
-import pytest
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+import pytest
 
 from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayObs

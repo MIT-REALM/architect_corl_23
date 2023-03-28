@@ -1,25 +1,25 @@
 """Define a highway scene with a variable number of lanes and cars."""
-from jaxtyping import Float, Array, jaxtyped
 import jax
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import List, NamedTuple, Optional, Tuple
+from jaxtyping import Array, Float, jaxtyped
 
-from architect.systems.components.sensing.vision.shapes import (
-    SDFShape,
-    Halfspace,
-    Box,
-    Cylinder,
-    Scene,
-)
 from architect.systems.components.sensing.vision.render import (
+    CameraExtrinsics,
+    CameraIntrinsics,
     pinhole_camera_rays,
     raycast,
-    render_depth,
     render_color,
+    render_depth,
     render_shadows,
-    CameraIntrinsics,
-    CameraExtrinsics,
+)
+from architect.systems.components.sensing.vision.shapes import (
+    Box,
+    Cylinder,
+    Halfspace,
+    Scene,
+    SDFShape,
 )
 
 

@@ -3,7 +3,6 @@ from typing import Callable
 
 import jax.numpy as jnp
 
-
 # Dynamics should take current state, control input, noise, and timestep
 DiscreteTimeDynamicsCallable = Callable[
     [jnp.ndarray, jnp.ndarray, jnp.ndarray, float], jnp.ndarray

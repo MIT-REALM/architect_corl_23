@@ -1,6 +1,6 @@
-import time
 import json
 import os.path
+import time
 
 import jax
 import jax.numpy as jnp
@@ -9,8 +9,8 @@ from beartype import beartype
 from architect.systems.power_systems.acopf import ACOPF
 from architect.systems.power_systems.acopf_types import (
     InterconnectionSpecification,
-    NetworkState,
     NetworkSpecification,
+    NetworkState,
 )
 
 

@@ -3,11 +3,7 @@ import time
 import jax.numpy as jnp
 import matplotlib.pyplot as plt  # noqa
 
-
-from architect.systems.components.specifications.stl.formula import (
-    STLPredicate,
-    STLAnd,
-)
+from architect.systems.components.specifications.stl.formula import STLAnd, STLPredicate
 
 
 def make_test_predicate():

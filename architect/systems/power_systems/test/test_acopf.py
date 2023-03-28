@@ -1,7 +1,6 @@
-import pytest
-
 import jax.numpy as jnp
 import jax.random as jrandom
+import pytest
 
 from architect.systems.power_systems.acopf import ACOPF
 from architect.systems.power_systems.acopf_types import (
@@ -9,8 +8,8 @@ from architect.systems.power_systems.acopf_types import (
     GenerationDispatch,
     InterconnectionSpecification,
     LoadDispatch,
-    NetworkState,
     NetworkSpecification,
+    NetworkState,
 )
 
 

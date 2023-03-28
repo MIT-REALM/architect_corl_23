@@ -6,12 +6,12 @@ return a fully accurate SDF, but they should be sufficient for rendering.
 """
 from abc import ABC, abstractmethod
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
 from beartype.typing import List, Optional
-import equinox as eqx
+from jaxtyping import Array, Float, jaxtyped
 
 from architect.utils import softmin
 

@@ -2,11 +2,11 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from architect.systems.hide_and_seek.hide_and_seek_types import (
-    Trajectory2D,
-    MultiAgentTrajectory,
-)
 from architect.systems.hide_and_seek.hide_and_seek import Game
+from architect.systems.hide_and_seek.hide_and_seek_types import (
+    MultiAgentTrajectory,
+    Trajectory2D,
+)
 
 
 def test_Game(plot=False):

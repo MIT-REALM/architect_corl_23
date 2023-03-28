@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 data = [
     {

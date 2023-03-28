@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-
 # Define constant parameters
 MU = 3.986e14  # Earth's gravitational parameter (m^3 / s^2)
 A_GEO = 42164e3  # GEO semi-major axis (m)

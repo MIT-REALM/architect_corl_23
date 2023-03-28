@@ -4,22 +4,22 @@ import json
 import os
 import time
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
-from jax.nn import sigmoid
-import equinox as eqx
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
-from jaxtyping import Float, Array, Shaped
 from beartype.typing import NamedTuple
+from jax.nn import sigmoid
+from jaxtyping import Array, Float, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes
-
-from architect.systems.highway.driving_policy import DrivingPolicy
-from architect.systems.highway.highway_env import HighwayState, HighwayEnv, HighwayObs
 from architect.experiments.highway.train_highway_agent import make_highway_env
+from architect.systems.highway.driving_policy import DrivingPolicy
+from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
 
 
 class SimulationResults(NamedTuple):
@@ -34,7 +34,7 @@ def simulate(
     env: HighwayEnv,
     policy: DrivingPolicy,
     initial_state: HighwayState,
-    max_steps: int = 8,  # 0,
+    max_steps: int = 80,
 ) -> Float[Array, ""]:
     """Simulate the highway environment.
 
@@ -53,10 +53,6 @@ def simulate(
     Returns:
         SimulationResults object
     """
-    # Make sure the policy is deterministic
-    policy = eqx.tree_at(
-        lambda policy: policy.log_action_std, policy, jnp.array(-jnp.inf)
-    )
 
     def step(carry, key):
         # Unpack the carry
@@ -67,7 +63,7 @@ def simulate(
         step_key, action_subkey = jrandom.split(key)
 
         # Sample an action from the policy
-        action, action_logprob, value = policy(obs, action_subkey)
+        action, action_logprob, value = policy(obs, action_subkey, deterministic=True)
 
         # Fix non-ego actions
         non_ego_actions = jnp.zeros((state.non_ego_states.shape[0], 2))
@@ -183,68 +179,74 @@ if __name__ == "__main__":
     initial_state_keys = jrandom.split(initial_state_key, num_chains)
     initial_states = eqx.filter_vmap(env.reset)(initial_state_keys)
 
-    # # Run the prediction+mitigation process
-    # t_start = time.perf_counter()
-    # dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
-    #     prng_key,
-    #     policy,
-    #     initial_states,
-    #     dp_logprior_fn=lambda dp: jnp.array(0.0),  # uniform prior over policies
-    #     ep_logprior_fn=env.overall_prior_logprob,
-    #     potential_fn=lambda dp, ep: L * simulate(env, dp, ep).reward,
-    #     num_rounds=num_rounds,
-    #     num_mcmc_steps_per_round=num_mcmc_steps_per_round,
-    #     dp_mcmc_step_size=dp_mcmc_step_size,
-    #     ep_mcmc_step_size=ep_mcmc_step_size,
-    #     use_gradients=use_gradients,
-    #     use_stochasticity=use_stochasticity,
-    #     repair=repair,
-    #     predict=predict,
-    #     quench_rounds=quench_rounds,
-    #     tempering_schedule=tempering_schedule,
-    #     dp_grad_clip=dp_grad_clip,
-    #     ep_grad_clip=ep_grad_clip,
-    # )
-    # t_end = time.perf_counter()
-    # print(
-    #     f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
-    # )
-
-    # # Select the policy that performs best against all predicted failures before
-    # # the final round (choose from all chains)
-    # if repair:
-    #     most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
-    # else:
-    #     # Just pick one policy arbitrarily if we didn't optimize the policies.
-    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
-
-    # # Evaluate this single policy against all failures
-    # final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
-    # TODO for debugging plots, just use the initial policy and eps
-    t_end = 0.0
-    t_start = 0.0
-    final_dps = jtu.tree_map(
-        lambda leaf: leaf[-1] if eqx.is_array(leaf) else leaf, policy
+    # Run the prediction+mitigation process
+    t_start = time.perf_counter()
+    dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
+        prng_key,
+        policy,
+        initial_states,
+        dp_logprior_fn=lambda dp: jnp.array(0.0),  # uniform prior over policies
+        ep_logprior_fn=env.overall_prior_logprob,
+        potential_fn=lambda dp, ep: L * simulate(env, dp, ep).reward,
+        num_rounds=num_rounds,
+        num_mcmc_steps_per_round=num_mcmc_steps_per_round,
+        dp_mcmc_step_size=dp_mcmc_step_size,
+        ep_mcmc_step_size=ep_mcmc_step_size,
+        use_gradients=use_gradients,
+        use_stochasticity=use_stochasticity,
+        repair=repair,
+        predict=predict,
+        quench_rounds=quench_rounds,
+        tempering_schedule=tempering_schedule,
+        dp_grad_clip=dp_grad_clip,
+        ep_grad_clip=ep_grad_clip,
     )
-    final_eps = initial_states
-    dp_logprobs = jnp.zeros((num_rounds, num_chains))
-    ep_logprobs = jnp.zeros((num_rounds, num_chains))
-    # TODO debugging bit ends here
+    t_end = time.perf_counter()
+    print(
+        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+    )
+
+    # Select the policy that performs best against all predicted failures before
+    # the final round (choose from all chains)
+    if repair:
+        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    else:
+        # Just pick one policy arbitrarily if we didn't optimize the policies.
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
+
+    # Evaluate this single policy against all failures
+    final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
+
+    # # TODO for debugging plots, just use the initial policy and eps
+    # t_end = 0.0
+    # t_start = 0.0
+    # final_dps = jtu.tree_map(
+    #     lambda leaf: leaf[-1] if eqx.is_array(leaf) else leaf, policy
+    # )
+    # final_eps = initial_states
+    # dp_logprobs = jnp.zeros((num_rounds, num_chains))
+    # ep_logprobs = jnp.zeros((num_rounds, num_chains))
+    # # TODO debugging bit ends here
 
     result = eqx.filter_vmap(lambda dp, ep: simulate(env, dp, ep), in_axes=(None, 0))(
         final_dps, final_eps
     )
-    # TODO debug reward!!!
 
     # Plot the results
-    fig = plt.figure(figsize=(32, 16), constrained_layout=True)
+    fig = plt.figure(figsize=(64, 32), constrained_layout=True)
     axs = fig.subplot_mosaic(
         [
-            ["initial_state", "trace", "reward"],
-            ["initial_obs", "initial_obs", "initial_obs"],
-            ["final_obs", "final_obs", "final_obs"],
-        ]
+            ["non_ego_initial_states", "lighting", "trace", "color_1", "color_2"],
+            ["initial_obs", "initial_obs", "initial_obs", "initial_obs", "initial_obs"],
+            ["final_obs", "final_obs", "final_obs", "final_obs", "final_obs"],
+            ["reward", "reward", "reward", "reward", "reward"],
+        ],
+        per_subplot_kw={
+            "lighting": {"projection": "polar"},
+            "color_1": {"projection": "3d"},
+            "color_2": {"projection": "3d"},
+        },
     )
 
     # Plot the chain convergence
@@ -257,24 +259,56 @@ if __name__ == "__main__":
 
     axs["trace"].set_xlabel("# Samples")
 
-    # Plot the initial states
-    sns.swarmplot(
-        data=[
-            final_eps.non_ego_states[:, 0, 3],  # first car velocity
-            final_eps.non_ego_states[:, 1, 3],  # second car velocity
-            final_eps.shading_light_direction[:, 0],  # light direction x
-            final_eps.shading_light_direction[:, 1],  # light direction y
-            final_eps.shading_light_direction[:, 2],  # light direction z
-        ],
-        ax=axs["initial_state"],
-    )
-    axs["initial_state"].set_xticklabels(
-        ["Car 1 v", "Car 2 v", "Light x", "Light y", "Light z"]
+    # Plot the initial states of the non-ego agents
+    axs["non_ego_initial_states"].set_title("Initial states of non-ego agents")
+    axs["non_ego_initial_states"].set_xlabel("Car 1 velocity (m/s)")
+    axs["non_ego_initial_states"].set_ylabel("Car 2 velocity (m/s)")
+    axs["non_ego_initial_states"].scatter(
+        final_eps.non_ego_states[:, 0, 3],  # first car velocity
+        final_eps.non_ego_states[:, 1, 3],  # second car velocity
+        c=result.reward,
     )
 
+    # Plot the initial lighting conditions
+    axs["lighting"].set_title("Lighting conditions")
+    light_distance = jnp.linalg.norm(final_eps.shading_light_direction, axis=-1)
+    inclination = jnp.arccos(final_eps.shading_light_direction[:, 2] / light_distance)
+    azimuth = jnp.sign(final_eps.shading_light_direction[:, 1]) * jnp.arccos(
+        final_eps.shading_light_direction[:, 0]
+        / jnp.linalg.norm(final_eps.shading_light_direction[:, :2], axis=-1)
+    )
+    axs["lighting"].scatter(
+        azimuth,
+        inclination,
+        c=result.reward,
+    )
+    axs["lighting"].set_xlabel("Azimuth")
+    axs["lighting"].set_ylabel("Inclination")
+
+    axs["color_1"].scatter(
+        final_eps.non_ego_colors[:, 0, 0],
+        final_eps.non_ego_colors[:, 0, 1],
+        final_eps.non_ego_colors[:, 0, 2],
+        c=result.reward,
+    )
+    axs["color_1"].set_title("Car 1 color")
+    axs["color_1"].set_xlabel("R")
+    axs["color_1"].set_ylabel("G")
+    axs["color_1"].set_zlabel("B")
+
+    axs["color_2"].scatter(
+        final_eps.non_ego_colors[:, 1, 0],
+        final_eps.non_ego_colors[:, 1, 1],
+        final_eps.non_ego_colors[:, 1, 2],
+        c=result.reward,
+    )
+    axs["color_2"].set_title("Car 2 color")
+    axs["color_2"].set_xlabel("R")
+    axs["color_2"].set_ylabel("G")
+    axs["color_2"].set_zlabel("B")
+
     # Plot the reward across all failure cases
-    sns.histplot(result.reward, ax=axs["reward"])
-    axs["reward"].set_xlabel("Reward")
+    axs["reward"].plot(result.reward, "ko")
 
     # Plot the initial RGB observations tiled on the same subplot
     axs["initial_obs"].imshow(

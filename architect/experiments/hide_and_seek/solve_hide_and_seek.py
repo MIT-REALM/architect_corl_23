@@ -8,13 +8,12 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
+from jax.config import config
 from jaxtyping import Array, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes
 from architect.systems.hide_and_seek.hide_and_seek import Game
 from architect.systems.hide_and_seek.hide_and_seek_types import Arena
-
-from jax.config import config
 
 config.update("jax_debug_nans", True)
 

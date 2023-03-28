@@ -7,10 +7,10 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
-from beartype.typing import Union, NamedTuple
-from jaxtyping import Array, Float, Bool, jaxtyped
+from beartype.typing import NamedTuple, Union
+from jaxtyping import Array, Bool, Float, jaxtyped
 
-from architect.types import LogLikelihood, PRNGKeyArray, Sampler, Params
+from architect.types import LogLikelihood, Params, PRNGKeyArray, Sampler
 
 
 # @jaxtyped
@@ -78,14 +78,18 @@ def make_kernel(
         grad = jax.lax.cond(
             use_gradients,
             lambda x: jtu.tree_map(
-                lambda v: jnp.clip(v, a_min=-grad_clip, a_max=grad_clip), x
+                # careful: we might have None leaves for equinox modules
+                lambda v: jnp.clip(v, a_min=-grad_clip, a_max=grad_clip)
+                if v is not None
+                else v,
+                x,
             ),
             lambda x: jtu.tree_map(jnp.zeros_like, x),
             state.logdensity_grad,
         )
 
         theta = jtu.tree_map(
-            lambda new_x, x, g: new_x - x - step_size * g,
+            lambda new_x, x, g: new_x - x - step_size * g if g is not None else 0.0,
             new_state.position,
             state.position,
             grad,

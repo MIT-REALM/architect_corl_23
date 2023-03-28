@@ -5,6 +5,7 @@ Provides system-agnostic code for failure mode prediction and mitigation.
 """
 import time
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom

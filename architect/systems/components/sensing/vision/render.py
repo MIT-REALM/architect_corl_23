@@ -2,10 +2,9 @@
 
 import jax
 import jax.numpy as jnp
-
-from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
 from beartype.typing import Callable, NamedTuple, Tuple
+from jaxtyping import Array, Float, jaxtyped
 
 
 @beartype

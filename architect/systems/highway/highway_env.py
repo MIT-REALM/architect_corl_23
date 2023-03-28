@@ -5,15 +5,15 @@ import jax.numpy as jnp
 import jax.random as jrandom
 from beartype import beartype
 from beartype.typing import NamedTuple, Tuple
-from jaxtyping import Float, Bool, Array, jaxtyped
+from jaxtyping import Array, Bool, Float, jaxtyped
 
-from architect.types import PRNGKeyArray
 from architect.systems.components.sensing.vision.render import (
-    CameraIntrinsics,
     CameraExtrinsics,
+    CameraIntrinsics,
 )
 from architect.systems.components.sensing.vision.util import look_at
 from architect.systems.highway.highway_scene import HighwayScene
+from architect.types import PRNGKeyArray
 
 
 # @beartype

@@ -1,7 +1,7 @@
 """Common utility functions."""
+from beartype import beartype
 from jax.nn import logsumexp
 from jaxtyping import Array, Float, jaxtyped
-from beartype import beartype
 
 
 @jaxtyped

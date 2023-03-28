@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from architect.systems.components.specifications.stl.signal import stack, max1d
+from architect.systems.components.specifications.stl.signal import max1d, stack
 
 
 def test_stack():

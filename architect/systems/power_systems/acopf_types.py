@@ -2,12 +2,7 @@ import jax.experimental.sparse as jsparse
 import jax.numpy as jnp
 from beartype.typing import NamedTuple, Tuple
 from jax.nn import relu, sigmoid
-from jaxtyping import (
-    Array,
-    Float,
-    Integer,
-    # jaxtyped,
-)
+from jaxtyping import Array, Float, Integer  # jaxtyped,
 
 
 # @jaxtyped

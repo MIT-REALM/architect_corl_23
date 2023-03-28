@@ -2,11 +2,11 @@
 import jax.numpy as jnp
 
 from architect.systems.components.sensing.vision.shapes import (
-    Sphere,
-    Halfspace,
     Box,
     Cylinder,
+    Halfspace,
     Scene,
+    Sphere,
 )
 
 

@@ -1,19 +1,18 @@
 import jax.numpy as jnp
 import matplotlib.pyplot as plt  # noqa
 
-
 from architect.systems.components.specifications.stl.formula import (
-    STLPredicate,
-    STLNegation,
     STLAnd,
-    STLOr,
     STLImplies,
-    STLUntimedEventually,
+    STLNegation,
+    STLOr,
+    STLPredicate,
+    STLTimedAlways,
     STLTimedEventually,
-    STLUntimedUntil,
     STLTimedUntil,
     STLUntimedAlways,
-    STLTimedAlways,
+    STLUntimedEventually,
+    STLUntimedUntil,
 )
 
 

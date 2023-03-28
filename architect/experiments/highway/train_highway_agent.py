@@ -2,28 +2,24 @@
 import os
 from functools import partial
 
-from jax_tqdm import scan_tqdm
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
-from jaxtyping import Float, Array, Bool, jaxtyped
+import matplotlib.image
+import optax
 from beartype import beartype
 from beartype.typing import NamedTuple, Tuple
+from jax_tqdm import scan_tqdm
+from jaxtyping import Array, Bool, Float, jaxtyped
 from torch.utils.tensorboard import SummaryWriter
-import equinox as eqx
-import optax
-import matplotlib.image
 
-from architect.types import PRNGKeyArray
 from architect.systems.components.sensing.vision.render import CameraIntrinsics
 from architect.systems.highway.driving_policy import DrivingPolicy
+from architect.systems.highway.highway_env import HighwayEnv, HighwayObs
 from architect.systems.highway.highway_scene import HighwayScene
-from architect.systems.highway.highway_env import (
-    HighwayEnv,
-    HighwayObs,
-)
-
+from architect.types import PRNGKeyArray
 
 #############################################################################
 # Define some utilities for generating training trajectories and generalized

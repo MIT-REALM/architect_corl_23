@@ -7,9 +7,9 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
-from jax.nn import sigmoid
 import matplotlib.pyplot as plt
 import seaborn as sns
+from jax.nn import sigmoid
 from jaxtyping import Array, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes

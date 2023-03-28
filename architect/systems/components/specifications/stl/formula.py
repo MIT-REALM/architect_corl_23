@@ -4,8 +4,8 @@ from functools import partial
 from typing import Callable
 
 import jax
-from jax.nn import logsumexp
 import jax.numpy as jnp
+from jax.nn import logsumexp
 
 from .signal import max1d
 

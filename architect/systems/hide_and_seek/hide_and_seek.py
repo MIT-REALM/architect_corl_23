@@ -1,13 +1,13 @@
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jax.nn import logsumexp
 from beartype import beartype
+from jax.nn import logsumexp
 from jaxtyping import Array, Float, jaxtyped
 
 from architect.systems.hide_and_seek.hide_and_seek_types import (
-    MultiAgentTrajectory,
     HideAndSeekResult,
+    MultiAgentTrajectory,
 )
 
 

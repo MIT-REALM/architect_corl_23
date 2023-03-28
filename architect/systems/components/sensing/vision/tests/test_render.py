@@ -1,25 +1,24 @@
 """Test scene rendering."""
-import pytest
-
 import jax
 import jax.numpy as jnp
+import pytest
 
 from architect.systems.components.sensing.vision.render import (
+    CameraExtrinsics,
+    CameraIntrinsics,
     pinhole_camera_rays,
     raycast,
     raycast_shadow,
-    render_depth,
     render_color,
+    render_depth,
     render_shadows,
-    CameraExtrinsics,
-    CameraIntrinsics,
 )
 from architect.systems.components.sensing.vision.shapes import (
-    Sphere,
     Box,
     Cylinder,
     Halfspace,
     Scene,
+    Sphere,
 )
 from architect.systems.components.sensing.vision.util import look_at
 

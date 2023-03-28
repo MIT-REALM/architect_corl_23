@@ -1,16 +1,16 @@
 from .formula import (
-    STLFormula,
-    STLPredicate,
-    STLNegation,
     STLAnd,
-    STLOr,
+    STLFormula,
     STLImplies,
-    STLUntimedEventually,
+    STLNegation,
+    STLOr,
+    STLPredicate,
+    STLTimedAlways,
     STLTimedEventually,
-    STLUntimedUntil,
     STLTimedUntil,
     STLUntimedAlways,
-    STLTimedAlways,
+    STLUntimedEventually,
+    STLUntimedUntil,
 )
 
 __all__ = [

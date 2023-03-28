@@ -2,9 +2,9 @@ import argparse
 import json
 
 import jax
-import jax.tree_util as jtu
 import jax.numpy as jnp
 import jax.random as jrandom
+import jax.tree_util as jtu
 
 from architect.systems.power_systems.acopf_types import (
     Dispatch,

@@ -1,25 +1,26 @@
-import equinox as eqx
+from dataclasses import field
+
 import diffrax
+import equinox as eqx
 import jax
 import jax.experimental.sparse as jsparse
 import jax.numpy as jnp
 import jax.random as jrandom
-from dataclasses import field
 from beartype import beartype
-from beartype.typing import Tuple, Dict
+from beartype.typing import Dict, Tuple
 from jax.nn import log_sigmoid, relu
-from jaxtyping import Array, Float, Bool, jaxtyped
+from jaxtyping import Array, Bool, Float, jaxtyped
 
-from architect.types import PRNGKeyArray
 from architect.systems.power_systems.acopf_types import (
     ACOPFResult,
     Dispatch,
     GenerationDispatch,
     InterconnectionSpecification,
     LoadDispatch,
-    NetworkState,
     NetworkSpecification,
+    NetworkState,
 )
+from architect.types import PRNGKeyArray
 
 
 @jaxtyped

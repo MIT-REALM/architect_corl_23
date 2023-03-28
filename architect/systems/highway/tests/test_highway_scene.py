@@ -1,12 +1,12 @@
 """Test the highway scene."""
 import jax.numpy as jnp
 
-from architect.systems.highway.highway_env import HighwayScene
 from architect.systems.components.sensing.vision.render import (
-    CameraIntrinsics,
     CameraExtrinsics,
+    CameraIntrinsics,
 )
 from architect.systems.components.sensing.vision.util import look_at
+from architect.systems.highway.highway_env import HighwayScene
 
 
 def test_highway_scene():

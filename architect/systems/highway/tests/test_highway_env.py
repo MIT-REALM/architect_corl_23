@@ -1,11 +1,11 @@
 """Test the highway environment."""
-import pytest
 import jax.numpy as jnp
 import jax.random as jrandom
+import pytest
 
 from architect.systems.components.sensing.vision.render import CameraIntrinsics
-from architect.systems.highway.highway_scene import HighwayScene
 from architect.systems.highway.highway_env import HighwayEnv, HighwayState
+from architect.systems.highway.highway_scene import HighwayScene
 
 
 @pytest.fixture

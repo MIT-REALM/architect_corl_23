@@ -1,7 +1,7 @@
 """Vision utility functions."""
 import jax.numpy as jnp
-from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
+from jaxtyping import Array, Float, jaxtyped
 
 
 @jaxtyped

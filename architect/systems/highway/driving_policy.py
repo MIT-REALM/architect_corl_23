@@ -1,15 +1,15 @@
 """Define a neural network policy for driving in the highway environment."""
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-import equinox as eqx
-from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype
 from beartype.typing import Tuple
+from jaxtyping import Array, Float, jaxtyped
 
-from architect.types import PRNGKeyArray
 from architect.systems.highway.highway_env import HighwayObs
+from architect.types import PRNGKeyArray
 
 
 class DrivingPolicy(eqx.Module):
@@ -127,21 +127,25 @@ class DrivingPolicy(eqx.Module):
         return action_mean, value
 
     def __call__(
-        self, obs: HighwayObs, key: PRNGKeyArray
+        self, obs: HighwayObs, key: PRNGKeyArray, deterministic=True
     ) -> Tuple[Float[Array, " 2"], Float[Array, ""], Float[Array, ""]]:
         """Compute the action and value estimate for the given state.
 
         Args:
             obs: The observation of the current state.
             key: The random key for sampling the action.
-            action_noise: The standard deviation of the Gaussian noise to add
-                to the action.
+            deterministic: Whether to sample the action from the policy distribution
+                or to return the mean action.
 
         Returns:
             The action, action log probability, and value estimate.
         """
         action_mean, value = self.forward(obs)
         action_noise = jnp.exp(self.log_action_std)
+
+        if deterministic:
+            # Return the mean action, a constant logprob, and the value estimate
+            return action_mean, jnp.array(0.0), value
 
         action = jrandom.multivariate_normal(
             key, action_mean, action_noise * jnp.eye(action_mean.shape[0])
