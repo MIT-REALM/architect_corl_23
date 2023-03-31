@@ -16,6 +16,17 @@ from jaxtyping import Array, Float, jaxtyped
 from architect.utils import softmin
 
 
+@jax.jit
+def softnorm(x):
+    """Compute the 2-norm, but if x is too small replace it with the squared 2-norm
+    to make sure it's differentiable. This function is continuous and has a derivative
+    that is defined everywhere, but its derivative is discontinuous.
+    """
+    eps = 1e-5
+    scaled_square = lambda x: (eps * (x / eps) ** 2).sum()
+    return jax.lax.cond(jnp.linalg.norm(x) >= eps, jnp.linalg.norm, scaled_square, x)
+
+
 class SDFShape(ABC, eqx.Module):
     """Abstract base class for shapes defined via signed distance functions."""
 
@@ -108,7 +119,7 @@ class Sphere(SDFShape):
         Returns:
             signed distance from the point to the sphere (positive outside)
         """
-        return jnp.linalg.norm(x - self.center) - self.radius
+        return softnorm(x - self.center) - self.radius
 
 
 @jaxtyped
@@ -188,7 +199,7 @@ class Box(SDFShape):
 
         # Round the corner a bit
         sdf = (
-            jnp.linalg.norm(jnp.maximum(distance_to_box, 0.0))
+            softnorm(jnp.maximum(distance_to_box, 0.0))
             + jnp.minimum(jnp.max(distance_to_box), 0.0)
             - self.rounding
         )
@@ -243,7 +254,7 @@ class Cylinder(SDFShape):
 
         # Compute the distance to the cylinder in the cylinder frame (which is
         # axis-aligned)
-        distance_to_axis = jnp.linalg.norm(offset[:2]) - self.radius
+        distance_to_axis = softnorm(offset[:2]) - self.radius
         distance_to_caps = jnp.abs(offset[2]) - self.height / 2.0
 
         sdf = jnp.maximum(distance_to_axis, distance_to_caps)
