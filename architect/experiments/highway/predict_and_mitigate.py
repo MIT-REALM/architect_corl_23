@@ -21,12 +21,13 @@ from architect.engines import predict_and_mitigate_failure_modes
 from architect.experiments.highway.train_highway_agent import make_highway_env
 from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
+from architect.utils import softmin
 
 
 class SimulationResults(NamedTuple):
     """A class for storing the results of a simulation."""
 
-    reward: Float[Array, ""]
+    potential: Float[Array, ""]
     initial_obs: HighwayObs
     final_obs: HighwayObs
 
@@ -105,7 +106,10 @@ def simulate(
     # Get the final observation
     final_obs = env.get_obs(final_state)
 
-    return SimulationResults(jnp.mean(reward), initial_obs, final_obs)
+    # The potential is the negative of the (soft) minimum reward observed
+    potential = -softmin(reward)
+
+    return SimulationResults(potential, initial_obs, final_obs)
 
 
 if __name__ == "__main__":
@@ -118,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-6)
-    parser.add_argument("--num_rounds", type=int, nargs="?", default=50)
+    parser.add_argument("--num_rounds", type=int, nargs="?", default=30)
     parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
@@ -203,8 +207,7 @@ if __name__ == "__main__":
         initial_eps,
         dp_logprior_fn=lambda dp: jnp.array(0.0),  # uniform prior over policies
         ep_logprior_fn=env.overall_prior_logprob,
-        # TODO does this need to be negative reward?????
-        potential_fn=lambda dp, ep: L * simulate(env, dp, ep, static_policy).reward,
+        potential_fn=lambda dp, ep: L * simulate(env, dp, ep, static_policy).potential,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
         dp_mcmc_step_size=dp_mcmc_step_size,
