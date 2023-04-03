@@ -5,13 +5,12 @@ Provides system-agnostic code for failure mode prediction and mitigation.
 """
 import time
 
-import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
-from beartype.typing import Callable, Optional, Tuple, Union
+from beartype.typing import Callable, Optional, Tuple, Union, Any
 from jaxtyping import Array, Float, Integer, jaxtyped
 
 from architect.engines.samplers import SamplerState, init_sampler, make_kernel
@@ -26,7 +25,7 @@ def run_chain(
     kernel: Sampler,
     initial_state: SamplerState,
     num_samples: int,
-) -> Tuple[Params, Float[Array, ""]]:
+) -> Tuple[Params, Float[Array, ""], Float[Array, ""], Any]:
     """
     Run the given MCMC kernel for the specified number of steps, returning last sample
     and associated log likelihood.
@@ -37,10 +36,10 @@ def run_chain(
         initial_state: the starting state for the sampler
         num_samples: how many samples to take
     returns:
-        the last state of the chain and associated log probability
+        the last state of the chain, the associated log probability, and acceptance
+        rate, along with arbitrary debug information.
     """
 
-    @jax.jit
     def one_step(_, carry):
         # unpack carry
         state, prng_key = carry
@@ -54,9 +53,15 @@ def run_chain(
         return carry
 
     initial_carry = (initial_state, prng_key)
+    one_step(0, initial_carry)  # todo
     final_state, _ = jax.lax.fori_loop(0, num_samples, one_step, initial_carry)
 
-    return final_state.position, final_state.logdensity
+    return (
+        final_state.position,
+        final_state.logdensity,
+        final_state.num_accepts / num_samples,
+        {"final_grad": final_state.logdensity_grad},
+    )
 
 
 # @jaxtyped
@@ -80,6 +85,7 @@ def predict_and_mitigate_failure_modes(
     tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
     dp_grad_clip: Union[float, Float[Array, ""]] = float("inf"),
     ep_grad_clip: Union[float, Float[Array, ""]] = float("inf"),
+    normalize_gradients: bool = False,
 ) -> Tuple[
     Params,
     Params,
@@ -115,6 +121,8 @@ def predict_and_mitigate_failure_modes(
             values. If not provided, defaults to all 1s (no tempering).
         dp_grad_clip: clip design param gradients at this value
         ep_grad_clip: clip exogenous param gradients at this value
+        normalize_gradients: if True, normalize gradients by the number of samples
+
     returns:
         - A trace of updated populations of design parameters
         - A trace of updated populations of exogenous parameters
@@ -134,8 +142,10 @@ def predict_and_mitigate_failure_modes(
         # Unpack the carry
         i, current_dps, current_eps = carry
 
-        # Set the logprobs to default values
-        dp_logprobs, ep_logprobs = None, None
+        # Set the outputs to default values
+        dp_logprobs, ep_logprobs = jnp.array(0.0), jnp.array(0.0)
+        dp_accept_rate, ep_accept_rate = jnp.array(0.0), jnp.array(0.0)
+        dp_debug, ep_debug = jnp.array(0.0), jnp.array(0.0)
 
         # Update the iteration index
         i += 1
@@ -162,8 +172,8 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Initialize the chains for this kernel
-            initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
-                current_dps, dp_logprob_fn
+            initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None, None))(
+                current_dps, dp_logprob_fn, normalize_gradients
             )
 
             # Make the sampling kernel
@@ -173,13 +183,16 @@ def predict_and_mitigate_failure_modes(
                 use_gradients,
                 stochasticity,
                 dp_grad_clip,
+                normalize_gradients,
             )
 
             # Run the chains and update the design parameters
             n_chains = initial_dp_sampler_states.logdensity.shape[0]
             prng_key, sample_key = jrandom.split(prng_key)
             sample_keys = jrandom.split(sample_key, n_chains)
-            current_dps, dp_logprobs = jax.vmap(run_chain, in_axes=(0, None, 0, None))(
+            current_dps, dp_logprobs, dp_accept_rate, dp_debug = jax.vmap(
+                run_chain, in_axes=(0, None, 0, None)
+            )(
                 sample_keys,
                 dp_kernel,
                 initial_dp_sampler_states,
@@ -203,8 +216,8 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Initialize the chains for this kernel
-            initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
-                current_eps, ep_logprob_fn
+            initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None, None))(
+                current_eps, ep_logprob_fn, normalize_gradients
             )
 
             # Make the sampling kernel
@@ -214,13 +227,16 @@ def predict_and_mitigate_failure_modes(
                 use_gradients,
                 stochasticity,
                 ep_grad_clip,
+                normalize_gradients,
             )
 
             # Run the chains and update the design parameters
             n_chains = initial_ep_sampler_states.logdensity.shape[0]
             prng_key, sample_key = jrandom.split(prng_key)
             sample_keys = jrandom.split(sample_key, n_chains)
-            current_eps, ep_logprobs = jax.vmap(run_chain, in_axes=(0, None, 0, None))(
+            current_eps, ep_logprobs, ep_accept_rate, ep_debug = jax.vmap(
+                run_chain, in_axes=(0, None, 0, None)
+            )(
                 sample_keys,
                 ep_kernel,
                 initial_ep_sampler_states,
@@ -228,7 +244,16 @@ def predict_and_mitigate_failure_modes(
             )
 
         # Return the updated params and logprobs (but only carry the index and params)
-        output = (i, current_dps, current_eps, dp_logprobs, ep_logprobs)
+        output = (
+            i,
+            current_dps,
+            current_eps,
+            dp_logprobs,
+            ep_logprobs,
+            dp_accept_rate,
+            ep_accept_rate,
+            {"dp_debug": dp_debug, "ep_debug": ep_debug},
+        )
         return output[:3], output
 
     # Run the appropriate number of steps
@@ -240,7 +265,13 @@ def predict_and_mitigate_failure_modes(
         start = time.perf_counter()
         carry, y = one_smc_step(carry, (key, tempering))
         end = time.perf_counter()
-        print(f" ({end - start:.2f} s)")
+        print(
+            (
+                f" ({end - start:.2f} s); "
+                f"DP/EP mean logprob: {y[3].mean():.2f}/{y[4].mean():.2f}; "
+                f"DP/EP accept rate: {y[5].mean():.2f}/{y[6].mean():.2f}; "
+            )
+        )
         results.append(y)
 
     # The python for loop above is faster than this scan, since we skip a long
@@ -260,5 +291,14 @@ def predict_and_mitigate_failure_modes(
     results = treedef_list[0].unflatten(result_leaves)
 
     # Unpack the results and return
-    _, design_params, exogenous_params, dp_logprobs, ep_logprobs = results
+    (
+        _,
+        design_params,
+        exogenous_params,
+        dp_logprobs,
+        ep_logprobs,
+        dp_accept,
+        ep_accept,
+        _,
+    ) = results
     return design_params, exogenous_params, dp_logprobs, ep_logprobs

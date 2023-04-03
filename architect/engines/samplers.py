@@ -8,7 +8,7 @@ import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
 from beartype.typing import NamedTuple, Union
-from jaxtyping import Array, Bool, Float, jaxtyped
+from jaxtyping import Array, Bool, Float, Integer, jaxtyped
 
 from architect.types import LogLikelihood, Params, PRNGKeyArray, Sampler
 
@@ -21,14 +21,43 @@ class SamplerState(NamedTuple):
     position: Params
     logdensity: Float[Array, ""]
     logdensity_grad: Params
+    num_accepts: Integer[Array, ""]
 
 
 @jaxtyped
 @beartype
-def init_sampler(position: Params, logdensity_fn: LogLikelihood) -> SamplerState:
+def init_sampler(
+    position: Params,
+    logdensity_fn: LogLikelihood,
+    normalize_gradients: Union[bool, Bool[Array, ""]] = True,
+) -> SamplerState:
+    """
+    Initialize a sampler.
+
+    args:
+        position: the initial position of the sampler
+        logdensity_fn: the non-normalized log likelihood function
+        normalize_gradients: if True, normalize gradients to have unit L2 norm
+    """
     grad_fn = jax.value_and_grad(logdensity_fn)
     logdensity, logdensity_grad = grad_fn(position)
-    return SamplerState(position, logdensity, logdensity_grad)
+
+    # Normalize the gradients if requested
+    overall_grad_norm = jnp.sqrt(
+        jtu.tree_reduce(
+            operator.add, jtu.tree_map(lambda x: jnp.sum(x * x), logdensity_grad)
+        )
+    )
+    normalized_logdensity_grad = jtu.tree_map(
+        lambda grad: grad / overall_grad_norm, logdensity_grad
+    )
+    logdensity_grad = jax.lax.cond(
+        normalize_gradients,
+        lambda: normalized_logdensity_grad,
+        lambda: logdensity_grad,
+    )
+
+    return SamplerState(position, logdensity, logdensity_grad, jnp.array(0))
 
 
 @jaxtyped
@@ -39,6 +68,7 @@ def make_kernel(
     use_gradients: Union[bool, Bool[Array, ""]] = True,
     use_stochasticity: Union[bool, Bool[Array, ""]] = True,
     grad_clip: Union[float, Float[Array, ""]] = float("inf"),
+    normalize_gradients: Union[bool, Bool[Array, ""]] = True,
 ) -> Sampler:
     """
     Build a kernel for a sampling algorithm (either MALA, RMH, or MLE).
@@ -58,6 +88,7 @@ def make_kernel(
         use_gradients: if True, use gradients in the proposal and acceptance steps
         use_stochasticity: if True, add a Gaussian to the proposal and acceptance steps
         grad_clip: maximum value to clip gradients
+        normalize_gradients: if True, normalize gradients to have unit L2 norm
     """
     # A generic Metropolis-Hastings-style MCMC algorithm has 2 steps: a proprosal and
     # an accept/reject step.
@@ -78,18 +109,14 @@ def make_kernel(
         grad = jax.lax.cond(
             use_gradients,
             lambda x: jtu.tree_map(
-                # careful: we might have None leaves for equinox modules
-                lambda v: jnp.clip(v, a_min=-grad_clip, a_max=grad_clip)
-                if v is not None
-                else v,
-                x,
+                lambda v: jnp.clip(v, a_min=-grad_clip, a_max=grad_clip), x
             ),
             lambda x: jtu.tree_map(jnp.zeros_like, x),
             state.logdensity_grad,
         )
 
         theta = jtu.tree_map(
-            lambda new_x, x, g: new_x - x - step_size * g if g is not None else 0.0,
+            lambda new_x, x, g: new_x - x - step_size * g,
             new_state.position,
             state.position,
             grad,
@@ -145,10 +172,27 @@ def make_kernel(
 
         # Make the state proposal
         new_position = jtu.tree_map(lambda x, dx: x + dx, state.position, delta_x)
-        new_logdensity, new_logdensity_grad = jax.value_and_grad(logdensity_fn)(
-            new_position
+        new_logdensity, new_grad = jax.value_and_grad(logdensity_fn)(new_position)
+        # Normalize the gradients if requested
+        overall_grad_norm = jnp.sqrt(
+            jtu.tree_reduce(
+                operator.add, jtu.tree_map(lambda x: jnp.sum(x * x), new_grad)
+            )
         )
-        new_state = SamplerState(new_position, new_logdensity, new_logdensity_grad)
+        normalized_new_grad = jtu.tree_map(
+            lambda grad: grad / overall_grad_norm, new_grad
+        )
+        new_grad = jax.lax.cond(
+            normalize_gradients,
+            lambda: normalized_new_grad,
+            lambda: new_grad,
+        )
+        new_state = SamplerState(
+            new_position,
+            new_logdensity,
+            new_grad,
+            state.num_accepts + 1,
+        )
 
         # Accept/reject the state using the Metropolis-Hasting rule
         log_p_accept = (

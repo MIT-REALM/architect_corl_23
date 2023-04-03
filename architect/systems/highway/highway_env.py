@@ -372,8 +372,10 @@ class HighwayEnv:
         Returns:
             The prior log probability of the givens state.
         """
-        single_state_logprob = lambda s, s_mean: jax.scipy.stats.multivariate_normal(
-            s, s_mean, self._initial_state_covariance
+        single_state_logprob = (
+            lambda s, s_mean: jax.scipy.stats.multivariate_normal.logpdf(
+                s, s_mean, self._initial_state_covariance
+            )
         )
         initial_state_logprobs = jax.vmap(single_state_logprob)(
             state, self._initial_non_ego_states
@@ -516,5 +518,5 @@ class HighwayEnv:
             self.initial_ego_state_prior_logprob(state.ego_state)
             + self.initial_non_ego_states_prior_logprob(state.non_ego_states)
             + self.shading_light_direction_prior_logprob(state.shading_light_direction)
-            + self.non_ego_color_prior_logprob(state.non_ego_colors)
+            + self.non_ego_colors_prior_logprob(state.non_ego_colors)
         )

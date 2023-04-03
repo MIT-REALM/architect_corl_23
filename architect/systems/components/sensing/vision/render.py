@@ -106,7 +106,7 @@ def raycast(
             h = dist_fn(dist_along_ray)
             new_dist_along_ray = dist_along_ray + h
             return jnp.clip(new_dist_along_ray, 0.0, max_dist)
-        
+
         # Raymarch
         return jax.lax.fori_loop(0, max_steps, step_ray, initial_guess)
 

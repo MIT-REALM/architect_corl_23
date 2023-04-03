@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import time
+import shutil
 
 import equinox as eqx
 import jax
@@ -34,7 +35,8 @@ def simulate(
     env: HighwayEnv,
     policy: DrivingPolicy,
     initial_state: HighwayState,
-    max_steps: int = 80,
+    static_policy: DrivingPolicy,
+    max_steps: int = 60,
 ) -> Float[Array, ""]:
     """Simulate the highway environment.
 
@@ -46,55 +48,62 @@ def simulate(
 
     Args:
         env: The environment to simulate.
-        policy: The policy to use to drive the car.
+        policy: The parts of the policy that are design parameters.
         initial_state: The initial state of the environment.
+        static_policy: the parts of the policy that are not design parameters.
         max_steps: The maximum number of steps to simulate.
 
     Returns:
         SimulationResults object
     """
+    # Merge the policy back together
+    policy = eqx.combine(policy, static_policy)
 
+    @jax.checkpoint
     def step(carry, key):
         # Unpack the carry
-        obs, state, already_done = carry
+        action, state, already_done = carry
 
         # PRNG key management. These don't have any effect, but they need to be passed
         # to the environment and policy.
-        step_key, action_subkey = jrandom.split(key)
-
-        # Sample an action from the policy
-        action, action_logprob, value = policy(obs, action_subkey, deterministic=True)
+        step_subkey, action_subkey = jrandom.split(key)
 
         # Fix non-ego actions
         non_ego_actions = jnp.zeros((state.non_ego_states.shape[0], 2))
 
-        # Take a step in the environment using that action
+        # Take a step in the environment using the action carried over from the previous
+        # step.
         next_state, next_observation, reward, done = env.step(
-            state, action, non_ego_actions, step_key
+            state, action, non_ego_actions, step_subkey
         )
+
+        # Compute the action for the next step
+        next_action, _, _ = policy(next_observation, action_subkey, deterministic=True)
 
         # If the environment has already terminated, set the reward to zero.
         reward = jax.lax.cond(already_done, lambda: 0.0, lambda: reward)
         already_done = jnp.logical_or(already_done, done)
 
         # Don't step if the environment has terminated
-        next_observation = jax.lax.cond(
-            already_done, lambda: obs, lambda: next_observation
-        )
+        next_action = jax.lax.cond(already_done, lambda: action, lambda: next_action)
         next_state = jax.lax.cond(already_done, lambda: state, lambda: next_state)
 
-        next_carry = (next_observation, next_state, already_done)
-        output = (reward, already_done)
+        next_carry = (next_action, next_state, already_done)
+        output = reward
         return next_carry, output
 
-    # Get the initial observation
+    # Get the initial observation and action
     initial_obs = env.get_obs(initial_state)
+    initial_action, _, _ = policy(initial_obs, jrandom.PRNGKey(0), deterministic=True)
 
     # Transform and rollout!
     keys = jrandom.split(jrandom.PRNGKey(0), max_steps)
-    (final_obs, _, _), (reward, already_done) = jax.lax.scan(
-        step, (initial_obs, initial_state, False), keys
+    (_, final_state, _), reward = jax.lax.scan(
+        step, (initial_action, initial_state, False), keys
     )
+
+    # Get the final observation
+    final_obs = env.get_obs(final_state)
 
     return SimulationResults(jnp.mean(reward), initial_obs, final_obs)
 
@@ -103,24 +112,25 @@ if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--savename", type=str, default="overtake")
-    parser.add_argument("--image_w", type=int, nargs="?", default=64)
-    parser.add_argument("--image_h", type=int, nargs="?", default=64)
-    parser.add_argument("--L", type=float, nargs="?", default=100.0)
-    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-6)
-    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-2)
-    parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
+    parser.add_argument("--savename", type=str, default="overtake_predict_only")
+    parser.add_argument("--image_w", type=int, nargs="?", default=32)
+    parser.add_argument("--image_h", type=int, nargs="?", default=32)
+    parser.add_argument("--L", type=float, nargs="?", default=1.0)
+    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
+    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-6)
+    parser.add_argument("--num_rounds", type=int, nargs="?", default=50)
     parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
-    parser.add_argument("--quench_rounds", type=int, nargs="?", default=10)
+    parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
-    parser.add_argument("--repair", action=boolean_action, default=True)
+    parser.add_argument("--repair", action=boolean_action, default=False)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=False)
     parser.add_argument("--dp_grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--ep_grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--dont_normalize_gradients", action="store_true")
     args = parser.parse_args()
 
     # Hyperparameters
@@ -138,6 +148,7 @@ if __name__ == "__main__":
     quench_rounds = args.quench_rounds
     dp_grad_clip = args.dp_grad_clip
     ep_grad_clip = args.ep_grad_clip
+    normalize_gradients = not args.dont_normalize_gradients
 
     print(f"Running prediction/mitigation on overtake with hyperparameters:")
     print(f"\tmodel_path = {args.model_path}")
@@ -156,6 +167,7 @@ if __name__ == "__main__":
     print(f"\tquench_rounds = {quench_rounds}")
     print(f"\tdp_grad_clip = {dp_grad_clip}")
     print(f"\tep_grad_clip = {ep_grad_clip}")
+    print(f"\tnormalize_gradients = {normalize_gradients}")
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
@@ -169,25 +181,30 @@ if __name__ == "__main__":
     env = make_highway_env(image_shape)
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
-    # parameters), duplicating the model for each chain
+    # parameters), duplicating the model for each chain. We'll also split partition
+    # out just the continuous parameters, which will be our design parameters
     dummy_policy = DrivingPolicy(jrandom.PRNGKey(0), image_shape)
     load_policy = lambda _: eqx.tree_deserialise_leaves(args.model_path, dummy_policy)
-    policy = eqx.filter_vmap(load_policy)(jnp.arange(num_chains))
+    get_dps = lambda _: eqx.partition(load_policy(_), eqx.is_array)[0]
+    initial_dps = eqx.filter_vmap(get_dps)(jnp.arange(num_chains))
+    # Also save out the static part of the policy
+    _, static_policy = eqx.partition(load_policy(None), eqx.is_array)
 
     # Initialize some random initial states
     prng_key, initial_state_key = jrandom.split(prng_key)
     initial_state_keys = jrandom.split(initial_state_key, num_chains)
-    initial_states = eqx.filter_vmap(env.reset)(initial_state_keys)
+    initial_eps = eqx.filter_vmap(env.reset)(initial_state_keys)
 
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
         prng_key,
-        policy,
-        initial_states,
+        initial_dps,
+        initial_eps,
         dp_logprior_fn=lambda dp: jnp.array(0.0),  # uniform prior over policies
         ep_logprior_fn=env.overall_prior_logprob,
-        potential_fn=lambda dp, ep: L * simulate(env, dp, ep).reward,
+        # TODO does this need to be negative reward?????
+        potential_fn=lambda dp, ep: L * simulate(env, dp, ep, static_policy).reward,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
         dp_mcmc_step_size=dp_mcmc_step_size,
@@ -200,6 +217,7 @@ if __name__ == "__main__":
         tempering_schedule=tempering_schedule,
         dp_grad_clip=dp_grad_clip,
         ep_grad_clip=ep_grad_clip,
+        normalize_gradients=normalize_gradients,
     )
     t_end = time.perf_counter()
     print(
@@ -221,17 +239,16 @@ if __name__ == "__main__":
     # # TODO for debugging plots, just use the initial policy and eps
     # t_end = 0.0
     # t_start = 0.0
-    # final_dps = jtu.tree_map(
-    #     lambda leaf: leaf[-1] if eqx.is_array(leaf) else leaf, policy
-    # )
-    # final_eps = initial_states
+    # final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
+    # final_eps = initial_eps
     # dp_logprobs = jnp.zeros((num_rounds, num_chains))
     # ep_logprobs = jnp.zeros((num_rounds, num_chains))
     # # TODO debugging bit ends here
 
-    result = eqx.filter_vmap(lambda dp, ep: simulate(env, dp, ep), in_axes=(None, 0))(
-        final_dps, final_eps
-    )
+    # Evaluate the solutions proposed by the prediction+mitigation algorithm
+    result = eqx.filter_vmap(
+        lambda dp, ep: simulate(env, dp, ep, static_policy), in_axes=(None, 0)
+    )(final_dps, final_eps)
 
     # Plot the results
     fig = plt.figure(figsize=(64, 32), constrained_layout=True)
@@ -309,6 +326,7 @@ if __name__ == "__main__":
 
     # Plot the reward across all failure cases
     axs["reward"].plot(result.reward, "ko")
+    axs["reward"].set_ylabel("Reward")
 
     # Plot the initial RGB observations tiled on the same subplot
     axs["initial_obs"].imshow(
@@ -338,16 +356,15 @@ if __name__ == "__main__":
     os.makedirs(f"results/{args.savename}", exist_ok=True)
     plt.savefig(filename + ".png")
 
-    # Save the final policy
-    eqx.tree_serialise_leaves(filename + ".eqx", final_dps)
+    # Save the final design parameters (joined back into the full policy)
+    final_policy = eqx.combine(final_dps, static_policy)
+    eqx.tree_serialise_leaves(filename + ".eqx", final_policy)
 
     # # Save the trace of policies
     # eqx.tree_serialise_leaves(filename + "_trace.eqx", dps)
 
     # Save the initial policy
-    eqx.tree_serialise_leaves(
-        f"results/{args.savename}/" + "initial_policy.eqx", policy
-    )
+    shutil.copyfile(args.model_path, f"results/{args.savename}/" + "initial_policy.eqx")
 
     # Save the hyperparameters
     with open(filename + ".json", "w") as f:

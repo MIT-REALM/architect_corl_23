@@ -22,9 +22,10 @@ def softnorm(x):
     to make sure it's differentiable. This function is continuous and has a derivative
     that is defined everywhere, but its derivative is discontinuous.
     """
-    eps = 1e-5
-    scaled_square = lambda x: (eps * (x / eps) ** 2).sum()
-    return jax.lax.cond(jnp.linalg.norm(x) >= eps, jnp.linalg.norm, scaled_square, x)
+    eps = 1e-3
+    # scaled_square = lambda x: (eps * (x / eps) ** 2).sum()
+    # return jax.lax.cond(jnp.linalg.norm(x) >= eps, jnp.linalg.norm, scaled_square, x)
+    return jnp.sqrt(jnp.sum(x**2) + eps)
 
 
 class SDFShape(ABC, eqx.Module):
