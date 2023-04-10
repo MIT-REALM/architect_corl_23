@@ -119,10 +119,10 @@ if __name__ == "__main__":
     parser.add_argument("--savename", type=str, default="overtake_predict_only")
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
-    parser.add_argument("--L", type=float, nargs="?", default=1.0)
+    parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-6)
-    parser.add_argument("--num_rounds", type=int, nargs="?", default=30)
+    parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
     parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
     parser.add_argument("--predict", action=boolean_action, default=True)
-    parser.add_argument("--temper", action=boolean_action, default=False)
+    parser.add_argument("--temper", action=boolean_action, default=True)
     parser.add_argument("--dp_grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--ep_grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--dont_normalize_gradients", action="store_true")
@@ -176,6 +176,8 @@ if __name__ == "__main__":
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
+    # # TODO: experiment with linear tempering
+    # tempering_schedule = t if temper else None
 
     # Make a PRNG key (#sorandom)
     prng_key = jrandom.PRNGKey(0)
@@ -286,7 +288,7 @@ if __name__ == "__main__":
     axs["non_ego_initial_states"].scatter(
         final_eps.non_ego_states[:, 0, 3],  # first car velocity
         final_eps.non_ego_states[:, 1, 3],  # second car velocity
-        c=result.reward,
+        c=result.potential,
     )
 
     # Plot the initial lighting conditions
@@ -300,7 +302,7 @@ if __name__ == "__main__":
     axs["lighting"].scatter(
         azimuth,
         inclination,
-        c=result.reward,
+        c=result.potential,
     )
     axs["lighting"].set_xlabel("Azimuth")
     axs["lighting"].set_ylabel("Inclination")
@@ -309,7 +311,7 @@ if __name__ == "__main__":
         final_eps.non_ego_colors[:, 0, 0],
         final_eps.non_ego_colors[:, 0, 1],
         final_eps.non_ego_colors[:, 0, 2],
-        c=result.reward,
+        c=result.potential,
     )
     axs["color_1"].set_title("Car 1 color")
     axs["color_1"].set_xlabel("R")
@@ -320,7 +322,7 @@ if __name__ == "__main__":
         final_eps.non_ego_colors[:, 1, 0],
         final_eps.non_ego_colors[:, 1, 1],
         final_eps.non_ego_colors[:, 1, 2],
-        c=result.reward,
+        c=result.potential,
     )
     axs["color_2"].set_title("Car 2 color")
     axs["color_2"].set_xlabel("R")
@@ -328,8 +330,8 @@ if __name__ == "__main__":
     axs["color_2"].set_zlabel("B")
 
     # Plot the reward across all failure cases
-    axs["reward"].plot(result.reward, "ko")
-    axs["reward"].set_ylabel("Reward")
+    axs["reward"].plot(result.potential, "ko")
+    axs["reward"].set_ylabel("Potential (negative min reward)")
 
     # Plot the initial RGB observations tiled on the same subplot
     axs["initial_obs"].imshow(
@@ -351,7 +353,7 @@ if __name__ == "__main__":
     filename = (
         f"results/{args.savename}/L_{L:0.1e}_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
-        f"{quench_rounds}_quench_{'tempered_' if temper else ''}"
+        f"{quench_rounds}_quench_{'tempered_' if temper else ''}"  # todo tempering
         f"{num_chains}_chains_step_dp_{dp_mcmc_step_size:0.1e}_"
         f"ep_{ep_mcmc_step_size:0.1e}_{alg_type}"
     )
