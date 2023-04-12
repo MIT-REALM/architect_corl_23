@@ -13,15 +13,76 @@ import jax.tree_util as jtu
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from beartype import beartype
 from beartype.typing import NamedTuple
 from jax.nn import sigmoid
-from jaxtyping import Array, Float, Shaped
+from jaxtyping import Array, Float, Shaped, jaxtyped
 
 from architect.engines import predict_and_mitigate_failure_modes
 from architect.experiments.highway.train_highway_agent import make_highway_env
 from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
 from architect.utils import softmin
+from architect.types import PRNGKeyArray
+
+
+@jaxtyped
+@beartype
+class NonEgoActions(NamedTuple):
+    """A class for storing the actions of the non-ego vehicles."""
+
+    actions: Float[Array, "T n_non_ego_agents num_actions"]
+
+
+def sample_non_ego_actions(
+    key: PRNGKeyArray,
+    env: HighwayEnv,
+    horizon: int,
+    n_non_ego: int,
+    noise_scale: float = 0.05,
+) -> NonEgoActions:
+    """Sample actions for the non-ego vehicles.
+
+    Args:
+        key: A PRNG key.
+        env: The environment to sample actions for.
+        horizon: The number of steps to sample actions for.
+        n_non_ego: The number of non-ego vehicles.
+
+    Returns:
+        A NonEgoActions object.
+    """
+    noise_cov = noise_scale * jnp.eye(2)
+    keys = jrandom.split(key, horizon)
+    actions = jax.vmap(env.sample_non_ego_actions, in_axes=(0, None, None))(
+        keys,
+        noise_cov=noise_cov,
+        n_non_ego=n_non_ego,
+    )
+    return actions
+
+
+def non_ego_actions_prior_logprob(
+    actions: NonEgoActions,
+    env: HighwayEnv,
+    noise_scale: float = 0.05,
+) -> Float[Array, ""]:
+    """Compute the log probability of a set of non-ego actions.
+
+    Args:
+        actions: The actions to compute the log probability of.
+        env: The environment to sample actions for
+        noise_scale: The scale of the noise to use.
+
+    Returns:
+        The log probability of the actions.
+    """
+    noise_cov = noise_scale * jnp.eye(2)
+    logprob = jax.vmap(env.non_ego_actions_prior_logprob, in_axes=(0, None))(
+        actions.actions,
+        noise_cov=noise_cov,
+    )
+    return logprob
 
 
 class SimulationResults(NamedTuple):
@@ -36,6 +97,7 @@ def simulate(
     env: HighwayEnv,
     policy: DrivingPolicy,
     initial_state: HighwayState,
+    non_ego_actions: NonEgoActions,
     static_policy: DrivingPolicy,
     max_steps: int = 60,
 ) -> Float[Array, ""]:
@@ -51,6 +113,7 @@ def simulate(
         env: The environment to simulate.
         policy: The parts of the policy that are design parameters.
         initial_state: The initial state of the environment.
+        non_ego_actions: The actions of the non-ego vehicles.
         static_policy: the parts of the policy that are not design parameters.
         max_steps: The maximum number of steps to simulate.
 
@@ -61,16 +124,16 @@ def simulate(
     policy = eqx.combine(policy, static_policy)
 
     @jax.checkpoint
-    def step(carry, key):
+    def step(carry, scan_inputs):
+        # Unpack the input
+        key, non_ego_action = scan_inputs
+
         # Unpack the carry
         action, state, already_done = carry
 
         # PRNG key management. These don't have any effect, but they need to be passed
         # to the environment and policy.
         step_subkey, action_subkey = jrandom.split(key)
-
-        # Fix non-ego actions
-        non_ego_actions = jnp.zeros((state.non_ego_states.shape[0], 2))
 
         # Take a step in the environment using the action carried over from the previous
         # step.
@@ -100,7 +163,7 @@ def simulate(
     # Transform and rollout!
     keys = jrandom.split(jrandom.PRNGKey(0), max_steps)
     (_, final_state, _), reward = jax.lax.scan(
-        step, (initial_action, initial_state, False), keys
+        step, (initial_action, initial_state, False), (keys, non_ego_actions)
     )
 
     # Get the final observation
@@ -131,7 +194,7 @@ if __name__ == "__main__":
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
     parser.add_argument("--predict", action=boolean_action, default=True)
-    parser.add_argument("--temper", action=boolean_action, default=True)
+    parser.add_argument("--temper", action=boolean_action, default=False)
     parser.add_argument("--dp_grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--ep_grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--dont_normalize_gradients", action="store_true")
@@ -256,7 +319,7 @@ if __name__ == "__main__":
     )(final_dps, final_eps)
 
     # Plot the results
-    fig = plt.figure(figsize=(64, 32), constrained_layout=True)
+    fig = plt.figure(figsize=(32, 16), constrained_layout=True)
     axs = fig.subplot_mosaic(
         [
             ["non_ego_initial_states", "lighting", "trace", "color_1", "color_2"],
@@ -353,7 +416,7 @@ if __name__ == "__main__":
     filename = (
         f"results/{args.savename}/L_{L:0.1e}_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
-        f"{quench_rounds}_quench_{'tempered_' if temper else ''}"  # todo tempering
+        f"{quench_rounds}_quench_{'tempered_' if temper else ''}"
         f"{num_chains}_chains_step_dp_{dp_mcmc_step_size:0.1e}_"
         f"ep_{ep_mcmc_step_size:0.1e}_{alg_type}"
     )
