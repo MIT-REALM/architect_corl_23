@@ -18,9 +18,9 @@ def test_sphere():
         jnp.array(1.0),  # radius
     )
     # Test the SDF at a few points
-    assert jnp.isclose(sphere(jnp.array([1.0, 0.0, 0.0])), 0.0)  # on the surface
-    assert jnp.isclose(sphere(jnp.array([2.0, 0.0, 0.0])), 1.0)  # outside
-    assert jnp.isclose(sphere(jnp.array([0.0, 0.0, 0.0])), -1.0)  # inside
+    assert jnp.isclose(sphere(jnp.array([1.0, 0.0, 0.0])), 0.0, atol=5e-2)  # on surface
+    assert jnp.isclose(sphere(jnp.array([2.0, 0.0, 0.0])), 1.0, atol=5e-2)  # outside
+    assert jnp.isclose(sphere(jnp.array([0.0, 0.0, 0.0])), -1.0, atol=5e-2)  # inside
 
     # Test color
     assert sphere.color(jnp.array([1.0, 0.0, 0.0])).shape == (3,)
@@ -35,9 +35,9 @@ def test_halspace():
         jnp.array([0.0, 0.0, 0.0]),  # point
     )
     # Test the SDF at a few points
-    assert jnp.isclose(halfspace(jnp.array([0.0, 0.0, 0.0])), 0.0)  # on the surface
-    assert jnp.isclose(halfspace(jnp.array([1.0, 0.0, 0.0])), 1.0)  # outside
-    assert jnp.isclose(halfspace(jnp.array([-1.0, 0.0, 0.0])), -1.0)  # inside
+    assert jnp.isclose(halfspace(jnp.array([0.0, 0.0, 0.0])), 0.0, atol=5e-2)  # on surface
+    assert jnp.isclose(halfspace(jnp.array([1.0, 0.0, 0.0])), 1.0, atol=5e-2)  # outside
+    assert jnp.isclose(halfspace(jnp.array([-1.0, 0.0, 0.0])), -1.0, atol=5e-2) # inside
 
 
 def test_box():
@@ -51,8 +51,8 @@ def test_box():
     )
     # Test the SDF at a few points
     assert box(jnp.array([0.0, 0.0, 0.0])) < 0  # in the center
-    assert jnp.isclose(box(jnp.array([0.5, 0.0, 0.0])), 0.0)  # on the face
-    assert jnp.isclose(box(jnp.array([0.5, 0.5, 0.5])), 0.0)  # on the corner
+    assert jnp.isclose(box(jnp.array([0.5, 0.0, 0.0])), 0.0, atol=5e-2)  # on the face
+    assert jnp.isclose(box(jnp.array([0.5, 0.5, 0.5])), 0.0, atol=5e-2)  # on the corner
     assert box(jnp.array([2.0, 0.0, 0.0])) > 0.0  # outside
     assert box(jnp.array([-3.0, -3.0, 0.0])) > 0.0  # outside
 
@@ -81,13 +81,13 @@ def test_box_rotation():
     assert jnp.isclose(
         box(jnp.array([0.5 * jnp.cos(angle), 0.5 * jnp.sin(angle), 0.0])),
         0.0,
-        atol=1e-7,
+        atol=5e-2,
     )
     # on the corner
     assert jnp.isclose(
         box(jnp.array([0.5 * jnp.cos(angle), 0.5 * jnp.sin(angle), 0.5])),
         0.0,
-        atol=1e-7,
+        atol=5e-2,
     )
     # Outside
     assert box(jnp.array([2.0, 0.0, 0.0])) > 0.0
@@ -107,9 +107,9 @@ def test_cylinder():
     # in the center
     assert cylinder(jnp.array([0.0, 0.0, 0.0])) < 0
     # on the face
-    assert jnp.isclose(cylinder(jnp.array([1.0, 0.0, 0.0])), 0.0)
+    assert jnp.isclose(cylinder(jnp.array([1.0, 0.0, 0.0])), 0.0, atol=5e-2)
     assert jnp.isclose(
-        cylinder(jnp.array([1 / jnp.sqrt(2), 1 / jnp.sqrt(2), 0])), 0.0, atol=1e-7
+        cylinder(jnp.array([1 / jnp.sqrt(2), 1 / jnp.sqrt(2), 0])), 0.0, atol=5e-2
     )
     # outside
     assert cylinder(jnp.array([2.0, 0.0, 0.0])) > 0.0

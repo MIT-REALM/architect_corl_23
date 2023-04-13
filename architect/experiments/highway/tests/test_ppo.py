@@ -23,7 +23,7 @@ def test_generalized_advantage_estimate():
         lam,
     )
     # computed by hand
-    expected_returns = jnp.array([2.0, 3.0, 4.0])
+    expected_returns = jnp.array([2.0, 3.0, 4.0]) + values[:-1]
     expected_advantage = jnp.array([9.0, 7.0, 4.0])
     assert jnp.allclose(returns, expected_returns)
     assert jnp.allclose(advantage, expected_advantage)
@@ -38,7 +38,7 @@ def test_generalized_advantage_estimate():
         lam,
     )
     # computed by hand
-    expected_returns = jnp.array([2.0, -3.0, 4.0])
+    expected_returns = jnp.array([2.0, -3.0, 4.0]) + values[:-1]
     expected_advantage = jnp.array([-1.0, -3.0, 4.0])
     assert jnp.allclose(returns, expected_returns)
     assert jnp.allclose(advantage, expected_advantage)

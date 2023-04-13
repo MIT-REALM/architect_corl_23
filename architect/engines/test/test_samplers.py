@@ -18,7 +18,7 @@ def test_init_sampler():
     """Test the init_sampler function."""
     n = 4
     position = jnp.ones(n)
-    state = init_sampler(position, quadratic_potential)
+    state = init_sampler(position, quadratic_potential, normalize_gradients=False)
 
     # State should be initialized correctly
     assert jnp.allclose(state.position, position)
@@ -28,7 +28,7 @@ def test_init_sampler():
 
 def test_make_kernel_mala():
     """Test the make_kernel function for the MALA sampler."""
-    step_size = 1e-3
+    step_size = 1e-2
 
     # Scale up the potential to make the test more consistent
     potential = lambda x: 100 * quadratic_potential(x)
@@ -43,7 +43,7 @@ def test_make_kernel_mala():
     # We should be able to call the kernel
     n = 2
     position = jnp.ones(n)
-    state = init_sampler(position, potential)
+    state = init_sampler(position, potential, normalize_gradients=False)
     prng_key = jrandom.PRNGKey(0)
     next_state = kernel(prng_key, state)
     assert next_state is not None

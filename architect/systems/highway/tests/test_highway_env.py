@@ -67,6 +67,8 @@ def test_highway_env_step(highway_env):
                 [-5.0, -4.0, 0.0, 11.0],
             ]
         ),
+        shading_light_direction=jnp.array([1.0, 0.0, 0.0]),
+        non_ego_colors=jnp.array([[1.0,0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
     )
 
     # Take a step
