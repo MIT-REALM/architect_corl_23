@@ -35,9 +35,13 @@ def test_halspace():
         jnp.array([0.0, 0.0, 0.0]),  # point
     )
     # Test the SDF at a few points
-    assert jnp.isclose(halfspace(jnp.array([0.0, 0.0, 0.0])), 0.0, atol=5e-2)  # on surface
+    assert jnp.isclose(
+        halfspace(jnp.array([0.0, 0.0, 0.0])), 0.0, atol=5e-2
+    )  # on surface
     assert jnp.isclose(halfspace(jnp.array([1.0, 0.0, 0.0])), 1.0, atol=5e-2)  # outside
-    assert jnp.isclose(halfspace(jnp.array([-1.0, 0.0, 0.0])), -1.0, atol=5e-2) # inside
+    assert jnp.isclose(
+        halfspace(jnp.array([-1.0, 0.0, 0.0])), -1.0, atol=5e-2
+    )  # inside
 
 
 def test_box():

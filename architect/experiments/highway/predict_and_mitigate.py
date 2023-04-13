@@ -136,7 +136,7 @@ def simulate(
         non_ego_stable_action = jnp.zeros_like(non_ego_action)
         non_ego_stable_action = non_ego_stable_action.at[:, 1].set(
             -0.5 * (state.non_ego_states[:, 1] - initial_state.non_ego_states[:, 1])
-            -0.5 * (state.non_ego_states[:, 3] - initial_state.non_ego_states[:, 3])
+            - 0.5 * (state.non_ego_states[:, 3] - initial_state.non_ego_states[:, 3])
         )
 
         # Take a step in the environment using the action carried over from the previous
