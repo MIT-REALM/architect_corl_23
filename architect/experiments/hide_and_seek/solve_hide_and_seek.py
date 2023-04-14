@@ -11,6 +11,10 @@ import matplotlib.pyplot as plt
 from jax.config import config
 from jaxtyping import Array, Shaped
 
+from architect.engines.samplers import (
+    init_sampler as init_mcmc_sampler,
+    make_kernel as make_mcmc_kernel,
+)
 from architect.engines import predict_and_mitigate_failure_modes
 from architect.systems.hide_and_seek.hide_and_seek import Game
 from architect.systems.hide_and_seek.hide_and_seek_types import Arena
@@ -40,8 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=False)
-    parser.add_argument("--dp_grad_clip", type=float, nargs="?", default=float("inf"))
-    parser.add_argument("--ep_grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--grad_clip", type=float, nargs="?", default=float("inf"))
     args = parser.parse_args()
 
     # Hyperparameters
@@ -63,8 +66,7 @@ if __name__ == "__main__":
     predict = args.predict
     temper = args.temper
     quench_rounds = args.quench_rounds
-    dp_grad_clip = args.dp_grad_clip
-    ep_grad_clip = args.ep_grad_clip
+    grad_clip = args.grad_clip
 
     print("Running HideAndSeek with hyperparameters:")
     print(f"\tn_seekers = {n_seekers}")
@@ -85,8 +87,7 @@ if __name__ == "__main__":
     print(f"\tpredict = {predict}")
     print(f"\ttemper = {temper}")
     print(f"\tquench_rounds = {quench_rounds}")
-    print(f"\tdp_grad_clip = {dp_grad_clip}")
-    print(f"\tep_grad_clip = {ep_grad_clip}")
+    print(f"\tgrad_clip = {grad_clip}")
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
@@ -138,6 +139,22 @@ if __name__ == "__main__":
         )
     )(hider_keys)
 
+    # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
+    # stochasticity are enabled
+    init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
+        params,
+        logprob_fn,
+        False,  # don't normalize gradients
+    )
+    make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
+        logprob_fn,
+        step_size,
+        use_gradients,
+        stochasticity,
+        grad_clip,
+        True,  # use metroplis-hastings
+    )
+
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
@@ -147,18 +164,17 @@ if __name__ == "__main__":
         dp_logprior_fn=arena.multi_trajectory_prior_logprob,
         ep_logprior_fn=arena.multi_trajectory_prior_logprob,
         potential_fn=lambda dp, ep: game(dp, ep).potential,
+        init_sampler=init_sampler_fn,
+        make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
         dp_mcmc_step_size=dp_mcmc_step_size,
         ep_mcmc_step_size=ep_mcmc_step_size,
-        use_gradients=use_gradients,
         use_stochasticity=use_stochasticity,
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
-        dp_grad_clip=dp_grad_clip,
-        ep_grad_clip=ep_grad_clip,
     )
     t_end = time.perf_counter()
     print(

@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from jax.nn import sigmoid
 
+from architect.engines.samplers import (
+    init_sampler as init_mcmc_sampler,
+    make_kernel as make_mcmc_kernel,
+)
 from architect.engines import predict_and_mitigate_failure_modes
 from architect.systems.power_systems.load_test_network import load_test_network
 
@@ -51,6 +55,23 @@ if __name__ == "__main__":
     network_keys = jrandom.split(network_key, num_chains)
     init_exogenous_params = jax.vmap(sys.sample_random_network_state)(network_keys)
 
+    # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
+    # stochasticity are enabled
+    init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
+        params,
+        logprob_fn,
+        False,  # don't normalize gradients
+    )
+    make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
+        logprob_fn,
+        step_size,
+        True,  # use gradients
+        stochasticity,
+        float("inf"),  # don't clip gradients
+        False,  # don't normalize gradients
+        True,  # use metroplis-hastings
+    )
+
     # Run gradient descent with no prediction to get a (non-robust) dispatch.
     t_start = time.perf_counter()
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
@@ -60,11 +81,12 @@ if __name__ == "__main__":
         dp_logprior_fn=sys.dispatch_prior_logprob,
         ep_logprior_fn=sys.network_state_prior_logprob,
         potential_fn=lambda dp, ep: sys(dp, ep).potential,
+        init_sampler=init_sampler_fn,
+        make_kernel=make_kernel_fn,
         num_rounds=num_gd_steps,
         num_mcmc_steps_per_round=1,
         dp_mcmc_step_size=dp_mcmc_step_size,
         ep_mcmc_step_size=ep_mcmc_step_size,
-        use_gradients=True,
         use_stochasticity=False,
         repair=True,
         predict=False,

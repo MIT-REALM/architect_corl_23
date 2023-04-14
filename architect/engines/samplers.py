@@ -69,15 +69,18 @@ def make_kernel(
     use_stochasticity: Union[bool, Bool[Array, ""]] = True,
     grad_clip: Union[float, Float[Array, ""]] = float("inf"),
     normalize_gradients: Union[bool, Bool[Array, ""]] = True,
+    use_mh: Union[bool, Bool[Array, ""]] = True,
 ) -> Sampler:
     """
     Build a kernel for a sampling algorithm (either MALA, RMH, or MLE).
 
     Here's the behavior of this sampler as a function of the arguments:
 
+    (inside each block indicates behavior with use_mh = True/False if behavior differs)
+
                                     use_gradients = True | use_gradients = False
                               //====================================================
-    use_stochasticity = True  ||            MALA         |          RMH
+    use_stochasticity = True  ||         MALA/ULA        |    RMH/random walk
     --------------------------||----------------------------------------------------
     use_stochasticity = False ||      Gradient descent   |     doesn't move
                               \\====================================================
@@ -89,6 +92,7 @@ def make_kernel(
         use_stochasticity: if True, add a Gaussian to the proposal and acceptance steps
         grad_clip: maximum value to clip gradients
         normalize_gradients: if True, normalize gradients to have unit L2 norm
+        use_mh: if True, use Metropolis-Hastings acceptance, otherwise always accept
     """
     # A generic Metropolis-Hastings-style MCMC algorithm has 2 steps: a proprosal and
     # an accept/reject step.
@@ -203,9 +207,9 @@ def make_kernel(
         )
         log_p_accept = jnp.where(jnp.isnan(log_p_accept), -jnp.inf, log_p_accept)
         p_accept = jnp.clip(jnp.exp(log_p_accept), a_max=1)
-        # If we're not using stochasticity, then always accept
+        # If we're not using stochasticity or MH has been disabled, then always accept
         do_accept = jax.lax.cond(
-            use_stochasticity,
+            use_stochasticity and use_mh,
             lambda: jrandom.bernoulli(acceptance_key, p_accept),
             lambda: jnp.array(True),
         )

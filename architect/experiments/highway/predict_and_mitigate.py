@@ -15,6 +15,14 @@ from beartype.typing import NamedTuple
 from jaxtyping import Array, Float, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes
+from architect.engines.samplers import (
+    init_sampler as init_mcmc_sampler,
+    make_kernel as make_mcmc_kernel,
+)
+from architect.engines.reinforce import (
+    init_sampler as init_reinforce_sampler,
+    make_kernel as make_reinforce_kernel,
+)
 from architect.experiments.highway.train_highway_agent import make_highway_env
 from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
@@ -196,19 +204,22 @@ if __name__ == "__main__":
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
-    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-6)
+    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
     parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
+    parser.add_argument("--disable_mh", action="store_true")
+    parser.add_argument("--bayes_opt", action="store_true")
+    parser.add_argument("--pso", action="store_true")
+    parser.add_argument("--reinforce", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
     parser.add_argument("--predict", action=boolean_action, default=True)
-    parser.add_argument("--temper", action=boolean_action, default=False)
-    parser.add_argument("--dp_grad_clip", type=float, nargs="?", default=float("inf"))
-    parser.add_argument("--ep_grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--temper", action=boolean_action, default=True)
+    parser.add_argument("--grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--dont_normalize_gradients", action="store_true")
     args = parser.parse_args()
 
@@ -223,12 +234,15 @@ if __name__ == "__main__":
     num_chains = args.num_chains
     use_gradients = not args.disable_gradients
     use_stochasticity = not args.disable_stochasticity
+    use_mh = not args.disable_mh
+    bayes_opt = args.bayes_opt
+    pso = args.pso
+    reinforce = args.reinforce
     repair = args.repair
     predict = args.predict
     temper = args.temper
     quench_rounds = args.quench_rounds
-    dp_grad_clip = args.dp_grad_clip
-    ep_grad_clip = args.ep_grad_clip
+    grad_clip = args.grad_clip
     normalize_gradients = not args.dont_normalize_gradients
 
     print("Running prediction/mitigation on overtake with hyperparameters:")
@@ -244,13 +258,17 @@ if __name__ == "__main__":
     print(f"\tnum_chains = {num_chains}")
     print(f"\tuse_gradients = {use_gradients}")
     print(f"\tuse_stochasticity = {use_stochasticity}")
+    print(f"\tuse_mh = {use_mh}")
     print(f"\trepair = {repair}")
     print(f"\tpredict = {predict}")
     print(f"\ttemper = {temper}")
     print(f"\tquench_rounds = {quench_rounds}")
-    print(f"\tdp_grad_clip = {dp_grad_clip}")
-    print(f"\tep_grad_clip = {ep_grad_clip}")
+    print(f"\tgrad_clip = {grad_clip}")
     print(f"\tnormalize_gradients = {normalize_gradients}")
+    print(
+        f"Using alternative algorithm? {bayes_opt or pso or reinforce}",
+        f"(bayes_opt = {bayes_opt}, pso = {pso}, reinforce = {reinforce})",
+    )
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
@@ -282,12 +300,43 @@ if __name__ == "__main__":
     prng_key, initial_state_key = jrandom.split(prng_key)
     initial_state = env.reset(initial_state_key)
 
-    # Initialize some random non-ego action trajectories to serve as exogenous parameters
+    # Initialize some random non-ego action trajectories as exogenous parameters
     prng_key, ep_key = jrandom.split(prng_key)
     ep_keys = jrandom.split(ep_key, num_chains)
     initial_eps = jax.vmap(
         lambda key: sample_non_ego_actions(key, env, T, 2, noise_scale)
     )(ep_keys)
+
+    # Choose which sampler to use
+    if bayes_opt:
+        raise NotImplementedError("Bayesian optimization not implemented yet")
+    elif pso:
+        raise NotImplementedError("PSO not implemented yet")
+    elif reinforce:
+        init_sampler_fn = init_reinforce_sampler
+        make_kernel_fn = lambda logprob_fn, step_size, _: make_reinforce_kernel(
+            logprob_fn,
+            step_size,
+            perturbation_stddev=noise_scale,
+            baseline_update_rate=0.5,
+        )
+    else:
+        # This sampler yields either MALA, GD, or RMH depending on whether gradients
+        # and/or stochasticity are enabled
+        init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
+            params,
+            logprob_fn,
+            normalize_gradients,
+        )
+        make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
+            logprob_fn,
+            step_size,
+            use_gradients,
+            stochasticity,
+            grad_clip,
+            normalize_gradients,
+            use_mh,
+        )
 
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
@@ -299,18 +348,17 @@ if __name__ == "__main__":
         ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
         potential_fn=lambda dp, ep: L
         * simulate(env, dp, initial_state, ep, static_policy, T).potential,
+        init_sampler=init_sampler_fn,
+        make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
         dp_mcmc_step_size=dp_mcmc_step_size,
         ep_mcmc_step_size=ep_mcmc_step_size,
-        use_gradients=use_gradients,
         use_stochasticity=use_stochasticity,
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
-        dp_grad_clip=dp_grad_clip,
-        ep_grad_clip=ep_grad_clip,
         normalize_gradients=normalize_gradients,
     )
     t_end = time.perf_counter()
@@ -410,17 +458,28 @@ if __name__ == "__main__":
         jnp.concatenate(result.final_obs.color_image.transpose(0, 2, 1, 3), axis=1)
     )
 
-    if use_gradients and use_stochasticity:
+    if bayes_opt:
+        alg_type = "bayes_opt_advsim"
+    elif pso:
+        alg_type = "pso_advto"
+    elif reinforce:
+        alg_type = "reinforce_l2c"
+    elif use_gradients and use_stochasticity and use_mh:
         alg_type = "mala"
+    elif use_gradients and use_stochasticity and not use_mh:
+        alg_type = "ula"
     elif use_gradients and not use_stochasticity:
         alg_type = "gd"
-    elif not use_gradients and use_stochasticity:
+    elif not use_gradients and use_stochasticity and use_mh:
         alg_type = "rmh"
+    elif not use_gradients and use_stochasticity and not use_mh:
+        alg_type = "random_walk"
     else:
         alg_type = "static"
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
         f"{'_' if repair else ''}{'repair' if repair else ''}/"
+        f"noise_{noise_scale:0.1e}/"
         f"L_{L:0.1e}/"
         f"{num_rounds * num_mcmc_steps_per_round}_samples/"
         f"{num_chains}_chains/"

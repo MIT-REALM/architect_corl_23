@@ -381,7 +381,8 @@ def train_ppo_driver(
         )
         if epoch % 20 == 0 or epoch == epochs - 1:
             # Save trajectory images; can be converted to video using this command:
-            # ffmpeg -framerate 10 -i img_%d.png -c:v libx264 -r 30 -vf scale=320x320:flags=neighbor out.mp4
+            # ffmpeg -framerate 10 -i img_%d.png -c:v libx264 -r 30 -vf \
+            #   scale=320x320:flags=neighbor out.mp4
             save_traj_imgs(trajectory, logdir, epoch)
             # Save policy
             eqx.tree_serialise_leaves(

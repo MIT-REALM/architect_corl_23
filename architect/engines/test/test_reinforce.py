@@ -4,7 +4,7 @@ import jax.random as jrandom
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
-from architect.engines.samplers import init_sampler, make_kernel
+from architect.engines.reinforce import init_sampler, make_kernel
 
 
 # Define a test likelihood
@@ -18,23 +18,24 @@ def test_init_sampler():
     """Test the init_sampler function."""
     n = 4
     position = jnp.ones(n)
-    state = init_sampler(position, quadratic_potential, normalize_gradients=False)
+    state = init_sampler(position, quadratic_potential)
 
     # State should be initialized correctly
     assert jnp.allclose(state.position, position)
-    assert jnp.allclose(state.logdensity, -n / 2)
-    assert jnp.allclose(state.logdensity_grad, -position)
+    assert jnp.allclose(state.baseline, 0.0)
 
 
-def test_make_kernel_mala():
-    """Test the make_kernel function for the MALA sampler."""
+def test_make_kernel():
+    """Test the make_kernel function for the REINFORCE optimizer."""
     step_size = 1e-2
+    perturbation_stddev = 0.1
+    baseline_update_rate = 0.5
 
     # Scale up the potential to make the test more consistent
-    potential = lambda x: 100 * quadratic_potential(x)
+    potential = lambda x: quadratic_potential(x)
 
     kernel = make_kernel(
-        potential, step_size, use_gradients=True, use_stochasticity=True
+        potential, step_size, perturbation_stddev, baseline_update_rate
     )
 
     # Kernel should be initialized correctly
@@ -43,7 +44,7 @@ def test_make_kernel_mala():
     # We should be able to call the kernel
     n = 2
     position = jnp.ones(n)
-    state = init_sampler(position, potential, normalize_gradients=False)
+    state = init_sampler(position, potential)
     prng_key = jrandom.PRNGKey(0)
     next_state = kernel(prng_key, state)
     assert next_state is not None
@@ -59,7 +60,7 @@ def test_make_kernel_mala():
         return state, state
 
     keys = jrandom.split(prng_key, n_steps * 2)
-    _, states = jax.lax.scan(one_step, state, keys)
+    _, states = jax.lax.scan(one_step, next_state, keys)
 
     assert jnp.allclose(
         states.position[n_steps:].mean(axis=0), jnp.zeros(n), atol=tolerance

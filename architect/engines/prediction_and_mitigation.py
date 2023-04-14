@@ -10,10 +10,9 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
-from beartype.typing import Callable, Optional, Tuple, Union, Any
-from jaxtyping import Array, Float, Integer, jaxtyped
+from beartype.typing import Callable, Optional, Tuple, Any
+from jaxtyping import Array, Float, Integer, jaxtyped, PyTree
 
-from architect.engines.samplers import SamplerState, init_sampler, make_kernel
 from architect.types import LogLikelihood, Params, Sampler
 from architect.utils import softmin
 
@@ -23,7 +22,7 @@ from architect.utils import softmin
 def run_chain(
     prng_key: Integer[Array, "..."],
     kernel: Sampler,
-    initial_state: SamplerState,
+    initial_state: PyTree,
     num_samples: int,
 ) -> Tuple[Params, Float[Array, ""], Float[Array, ""], Any]:
     """
@@ -56,11 +55,22 @@ def run_chain(
     one_step(0, initial_carry)  # todo
     final_state, _ = jax.lax.fori_loop(0, num_samples, one_step, initial_carry)
 
+    # Compute acceptance rate if the sampler supports it
+    if hasattr(initial_state, "acceptance_rate"):
+        accept_rate = initial_state.acceptance_rate
+    else:
+        accept_rate = -1.0
+
+    # Add debug information
+    debug = {}
+    if hasattr(initial_state, "logdensity_grad"):
+        debug["initial_grad"] = initial_state.logdensity_grad
+
     return (
         final_state.position,
         final_state.logdensity,
-        final_state.num_accepts / num_samples,
-        {"final_grad": final_state.logdensity_grad},
+        accept_rate,
+        debug,
     )
 
 
@@ -73,19 +83,17 @@ def predict_and_mitigate_failure_modes(
     dp_logprior_fn: LogLikelihood,
     ep_logprior_fn: LogLikelihood,
     potential_fn: Callable[[Params, Params], Float[Array, ""]],
+    init_sampler: Callable[[Params, LogLikelihood], PyTree],
+    make_kernel: Callable[[LogLikelihood, float, bool], Sampler],
     num_rounds: int,
     num_mcmc_steps_per_round: int,
     dp_mcmc_step_size: float,
     ep_mcmc_step_size: float,
-    use_gradients: bool = True,
     use_stochasticity: bool = True,
     repair: bool = True,
     predict: bool = True,
     quench_rounds: int = 0,
     tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
-    dp_grad_clip: Union[float, Float[Array, ""]] = float("inf"),
-    ep_grad_clip: Union[float, Float[Array, ""]] = float("inf"),
-    normalize_gradients: bool = False,
 ) -> Tuple[
     Params,
     Params,
@@ -107,6 +115,12 @@ def predict_and_mitigate_failure_modes(
             prior distribution
         potential_fn: function taking a single set of design and exogenous parameters,
             returning the cost metric for the system's performance
+        init_sampler: function taking a single set of design parameters and a log
+            likelihood function, returning the initial state for a sampler/optimization
+            algorithm.
+        make_kernel: function taking a log likelihood function, a step size, and a
+            boolean flag indicating whether or not to disable stochasticity, returning a
+            sampler (or optimizer) to use.
         num_rounds: how many steps to take for the top-level predict-repair algorithm
         num_mcmc_steps_per_round: the number of steps to run for each set of MCMC chains
             within each round
@@ -172,19 +186,12 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Initialize the chains for this kernel
-            initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None, None))(
-                current_dps, dp_logprob_fn, normalize_gradients
+            initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
+                current_dps, dp_logprob_fn
             )
 
             # Make the sampling kernel
-            dp_kernel = make_kernel(
-                dp_logprob_fn,
-                dp_mcmc_step_size,
-                use_gradients,
-                stochasticity,
-                dp_grad_clip,
-                normalize_gradients,
-            )
+            dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, stochasticity)
 
             # Run the chains and update the design parameters
             n_chains = initial_dp_sampler_states.logdensity.shape[0]
@@ -216,19 +223,12 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Initialize the chains for this kernel
-            initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None, None))(
-                current_eps, ep_logprob_fn, normalize_gradients
+            initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
+                current_eps, ep_logprob_fn
             )
 
             # Make the sampling kernel
-            ep_kernel = make_kernel(
-                ep_logprob_fn,
-                ep_mcmc_step_size,
-                use_gradients,
-                stochasticity,
-                ep_grad_clip,
-                normalize_gradients,
-            )
+            ep_kernel = make_kernel(ep_logprob_fn, ep_mcmc_step_size, stochasticity)
 
             # Run the chains and update the design parameters
             n_chains = initial_ep_sampler_states.logdensity.shape[0]
