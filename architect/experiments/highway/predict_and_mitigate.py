@@ -206,14 +206,12 @@ if __name__ == "__main__":
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
-    parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
+    parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
     parser.add_argument("--disable_mh", action="store_true")
-    parser.add_argument("--bayes_opt", action="store_true")
-    parser.add_argument("--pso", action="store_true")
     parser.add_argument("--reinforce", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
@@ -230,13 +228,11 @@ if __name__ == "__main__":
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
     num_rounds = args.num_rounds
-    num_mcmc_steps_per_round = args.num_mcmc_steps_per_round
+    num_steps_per_round = args.num_steps_per_round
     num_chains = args.num_chains
     use_gradients = not args.disable_gradients
     use_stochasticity = not args.disable_stochasticity
     use_mh = not args.disable_mh
-    bayes_opt = args.bayes_opt
-    pso = args.pso
     reinforce = args.reinforce
     repair = args.repair
     predict = args.predict
@@ -254,7 +250,7 @@ if __name__ == "__main__":
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
     print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
     print(f"\tnum_rounds = {num_rounds}")
-    print(f"\tnum_mcmc_steps_per_round = {num_mcmc_steps_per_round}")
+    print(f"\tnum_steps_per_round = {num_steps_per_round}")
     print(f"\tnum_chains = {num_chains}")
     print(f"\tuse_gradients = {use_gradients}")
     print(f"\tuse_stochasticity = {use_stochasticity}")
@@ -266,8 +262,8 @@ if __name__ == "__main__":
     print(f"\tgrad_clip = {grad_clip}")
     print(f"\tnormalize_gradients = {normalize_gradients}")
     print(
-        f"Using alternative algorithm? {bayes_opt or pso or reinforce}",
-        f"(bayes_opt = {bayes_opt}, pso = {pso}, reinforce = {reinforce})",
+        f"Using alternative algorithm? {reinforce}",
+        f"(reinforce = {reinforce})",
     )
 
     # Add exponential tempering if using
@@ -308,11 +304,7 @@ if __name__ == "__main__":
     )(ep_keys)
 
     # Choose which sampler to use
-    if bayes_opt:
-        raise NotImplementedError("Bayesian optimization not implemented yet")
-    elif pso:
-        raise NotImplementedError("PSO not implemented yet")
-    elif reinforce:
+    if reinforce:
         init_sampler_fn = init_reinforce_sampler
         make_kernel_fn = lambda logprob_fn, step_size, _: make_reinforce_kernel(
             logprob_fn,
@@ -351,7 +343,7 @@ if __name__ == "__main__":
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
-        num_mcmc_steps_per_round=num_mcmc_steps_per_round,
+        num_mcmc_steps_per_round=num_steps_per_round,
         dp_mcmc_step_size=dp_mcmc_step_size,
         ep_mcmc_step_size=ep_mcmc_step_size,
         use_stochasticity=use_stochasticity,
@@ -458,11 +450,7 @@ if __name__ == "__main__":
         jnp.concatenate(result.final_obs.color_image.transpose(0, 2, 1, 3), axis=1)
     )
 
-    if bayes_opt:
-        alg_type = "bayes_opt_advsim"
-    elif pso:
-        alg_type = "pso_advto"
-    elif reinforce:
+    if reinforce:
         alg_type = "reinforce_l2c"
     elif use_gradients and use_stochasticity and use_mh:
         alg_type = "mala"
@@ -481,7 +469,7 @@ if __name__ == "__main__":
         f"{'_' if repair else ''}{'repair' if repair else ''}/"
         f"noise_{noise_scale:0.1e}/"
         f"L_{L:0.1e}/"
-        f"{num_rounds * num_mcmc_steps_per_round}_samples/"
+        f"{num_rounds * num_steps_per_round}_samples/"
         f"{num_chains}_chains/"
         f"{quench_rounds}_quench/"
         f"dp_{dp_mcmc_step_size:0.1e}/"
@@ -516,7 +504,7 @@ if __name__ == "__main__":
                 "dp_mcmc_step_size": dp_mcmc_step_size,
                 "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,
-                "num_mcmc_steps_per_round": num_mcmc_steps_per_round,
+                "num_steps_per_round": num_steps_per_round,
                 "num_chains": num_chains,
                 "use_gradients": use_gradients,
                 "use_stochasticity": use_stochasticity,
