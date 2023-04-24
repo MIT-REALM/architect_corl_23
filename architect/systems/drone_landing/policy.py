@@ -25,9 +25,6 @@ class DroneLandingPolicy(eqx.Module):
     encoder_conv_3: eqx.nn.Conv2d
 
     actor_fcn: eqx.nn.MLP
-    critic_fcn: eqx.nn.MLP
-
-    log_action_std: Float[Array, ""]
 
     @jaxtyped
     @beartype
@@ -77,34 +74,23 @@ class DroneLandingPolicy(eqx.Module):
         embedding_size = image_shape[0] * image_shape[1]
         embedding_size = int(embedding_size) + 5  # for drone state
 
-        actor_key, critic_key = jrandom.split(fcn_key)
         # Create the fully connected layers
         self.actor_fcn = eqx.nn.MLP(
             in_size=embedding_size,
             out_size=2,  # todo 4,
             width_size=fcn_width,
             depth=fcn_layers,
-            key=actor_key,
+            key=fcn_key,
         )
-        self.critic_fcn = eqx.nn.MLP(
-            in_size=embedding_size,
-            out_size=1,
-            width_size=fcn_width,
-            depth=fcn_layers,
-            key=critic_key,
-        )
-
-        # Initialize action standard deviation
-        self.log_action_std = jnp.log(jnp.array(0.1))
 
     def forward(self, obs: DroneObs) -> Tuple[Float[Array, " 2"], Float[Array, ""]]:
-        """Compute the mean action and value estimate for the given state.
+        """Compute the action for the given observation.
 
         Args:
             obs: The observation of the current state.
 
         Returns:
-            The mean action and value estimate.
+            The predicted action
         """
         # Compute the image embedding
         rgb = obs.image.transpose(2, 0, 1)
@@ -126,67 +112,19 @@ class DroneLandingPolicy(eqx.Module):
             )
         )
 
-        # Compute the action and value estimate
-        value = self.critic_fcn(y).reshape()  # scalar output
-        action_mean = self.actor_fcn(y)
-
-        return action_mean, value
+        # Compute the action
+        action = self.actor_fcn(y)
+        return action
 
     def __call__(
-        self, obs: DroneObs, key: PRNGKeyArray, deterministic=True
+        self, obs: DroneObs
     ) -> Tuple[Float[Array, " 2"], Float[Array, ""], Float[Array, ""]]:
         """Compute the action and value estimate for the given state.
 
         Args:
             obs: The observation of the current state.
-            key: The random key for sampling the action.
-            deterministic: Whether to sample the action from the policy distribution
-                or to return the mean action.
 
         Returns:
-            The action, action log probability, and value estimate.
+            The predicted action
         """
-        action_mean, value = self.forward(obs)
-        action_noise = jnp.exp(self.log_action_std)
-
-        if deterministic:
-            # Return the mean action, a constant logprob, and the value estimate
-            return action_mean, jnp.array(0.0), value
-
-        action = jrandom.multivariate_normal(
-            key, action_mean, action_noise * jnp.eye(action_mean.shape[0])
-        )
-        action_logp = jax.scipy.stats.multivariate_normal.logpdf(
-            action, action_mean, action_noise * jnp.eye(action_mean.shape[0])
-        )
-
-        return action, action_logp, value
-
-    def action_log_prob_and_value(
-        self, obs: DroneObs, action: Float[Array, " 2"]
-    ) -> Tuple[Float[Array, ""], Float[Array, ""]]:
-        """Compute the log probability of an action with the given observation.
-
-        Args:
-            obs: The observation of the current state.
-            action: The action to compute the log probability of.
-            action_noise: The standard deviation of the Gaussian noise to add
-
-        Returns:
-            The log probability of the action and the value estimate.
-        """
-        action_mean, value = self.forward(obs)
-        action_noise = jnp.exp(self.log_action_std)
-
-        action_logp = jax.scipy.stats.multivariate_normal.logpdf(
-            action, action_mean, action_noise * jnp.eye(action_mean.shape[0])
-        )
-
-        return action_logp, value
-
-    def entropy(self) -> Float[Array, ""]:
-        """Return the entropy of the action distribution."""
-        action_noise = jnp.exp(self.log_action_std)
-        return (
-            0.5 * jnp.linalg.slogdet(2 * jnp.pi * jnp.e * action_noise * jnp.eye(4))[1]
-        )
+        return self.forward(obs)

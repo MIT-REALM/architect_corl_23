@@ -11,11 +11,9 @@ import matplotlib.pyplot as plt
 from jax.config import config
 from jaxtyping import Array, Shaped
 
-from architect.engines.samplers import (
-    init_sampler as init_mcmc_sampler,
-    make_kernel as make_mcmc_kernel,
-)
 from architect.engines import predict_and_mitigate_failure_modes
+from architect.engines.samplers import init_sampler as init_mcmc_sampler
+from architect.engines.samplers import make_kernel as make_mcmc_kernel
 from architect.systems.hide_and_seek.hide_and_seek import Game
 from architect.systems.hide_and_seek.hide_and_seek_types import Arena
 

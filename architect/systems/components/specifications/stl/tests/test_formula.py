@@ -2,18 +2,9 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt  # noqa
 
 from architect.systems.components.specifications.stl.formula import (
-    STLAnd,
-    STLImplies,
-    STLNegation,
-    STLOr,
-    STLPredicate,
-    STLTimedAlways,
-    STLTimedEventually,
-    STLTimedUntil,
-    STLUntimedAlways,
-    STLUntimedEventually,
-    STLUntimedUntil,
-)
+    STLAnd, STLImplies, STLNegation, STLOr, STLPredicate, STLTimedAlways,
+    STLTimedEventually, STLTimedUntil, STLUntimedAlways, STLUntimedEventually,
+    STLUntimedUntil)
 
 
 def make_test_predicate():

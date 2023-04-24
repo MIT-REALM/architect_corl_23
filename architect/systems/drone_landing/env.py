@@ -8,9 +8,7 @@ from beartype.typing import NamedTuple, Tuple
 from jaxtyping import Array, Bool, Float, jaxtyped
 
 from architect.systems.components.sensing.vision.render import (
-    CameraExtrinsics,
-    CameraIntrinsics,
-)
+    CameraExtrinsics, CameraIntrinsics)
 from architect.systems.components.sensing.vision.util import look_at
 from architect.systems.drone_landing.scene import DroneLandingScene
 from architect.types import PRNGKeyArray
@@ -120,7 +118,7 @@ class DroneLandingEnv:
         x, y, z, yaw = state
 
         # Clip the velocities and unpack
-        action = 1 * jax.nn.tanh(action)
+        action = 2 * jax.nn.tanh(action)
         # vx, vy, vz, yaw_rate = action  todo
         v, yaw_rate = action
         vx = v * jnp.cos(yaw)
@@ -186,13 +184,15 @@ class DroneLandingEnv:
             -25 * min_distance_to_obstacle
         )
 
-        reward = (distance_reward + collision_reward)#  / self._collision_penalty
+        reward = distance_reward + collision_reward  #  / self._collision_penalty
 
         # The episode ends when a collision occurs or we get close to the goal, at which
         # point we reset the environment
         done = jnp.logical_or(min_distance_to_obstacle < 0.0, distance_to_goal < 1.0)
         done = jnp.logical_or(done, distance_to_goal > 15.0)
-        done = jnp.logical_or(done, next_drone_state[0] > 0.1)  # stop if we go too far in x
+        done = jnp.logical_or(
+            done, next_drone_state[0] > 0.1
+        )  # stop if we go too far in x
         next_state = jax.lax.cond(
             done,
             lambda: self.reset(key),
@@ -227,9 +227,7 @@ class DroneLandingEnv:
         )
 
         # Sample a new wind speed
-        wind_speed = jax.random.uniform(
-            wind_key, shape=(2,), minval=-0.1, maxval=0.1
-        )
+        wind_speed = jax.random.uniform(wind_key, shape=(2,), minval=-0.1, maxval=0.1)
 
         return DroneState(
             drone_state=self._initial_drone_state,

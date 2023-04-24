@@ -10,8 +10,8 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 from beartype import beartype
-from beartype.typing import Callable, Optional, Tuple, Any
-from jaxtyping import Array, Float, Integer, jaxtyped, PyTree
+from beartype.typing import Any, Callable, Optional, Tuple
+from jaxtyping import Array, Float, Integer, PyTree, jaxtyped
 
 from architect.types import LogLikelihood, Params, Sampler
 from architect.utils import softmin

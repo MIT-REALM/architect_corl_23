@@ -8,10 +8,7 @@ from beartype import beartype
 
 from architect.systems.power_systems.acopf import ACOPF
 from architect.systems.power_systems.acopf_types import (
-    InterconnectionSpecification,
-    NetworkSpecification,
-    NetworkState,
-)
+    InterconnectionSpecification, NetworkSpecification, NetworkState)
 
 
 @beartype

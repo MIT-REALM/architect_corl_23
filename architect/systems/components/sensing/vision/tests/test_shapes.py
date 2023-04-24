@@ -1,13 +1,9 @@
 """Test implementation of SDF shapes."""
 import jax.numpy as jnp
 
-from architect.systems.components.sensing.vision.shapes import (
-    Box,
-    Cylinder,
-    Halfspace,
-    Scene,
-    Sphere,
-)
+from architect.systems.components.sensing.vision.shapes import (Box, Cylinder,
+                                                                Halfspace,
+                                                                Scene, Sphere)
 
 
 def test_sphere():

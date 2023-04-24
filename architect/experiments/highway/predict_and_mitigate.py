@@ -2,8 +2,8 @@
 import argparse
 import json
 import os
-import time
 import shutil
+import time
 
 import equinox as eqx
 import jax
@@ -15,20 +15,16 @@ from beartype.typing import NamedTuple
 from jaxtyping import Array, Float, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes
-from architect.engines.samplers import (
-    init_sampler as init_mcmc_sampler,
-    make_kernel as make_mcmc_kernel,
-)
-from architect.engines.reinforce import (
-    init_sampler as init_reinforce_sampler,
-    make_kernel as make_reinforce_kernel,
-)
+from architect.engines.reinforce import init_sampler as init_reinforce_sampler
+from architect.engines.reinforce import make_kernel as make_reinforce_kernel
+from architect.engines.samplers import init_sampler as init_mcmc_sampler
+from architect.engines.samplers import make_kernel as make_mcmc_kernel
 from architect.experiments.highway.train_highway_agent import make_highway_env
 from architect.systems.highway.driving_policy import DrivingPolicy
-from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
-from architect.utils import softmin
+from architect.systems.highway.highway_env import (HighwayEnv, HighwayObs,
+                                                   HighwayState)
 from architect.types import PRNGKeyArray
-
+from architect.utils import softmin
 
 # Type for non ego action trajectory
 NonEgoActions = Float[Array, "T n_non_ego_agents num_actions"]

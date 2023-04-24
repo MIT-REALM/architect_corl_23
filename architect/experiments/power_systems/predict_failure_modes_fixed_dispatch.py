@@ -9,11 +9,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from jax.nn import sigmoid
 
-from architect.engines.samplers import (
-    init_sampler as init_mcmc_sampler,
-    make_kernel as make_mcmc_kernel,
-)
 from architect.engines import predict_and_mitigate_failure_modes
+from architect.engines.samplers import init_sampler as init_mcmc_sampler
+from architect.engines.samplers import make_kernel as make_mcmc_kernel
 from architect.systems.power_systems.load_test_network import load_test_network
 
 if __name__ == "__main__":

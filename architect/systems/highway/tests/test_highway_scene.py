@@ -2,9 +2,7 @@
 import jax.numpy as jnp
 
 from architect.systems.components.sensing.vision.render import (
-    CameraExtrinsics,
-    CameraIntrinsics,
-)
+    CameraExtrinsics, CameraIntrinsics)
 from architect.systems.components.sensing.vision.util import look_at
 from architect.systems.highway.highway_env import HighwayScene
 
