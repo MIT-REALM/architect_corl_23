@@ -6,12 +6,21 @@ from beartype.typing import List, NamedTuple, Optional, Tuple
 from jaxtyping import Array, Float, jaxtyped
 
 from architect.systems.components.sensing.vision.render import (
-    CameraExtrinsics, CameraIntrinsics, pinhole_camera_rays, raycast,
-    render_color, render_depth, render_shadows)
-from architect.systems.components.sensing.vision.shapes import (Box, Cylinder,
-                                                                Halfspace,
-                                                                Scene,
-                                                                SDFShape)
+    CameraExtrinsics,
+    CameraIntrinsics,
+    pinhole_camera_rays,
+    raycast,
+    render_color,
+    render_depth,
+    render_shadows,
+)
+from architect.systems.components.sensing.vision.shapes import (
+    Box,
+    Cylinder,
+    Halfspace,
+    Scene,
+    SDFShape,
+)
 
 
 @beartype

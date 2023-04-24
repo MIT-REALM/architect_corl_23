@@ -6,7 +6,9 @@ from jax.nn import logsumexp
 from jaxtyping import Array, Float, jaxtyped
 
 from architect.systems.hide_and_seek.hide_and_seek_types import (
-    HideAndSeekResult, MultiAgentTrajectory)
+    HideAndSeekResult,
+    MultiAgentTrajectory,
+)
 
 
 @jax.jit

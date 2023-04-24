@@ -1,4 +1,4 @@
-"""Code to predict and mitigate failure modes in the highway scenario."""
+"""Code to predict and mitigate failure modes in the drone scenario."""
 import argparse
 import json
 import os
@@ -19,88 +19,32 @@ from architect.engines.reinforce import init_sampler as init_reinforce_sampler
 from architect.engines.reinforce import make_kernel as make_reinforce_kernel
 from architect.engines.samplers import init_sampler as init_mcmc_sampler
 from architect.engines.samplers import make_kernel as make_mcmc_kernel
-from architect.experiments.highway.train_highway_agent import make_highway_env
-from architect.systems.highway.driving_policy import DrivingPolicy
-from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
+from architect.experiments.drone_landing.train_drone_agent import make_drone_landing_env
+from architect.systems.drone_landing.policy import DroneLandingPolicy
+from architect.systems.drone_landing.env import DroneLandingEnv, DroneObs, DroneState
 from architect.types import PRNGKeyArray
 from architect.utils import softmin
-
-# Type for non ego action trajectory
-NonEgoActions = Float[Array, "T n_non_ego_agents num_actions"]
-
-
-def sample_non_ego_actions(
-    key: PRNGKeyArray,
-    env: HighwayEnv,
-    horizon: int,
-    n_non_ego: int,
-    noise_scale: float = 0.05,
-) -> NonEgoActions:
-    """Sample actions for the non-ego vehicles.
-
-    These are residual applied on top of a proportional feedback controller.
-
-    Args:
-        key: A PRNG key.
-        env: The environment to sample actions for.
-        horizon: The number of steps to sample actions for.
-        n_non_ego: The number of non-ego vehicles.
-
-    Returns:
-        A NonEgoActions object.
-    """
-    noise_cov = noise_scale * jnp.eye(2)
-    keys = jrandom.split(key, horizon)
-    actions = jax.vmap(env.sample_non_ego_actions, in_axes=(0, None, None))(
-        keys,
-        noise_cov,
-        n_non_ego,
-    )
-    return actions
-
-
-def non_ego_actions_prior_logprob(
-    actions: NonEgoActions,
-    env: HighwayEnv,
-    noise_scale: float = 0.05,
-) -> Float[Array, ""]:
-    """Compute the log probability of a set of non-ego actions.
-
-    Args:
-        actions: The actions to compute the log probability of.
-        env: The environment to sample actions for
-        noise_scale: The scale of the noise to use.
-
-    Returns:
-        The log probability of the actions.
-    """
-    noise_cov = noise_scale * jnp.eye(2)
-    logprob = jax.vmap(env.non_ego_actions_prior_logprob, in_axes=(0, None))(
-        actions,
-        noise_cov,
-    )
-    return logprob.sum()
 
 
 class SimulationResults(NamedTuple):
     """A class for storing the results of a simulation."""
 
     potential: Float[Array, ""]
-    initial_obs: HighwayObs
-    final_obs: HighwayObs
-    ego_trajectory: Float[Array, "T 4"]
-    non_ego_trajectory: Float[Array, "T n_non_ego 4"]
+    initial_obs: DroneObs
+    final_obs: DroneObs
+    drone_traj: Float[Array, "T 4"]
+    tree_locations: Float[Array, "num_trees 2"]
+    wind_speed: Float[Array, " 2"]
 
 
 def simulate(
-    env: HighwayEnv,
-    policy: DrivingPolicy,
-    initial_state: HighwayState,
-    non_ego_actions: NonEgoActions,
-    static_policy: DrivingPolicy,
+    env: DroneLandingEnv,
+    policy: DroneLandingPolicy,
+    initial_state: DroneState,
+    static_policy: DroneLandingPolicy,
     max_steps: int = 60,
 ) -> Float[Array, ""]:
-    """Simulate the highway environment.
+    """Simulate the drone landing environment.
 
     Disables randomness in the policy and environment (all randomness should be
     factored out into the initial_state argument).
@@ -112,7 +56,6 @@ def simulate(
         env: The environment to simulate.
         policy: The parts of the policy that are design parameters.
         initial_state: The initial state of the environment.
-        non_ego_actions: The actions of the non-ego vehicles.
         static_policy: the parts of the policy that are not design parameters.
         max_steps: The maximum number of steps to simulate.
 
@@ -123,10 +66,7 @@ def simulate(
     policy = eqx.combine(policy, static_policy)
 
     @jax.checkpoint
-    def step(carry, scan_inputs):
-        # Unpack the input
-        key, non_ego_action = scan_inputs
-
+    def step(carry, key):
         # Unpack the carry
         action, state, already_done = carry
 
@@ -134,22 +74,14 @@ def simulate(
         # to the environment and policy.
         step_subkey, action_subkey = jrandom.split(key)
 
-        # The action passed in is a residual applied to a stabilizing policy for each
-        # non-ego agent
-        non_ego_stable_action = jnp.zeros_like(non_ego_action)
-        non_ego_stable_action = non_ego_stable_action.at[:, 1].set(
-            -0.5 * (state.non_ego_states[:, 1] - initial_state.non_ego_states[:, 1])
-            - 0.5 * (state.non_ego_states[:, 3] - initial_state.non_ego_states[:, 3])
-        )
-
         # Take a step in the environment using the action carried over from the previous
         # step.
         next_state, next_observation, reward, done = env.step(
-            state, action, non_ego_action + non_ego_stable_action, step_subkey
+            state, action, step_subkey
         )
 
         # Compute the action for the next step
-        next_action, _, _ = policy(next_observation, action_subkey, deterministic=True)
+        next_action = policy(next_observation, action_subkey)
 
         # If the environment has already terminated, set the reward to zero.
         reward = jax.lax.cond(already_done, lambda: 0.0, lambda: reward)
@@ -165,12 +97,12 @@ def simulate(
 
     # Get the initial observation and action
     initial_obs = env.get_obs(initial_state)
-    initial_action, _, _ = policy(initial_obs, jrandom.PRNGKey(0), deterministic=True)
+    initial_action = policy(initial_obs, jrandom.PRNGKey(0))
 
     # Transform and rollout!
     keys = jrandom.split(jrandom.PRNGKey(0), max_steps)
     (_, final_state, _), (reward, state_traj) = jax.lax.scan(
-        step, (initial_action, initial_state, False), (keys, non_ego_actions)
+        step, (initial_action, initial_state, False), keys
     )
 
     # Get the final observation
@@ -183,8 +115,9 @@ def simulate(
         potential,
         initial_obs,
         final_obs,
-        state_traj.ego_state,
-        state_traj.non_ego_states,
+        drone_traj=state_traj.drone_state,
+        tree_locations=initial_state.tree_locations,
+        wind_speed=initial_state.wind_speed,
     )
 
 
@@ -192,10 +125,7 @@ if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--savename", type=str, default="overtake_actions")
-    parser.add_argument("--image_w", type=int, nargs="?", default=32)
-    parser.add_argument("--image_h", type=int, nargs="?", default=32)
-    parser.add_argument("--noise_scale", type=float, nargs="?", default=0.05)
+    parser.add_argument("--savename", type=str, default="drone")
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
@@ -218,7 +148,6 @@ if __name__ == "__main__":
 
     # Hyperparameters
     L = args.L
-    noise_scale = args.noise_scale
     T = args.T
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
@@ -238,8 +167,7 @@ if __name__ == "__main__":
 
     print("Running prediction/mitigation on overtake with hyperparameters:")
     print(f"\tmodel_path = {args.model_path}")
-    print(f"\timage dimensions (w x h) = {args.image_w} x {args.image_h}")
-    print(f"\tnoise_scale = {noise_scale}")
+    print(f"\timage dimensions (w x h) = 64 x 64")
     print(f"\tT = {T}")
     print(f"\tL = {L}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
@@ -269,34 +197,23 @@ if __name__ == "__main__":
     prng_key = jrandom.PRNGKey(0)
 
     # Make the environment to use
-    image_shape = (args.image_h, args.image_w)
-    env = make_highway_env(image_shape)
+    image_shape = (64, 64)
+    env = make_drone_landing_env(image_shape)
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition
     # out just the continuous parameters, which will be our design parameters
-    dummy_policy = DrivingPolicy(jrandom.PRNGKey(0), image_shape)
+    dummy_policy = DroneLandingPolicy(jrandom.PRNGKey(0), image_shape)
     load_policy = lambda _: eqx.tree_deserialise_leaves(args.model_path, dummy_policy)
     get_dps = lambda _: eqx.partition(load_policy(_), eqx.is_array)[0]
     initial_dps = eqx.filter_vmap(get_dps)(jnp.arange(num_chains))
     # Also save out the static part of the policy
     _, static_policy = eqx.partition(load_policy(None), eqx.is_array)
 
-    # Initialize some fixed initial states
-    # Hack: reset covariances to remove variation in initial state
-    env._initial_state_covariance = 1e-3 * env._initial_state_covariance
-    env._shading_light_direction_covariance = (
-        1e-3 * env._shading_light_direction_covariance
-    )
+    # Initialize some initial states (these serve as our initial exogenous parameters)
     prng_key, initial_state_key = jrandom.split(prng_key)
-    initial_state = env.reset(initial_state_key)
-
-    # Initialize some random non-ego action trajectories as exogenous parameters
-    prng_key, ep_key = jrandom.split(prng_key)
-    ep_keys = jrandom.split(ep_key, num_chains)
-    initial_eps = jax.vmap(
-        lambda key: sample_non_ego_actions(key, env, T, 2, noise_scale)
-    )(ep_keys)
+    initial_state_keys = jrandom.split(initial_state_key, num_chains)
+    initial_eps = jax.vmap(env.reset)(initial_state_keys)
 
     # Choose which sampler to use
     if reinforce:
@@ -304,7 +221,7 @@ if __name__ == "__main__":
         make_kernel_fn = lambda logprob_fn, step_size, _: make_reinforce_kernel(
             logprob_fn,
             step_size,
-            perturbation_stddev=noise_scale,
+            perturbation_stddev=0.05,
             baseline_update_rate=0.5,
         )
     else:
@@ -325,58 +242,58 @@ if __name__ == "__main__":
             use_mh,
         )
 
-    # Run the prediction+mitigation process
-    t_start = time.perf_counter()
-    dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
-        prng_key,
-        initial_dps,
-        initial_eps,
-        dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
-        ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
-        potential_fn=lambda dp, ep: L
-        * simulate(env, dp, initial_state, ep, static_policy, T).potential,
-        init_sampler=init_sampler_fn,
-        make_kernel=make_kernel_fn,
-        num_rounds=num_rounds,
-        num_mcmc_steps_per_round=num_steps_per_round,
-        dp_mcmc_step_size=dp_mcmc_step_size,
-        ep_mcmc_step_size=ep_mcmc_step_size,
-        use_stochasticity=use_stochasticity,
-        repair=repair,
-        predict=predict,
-        quench_rounds=quench_rounds,
-        tempering_schedule=tempering_schedule,
-        normalize_gradients=normalize_gradients,
-    )
-    t_end = time.perf_counter()
-    print(
-        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
-    )
+    # # Run the prediction+mitigation process
+    # t_start = time.perf_counter()
+    # dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
+    #     prng_key,
+    #     initial_dps,
+    #     initial_eps,
+    #     dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
+    #     ep_logprior_fn=lambda ep: env.initial_state_logprior(ep),
+    #     potential_fn=lambda dp, ep: L
+    #     * simulate(env, dp, ep, static_policy, T).potential,
+    #     init_sampler=init_sampler_fn,
+    #     make_kernel=make_kernel_fn,
+    #     num_rounds=num_rounds,
+    #     num_mcmc_steps_per_round=num_steps_per_round,
+    #     dp_mcmc_step_size=dp_mcmc_step_size,
+    #     ep_mcmc_step_size=ep_mcmc_step_size,
+    #     use_stochasticity=use_stochasticity,
+    #     repair=repair,
+    #     predict=predict,
+    #     quench_rounds=quench_rounds,
+    #     tempering_schedule=tempering_schedule,
+    #     normalize_gradients=normalize_gradients,
+    # )
+    # t_end = time.perf_counter()
+    # print(
+    #     f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+    # )
 
-    # Select the policy that performs best against all predicted failures before
-    # the final round (choose from all chains)
-    if repair:
-        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
-    else:
-        # Just pick one policy arbitrarily if we didn't optimize the policies.
-        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
+    # # Select the policy that performs best against all predicted failures before
+    # # the final round (choose from all chains)
+    # if repair:
+    #     most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    # else:
+    #     # Just pick one policy arbitrarily if we didn't optimize the policies.
+    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
 
-    # Evaluate this single policy against all failures
-    final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
+    # # Evaluate this single policy against all failures
+    # final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
 
-    # # TODO for debugging plots, just use the initial policy and eps
-    # t_end = 0.0
-    # t_start = 0.0
-    # final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
-    # final_eps = initial_eps
-    # dp_logprobs = jnp.zeros((num_rounds, num_chains))
-    # ep_logprobs = jnp.zeros((num_rounds, num_chains))
-    # # TODO debugging bit ends here
+    # TODO for debugging plots, just use the initial policy and eps
+    t_end = 0.0
+    t_start = 0.0
+    final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
+    final_eps = initial_eps
+    dp_logprobs = jnp.zeros((num_rounds, num_chains))
+    ep_logprobs = jnp.zeros((num_rounds, num_chains))
+    # TODO debugging bit ends here
 
     # Evaluate the solutions proposed by the prediction+mitigation algorithm
     result = eqx.filter_vmap(
-        lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
+        lambda dp, ep: simulate(env, dp, ep, static_policy, T),
         in_axes=(None, 0),
     )(final_dps, final_eps)
 
@@ -384,7 +301,7 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(32, 16), constrained_layout=True)
     axs = fig.subplot_mosaic(
         [
-            ["trace", "trajectory", "trajectory", "trajectory", "trajectory"],
+            ["trace", "wind_speed", "trajectory", "trajectory", "trajectory"],
             ["initial_obs", "initial_obs", "initial_obs", "initial_obs", "initial_obs"],
             ["final_obs", "final_obs", "final_obs", "final_obs", "final_obs"],
             ["reward", "reward", "reward", "reward", "reward"],
@@ -407,30 +324,38 @@ if __name__ == "__main__":
     normalized_potential = (result.potential - min_potential) / (
         max_potential - min_potential
     )
-    axs["trajectory"].axhline(7.5, linestyle="--", color="k")
-    axs["trajectory"].axhline(-7.5, linestyle="--", color="k")
+    axs["trajectory"].axhline(4.0, linestyle="--", color="k")
+    axs["trajectory"].axhline(-4.0, linestyle="--", color="k")
+    axs["trajectory"].scatter(0.0, 0.0, marker="x", color="k", label="Goal")
     for chain_idx in range(num_chains):
         axs["trajectory"].plot(
-            result.ego_trajectory[chain_idx, :, 0].T,
-            result.ego_trajectory[chain_idx, :, 1].T,
+            result.drone_traj[chain_idx, :, 0].T,
+            result.drone_traj[chain_idx, :, 1].T,
             linestyle="-",
             color=plt.cm.plasma(normalized_potential[chain_idx]),
             label="Ego" if chain_idx == 0 else None,
         )
-        axs["trajectory"].plot(
-            result.non_ego_trajectory[chain_idx, :, 0, 0],
-            result.non_ego_trajectory[chain_idx, :, 0, 1],
-            linestyle="-.",
-            color=plt.cm.plasma(normalized_potential[chain_idx]),
-            label="Non-ego 1" if chain_idx == 0 else None,
-        )
-        axs["trajectory"].plot(
-            result.non_ego_trajectory[chain_idx, :, 1, 0],
-            result.non_ego_trajectory[chain_idx, :, 1, 1],
-            linestyle="--",
-            color=plt.cm.plasma(normalized_potential[chain_idx]),
-            label="Non-ego 2" if chain_idx == 0 else None,
-        )
+        for tree_location in result.tree_locations:
+            axs["trajectory"].add_patch(
+                plt.Circle(
+                    tree_location,
+                    radius=0.5,
+                    color=plt.cm.plasma(normalized_potential[chain_idx]),
+                    fill=False,
+                )
+            )
+        
+        axs["trajectory"].set_xlabel("x")
+        axs["trajectory"].set_ylabel("y")
+        axs["trajectory"].set_aspect("equal")
+
+    # Plot the wind speed for each case, color-coded by potential
+    axs["wind_speed"].scatter(
+        result.wind_speed[:, 0],
+        result.wind_speed[:, 1],
+        marker="o",
+        color=plt.cm.plasma(normalized_potential),
+    )
 
     # Plot the reward across all failure cases
     axs["reward"].plot(result.potential, "ko")
@@ -438,11 +363,11 @@ if __name__ == "__main__":
 
     # Plot the initial RGB observations tiled on the same subplot
     axs["initial_obs"].imshow(
-        jnp.concatenate(result.initial_obs.color_image.transpose(0, 2, 1, 3), axis=1)
+        jnp.concatenate(result.initial_obs.image.transpose(0, 2, 1, 3), axis=1)
     )
     # And do the same for the final observations
     axs["final_obs"].imshow(
-        jnp.concatenate(result.final_obs.color_image.transpose(0, 2, 1, 3), axis=1)
+        jnp.concatenate(result.final_obs.image.transpose(0, 2, 1, 3), axis=1)
     )
 
     if reinforce:
@@ -462,7 +387,6 @@ if __name__ == "__main__":
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
         f"{'_' if repair else ''}{'repair' if repair else ''}/"
-        f"noise_{noise_scale:0.1e}/"
         f"L_{L:0.1e}/"
         f"{num_rounds * num_steps_per_round}_samples/"
         f"{num_chains}_chains/"
@@ -489,13 +413,9 @@ if __name__ == "__main__":
     with open(filename + ".json", "w") as f:
         json.dump(
             {
-                "initial_state": initial_state._asdict(),
-                "action_trajectory": final_eps,
+                "eps": final_eps,
                 "time": t_end - t_start,
                 "L": L,
-                "noise_scale": noise_scale,
-                "image_w": args.image_w,
-                "image_h": args.image_h,
                 "dp_mcmc_step_size": dp_mcmc_step_size,
                 "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,
@@ -507,6 +427,8 @@ if __name__ == "__main__":
                 "predict": predict,
                 "quench_rounds": quench_rounds,
                 "tempering_schedule": tempering_schedule,
+                "ep_logprobs": ep_logprobs,
+                "dp_logprobs": dp_logprobs,
             },
             f,
             default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,

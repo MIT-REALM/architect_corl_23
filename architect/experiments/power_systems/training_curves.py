@@ -6,9 +6,11 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 
-from architect.systems.power_systems.acopf_types import (Dispatch,
-                                                         GenerationDispatch,
-                                                         LoadDispatch)
+from architect.systems.power_systems.acopf_types import (
+    Dispatch,
+    GenerationDispatch,
+    LoadDispatch,
+)
 from architect.systems.power_systems.load_test_network import load_test_network
 
 if __name__ == "__main__":

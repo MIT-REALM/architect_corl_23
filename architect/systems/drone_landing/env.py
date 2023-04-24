@@ -2,13 +2,16 @@
 import jax
 import jax.nn
 import jax.numpy as jnp
+from jax.nn import log_sigmoid
 import jax.random as jrandom
 from beartype import beartype
 from beartype.typing import NamedTuple, Tuple
 from jaxtyping import Array, Bool, Float, jaxtyped
 
 from architect.systems.components.sensing.vision.render import (
-    CameraExtrinsics, CameraIntrinsics)
+    CameraExtrinsics,
+    CameraIntrinsics,
+)
 from architect.systems.components.sensing.vision.util import look_at
 from architect.systems.drone_landing.scene import DroneLandingScene
 from architect.types import PRNGKeyArray
@@ -73,7 +76,9 @@ class DroneLandingEnv:
     _num_trees: int
     _collision_penalty: float
     _render_sharpness: float
-    _initial_drone_state: Float[Array, " n_states"]
+    _initial_drone_state_mean: Float[Array, " n_states"]
+    _initial_drone_state_stddev: Float[Array, " n_states"]
+    _wind_speed_stddev: Float[Array, " "]
 
     @jaxtyped
     @beartype
@@ -92,7 +97,9 @@ class DroneLandingEnv:
         self._camera_intrinsics = camera_intrinsics
         self._dt = dt
         self._num_trees = num_trees
-        self._initial_drone_state = initial_drone_state
+        self._initial_drone_state_mean = initial_drone_state
+        self._initial_drone_state_stddev = jnp.array([0.1, 0.1, 0.05, 0.1])
+        self._wind_speed_stddev = jnp.array(0.1)
         self._collision_penalty = collision_penalty
         self._render_sharpness = render_sharpness
 
@@ -216,7 +223,14 @@ class DroneLandingEnv:
             The initial state of the environment.
         """
         # Split the PRNG key
-        tree_key, wind_key = jax.random.split(key)
+        initial_state_key, tree_key, wind_key = jax.random.split(key, 3)
+
+        # Sample a new initial state
+        initial_drone_state = jax.random.multivariate_normal(
+            initial_state_key,
+            self._initial_drone_state_mean,
+            jnp.diag(self._initial_drone_state_stddev**2),
+        )
 
         # Sample new tree locations
         tree_locations = jax.random.uniform(
@@ -226,14 +240,66 @@ class DroneLandingEnv:
             maxval=jnp.array([-1.0, 4.0]),
         )
 
-        # Sample a new wind speed
-        wind_speed = jax.random.uniform(wind_key, shape=(2,), minval=-0.1, maxval=0.1)
+        # Sample a new wind speed from a multivariate gaussian
+        wind_speed = jax.random.multivariate_normal(
+            wind_key, jnp.zeros(2), jnp.eye(2) * self._wind_speed_stddev**2
+        )
 
         return DroneState(
-            drone_state=self._initial_drone_state,
+            drone_state=initial_drone_state,
             tree_locations=tree_locations,
             wind_speed=wind_speed,
         )
+
+    @jaxtyped
+    @beartype
+    def initial_state_logprior(self, state: DroneState) -> Float[Array, ""]:
+        """
+        Compute the prior logprobability of the given state.
+
+        Args:
+            state: the state to evaluate the prior at
+
+        Returns:
+            The logprior of the given state.
+        """
+        # Unpack the state
+        drone_state, tree_locations, wind_speed = state
+
+        # Compute the prior logprobabilities
+
+        # Drone state is sampled from a normal distribution
+        drone_logprior = jax.scipy.stats.multivariate_normal.logpdf(
+            drone_state,
+            mean=self._initial_drone_state_mean,
+            cov=jnp.diag(self._initial_drone_state_std**2),
+        )
+
+        # Tree locations are sampled from a uniform distribution
+        def log_smooth_uniform(x, x_min, x_max):
+            b = 50.0  # sharpness
+            return log_sigmoid(b * (x - x_min)) + log_sigmoid(b * (x_max - x))
+
+        num_trees = tree_locations.shape[0]
+        tree_min_x = -8.0 * jnp.ones(num_trees)
+        tree_max_x = -1.0 * jnp.ones(num_trees)
+        tree_min_y = -4.0 * jnp.ones(num_trees)
+        tree_max_y = 4.0 * jnp.ones(num_trees)
+        tree_logprior = log_smooth_uniform(
+            tree_locations[:, 0], tree_min_x, tree_max_x
+        ).sum()
+        tree_logprior += log_smooth_uniform(
+            tree_locations[:, 1], tree_min_y, tree_max_y
+        ).sum()
+
+        # Wind speed is also from a normal distribution
+        wind_logprior = jax.scipy.stats.multivariate_normal.logpdf(
+            wind_speed,
+            mean=jnp.zeros(2),
+            cov=jnp.eye(2) * self._wind_speed_stddev**2,
+        )
+
+        return drone_logprior + tree_logprior + wind_logprior
 
     @jaxtyped
     @beartype

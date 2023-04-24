@@ -1,8 +1,9 @@
 """Test RL subroutines for training the highway agent."""
 import jax.numpy as jnp
 
-from architect.experiments.highway.train_highway_agent import \
-    generalized_advantage_estimate
+from architect.experiments.highway.train_highway_agent import (
+    generalized_advantage_estimate,
+)
 
 
 def test_generalized_advantage_estimate():

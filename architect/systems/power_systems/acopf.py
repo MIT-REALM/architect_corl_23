@@ -12,8 +12,14 @@ from jax.nn import log_sigmoid, relu
 from jaxtyping import Array, Bool, Float, jaxtyped
 
 from architect.systems.power_systems.acopf_types import (
-    ACOPFResult, Dispatch, GenerationDispatch, InterconnectionSpecification,
-    LoadDispatch, NetworkSpecification, NetworkState)
+    ACOPFResult,
+    Dispatch,
+    GenerationDispatch,
+    InterconnectionSpecification,
+    LoadDispatch,
+    NetworkSpecification,
+    NetworkState,
+)
 from architect.types import PRNGKeyArray
 
 

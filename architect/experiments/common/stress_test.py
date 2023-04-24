@@ -4,10 +4,10 @@ import os
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+import pandas as pd
 from beartype.typing import Callable
 from jaxtyping import Array, Float
 from tqdm import tqdm
-import pandas as pd
 
 from architect.types import Params, PRNGKeyArray
 
@@ -55,11 +55,12 @@ def stress_test(
         exogenous_params = jax.vmap(exogenous_sampler)(prng_key)
 
         # Evaluate the cost function at the exogenous parameters
-        costs = jax.jit(jax.vmap(cost_function, in_axes=(None, 0)))(design_params, exogenous_params)
+        costs = jax.jit(jax.vmap(cost_function, in_axes=(None, 0)))(
+            design_params, exogenous_params
+        )
 
         # Accumulate the results
         costs = pd.concat([costs, pd.Series(costs)], ignore_index=True)
-
 
     # Make a dataframe with the results
     results = pd.DataFrame(

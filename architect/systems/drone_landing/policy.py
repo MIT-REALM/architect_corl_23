@@ -83,7 +83,7 @@ class DroneLandingPolicy(eqx.Module):
             key=fcn_key,
         )
 
-    def forward(self, obs: DroneObs) -> Tuple[Float[Array, " 2"], Float[Array, ""]]:
+    def forward(self, obs: DroneObs) -> Float[Array, " 2"]:
         """Compute the action for the given observation.
 
         Args:
@@ -116,9 +116,7 @@ class DroneLandingPolicy(eqx.Module):
         action = self.actor_fcn(y)
         return action
 
-    def __call__(
-        self, obs: DroneObs
-    ) -> Tuple[Float[Array, " 2"], Float[Array, ""], Float[Array, ""]]:
+    def __call__(self, obs: DroneObs) -> Float[Array, " 2"]:
         """Compute the action and value estimate for the given state.
 
         Args:

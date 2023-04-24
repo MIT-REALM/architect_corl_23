@@ -180,6 +180,7 @@ def shuffle_trajectory(traj: Trajectory, key: PRNGKeyArray) -> Trajectory:
 
     return traj
 
+
 def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
     """Save the given trajectory to a gif."""
     color_images = trajectory.observations.image
@@ -189,6 +190,7 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
         matplotlib.image.imsave(
             os.path.join(img_dir, f"img_{i}.png"), img.transpose(1, 0, 2)
         )
+
 
 def make_drone_landing_env(image_shape: Tuple[int, int]):
     """Make the drone landing environment."""
@@ -220,7 +222,7 @@ def train_ppo_drone(
     epochs: int = 200,
     gd_steps_per_update: int = 1000,
     minibatch_size: int = 32,
-    logdir: str = "./tmp/oracle_noise_0.5_learner",
+    logdir: str = "./tmp/oracle_noise_0.5_learner_random_state",
 ):
     """
     Train the drone using behavior cloning.
@@ -249,7 +251,9 @@ def train_ppo_drone(
         predicted_actions = jax.vmap(policy)(trajectory.observations)
 
         # Minimize L2 loss between predicted and actual actions
-        action_loss = jnp.mean(jnp.square(predicted_actions - trajectory.expert_actions))
+        action_loss = jnp.mean(
+            jnp.square(predicted_actions - trajectory.expert_actions)
+        )
 
         return action_loss
 

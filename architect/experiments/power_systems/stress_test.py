@@ -5,10 +5,12 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 
-from architect.systems.power_systems.acopf_types import (Dispatch,
-                                                         GenerationDispatch,
-                                                         LoadDispatch,
-                                                         NetworkState)
+from architect.systems.power_systems.acopf_types import (
+    Dispatch,
+    GenerationDispatch,
+    LoadDispatch,
+    NetworkState,
+)
 from architect.systems.power_systems.load_test_network import load_test_network
 
 if __name__ == "__main__":

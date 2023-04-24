@@ -11,7 +11,9 @@ from beartype.typing import NamedTuple, Tuple
 from jaxtyping import Array, Bool, Float, jaxtyped
 
 from architect.systems.components.sensing.vision.render import (
-    CameraExtrinsics, CameraIntrinsics)
+    CameraExtrinsics,
+    CameraIntrinsics,
+)
 from architect.systems.drone_landing.env import DroneLandingEnv, DroneState
 from architect.types import PRNGKeyArray
 

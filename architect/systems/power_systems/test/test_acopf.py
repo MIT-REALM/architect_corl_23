@@ -4,8 +4,13 @@ import pytest
 
 from architect.systems.power_systems.acopf import ACOPF
 from architect.systems.power_systems.acopf_types import (
-    Dispatch, GenerationDispatch, InterconnectionSpecification, LoadDispatch,
-    NetworkSpecification, NetworkState)
+    Dispatch,
+    GenerationDispatch,
+    InterconnectionSpecification,
+    LoadDispatch,
+    NetworkSpecification,
+    NetworkState,
+)
 
 
 @pytest.fixture

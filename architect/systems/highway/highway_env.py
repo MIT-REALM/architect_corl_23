@@ -8,7 +8,9 @@ from beartype.typing import NamedTuple, Tuple
 from jaxtyping import Array, Bool, Float, jaxtyped
 
 from architect.systems.components.sensing.vision.render import (
-    CameraExtrinsics, CameraIntrinsics)
+    CameraExtrinsics,
+    CameraIntrinsics,
+)
 from architect.systems.components.sensing.vision.util import look_at
 from architect.systems.highway.highway_scene import HighwayScene
 from architect.types import PRNGKeyArray
