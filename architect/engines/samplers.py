@@ -209,7 +209,7 @@ def make_kernel(
         p_accept = jnp.clip(jnp.exp(log_p_accept), a_max=1)
         # If we're not using stochasticity or MH has been disabled, then always accept
         do_accept = jax.lax.cond(
-            use_stochasticity and use_mh,
+            jnp.logical_and(use_stochasticity, use_mh),
             lambda: jrandom.bernoulli(acceptance_key, p_accept),
             lambda: jnp.array(True),
         )

@@ -192,7 +192,7 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
         )
 
 
-def make_drone_landing_env(image_shape: Tuple[int, int]):
+def make_drone_landing_env(image_shape: Tuple[int, int], num_trees: int = 10):
     """Make the drone landing environment."""
     scene = DroneLandingScene()
     intrinsics = CameraIntrinsics(
@@ -201,7 +201,6 @@ def make_drone_landing_env(image_shape: Tuple[int, int]):
         resolution=image_shape,
     )
 
-    num_trees = 10
     initial_drone_state = jnp.array([-10.0, 0.0, 1.0, 0.0])
     env = DroneLandingEnv(
         scene,
@@ -222,7 +221,7 @@ def train_ppo_drone(
     epochs: int = 200,
     gd_steps_per_update: int = 1000,
     minibatch_size: int = 32,
-    logdir: str = "./tmp/oracle_noise_0.5_learner_random_state",
+    logdir: str = "./tmp/oracle_32",
 ):
     """
     Train the drone using behavior cloning.
@@ -321,4 +320,4 @@ def train_ppo_drone(
 
 
 if __name__ == "__main__":
-    train_ppo_drone((64, 64))
+    train_ppo_drone((32, 32))

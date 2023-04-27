@@ -3,6 +3,7 @@ Failure mode prediction and mitigation code.
 
 Provides system-agnostic code for failure mode prediction and mitigation.
 """
+import operator
 import time
 
 import jax
@@ -56,15 +57,22 @@ def run_chain(
     final_state, _ = jax.lax.fori_loop(0, num_samples, one_step, initial_carry)
 
     # Compute acceptance rate if the sampler supports it
-    if hasattr(initial_state, "acceptance_rate"):
-        accept_rate = initial_state.acceptance_rate
+    if hasattr(final_state, "num_accepts"):
+        # convert to float
+        accept_rate = final_state.num_accepts.astype(jnp.float32) / num_samples
     else:
-        accept_rate = -1.0
+        accept_rate = jnp.array(-1.0)
 
     # Add debug information
     debug = {}
-    if hasattr(initial_state, "logdensity_grad"):
-        debug["initial_grad"] = initial_state.logdensity_grad
+    if hasattr(final_state, "logdensity_grad"):
+        # Compute the norm of the gradient
+        debug["final_grad_norm"] = jnp.sqrt(
+            jtu.tree_reduce(
+                operator.add,
+                jtu.tree_map(lambda x: jnp.sum(x * x), final_state.logdensity_grad),
+            )
+        )
 
     return (
         final_state.position,
@@ -270,6 +278,7 @@ def predict_and_mitigate_failure_modes(
                 f" ({end - start:.2f} s); "
                 f"DP/EP mean logprob: {y[3].mean():.2f}/{y[4].mean():.2f}; "
                 f"DP/EP accept rate: {y[5].mean():.2f}/{y[6].mean():.2f}; "
+                f"EP debug: {y[7]['ep_debug']['final_grad_norm'].round(2)}"
             )
         )
         results.append(y)

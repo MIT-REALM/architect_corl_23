@@ -20,8 +20,8 @@ from architect.engines.reinforce import make_kernel as make_reinforce_kernel
 from architect.engines.samplers import init_sampler as init_mcmc_sampler
 from architect.engines.samplers import make_kernel as make_mcmc_kernel
 from architect.experiments.drone_landing.train_drone_agent import make_drone_landing_env
-from architect.systems.drone_landing.policy import DroneLandingPolicy
 from architect.systems.drone_landing.env import DroneLandingEnv, DroneObs, DroneState
+from architect.systems.drone_landing.policy import DroneLandingPolicy
 from architect.types import PRNGKeyArray
 from architect.utils import softmin
 
@@ -42,7 +42,7 @@ def simulate(
     policy: DroneLandingPolicy,
     initial_state: DroneState,
     static_policy: DroneLandingPolicy,
-    max_steps: int = 60,
+    max_steps: int = 80,
 ) -> Float[Array, ""]:
     """Simulate the drone landing environment.
 
@@ -70,18 +70,12 @@ def simulate(
         # Unpack the carry
         action, state, already_done = carry
 
-        # PRNG key management. These don't have any effect, but they need to be passed
-        # to the environment and policy.
-        step_subkey, action_subkey = jrandom.split(key)
-
         # Take a step in the environment using the action carried over from the previous
         # step.
-        next_state, next_observation, reward, done = env.step(
-            state, action, step_subkey
-        )
+        next_state, next_observation, reward, done = env.step(state, action, key)
 
         # Compute the action for the next step
-        next_action = policy(next_observation, action_subkey)
+        next_action = policy(next_observation)
 
         # If the environment has already terminated, set the reward to zero.
         reward = jax.lax.cond(already_done, lambda: 0.0, lambda: reward)
@@ -97,7 +91,7 @@ def simulate(
 
     # Get the initial observation and action
     initial_obs = env.get_obs(initial_state)
-    initial_action = policy(initial_obs, jrandom.PRNGKey(0))
+    initial_action = policy(initial_obs)
 
     # Transform and rollout!
     keys = jrandom.split(jrandom.PRNGKey(0), max_steps)
@@ -108,8 +102,11 @@ def simulate(
     # Get the final observation
     final_obs = env.get_obs(final_state)
 
-    # The potential is the negative of the (soft) minimum reward observed
-    potential = -softmin(reward)
+    # The potential is the negative of the (soft) minimum reward observed, plus a
+    # penalty based on how far the drone is from the target.
+    potential = (
+        -softmin(reward, sharpness=1.0) + (final_state.drone_state[:2] ** 2).sum()
+    )
 
     return SimulationResults(
         potential,
@@ -125,11 +122,13 @@ if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--savename", type=str, default="drone")
-    parser.add_argument("--T", type=int, nargs="?", default=60)
-    parser.add_argument("--L", type=float, nargs="?", default=10.0)
+    parser.add_argument("--savename", type=str, default="drone_cond")
+    parser.add_argument("--T", type=int, nargs="?", default=80)
+    parser.add_argument("--L", type=float, nargs="?", default=1.0)
+    parser.add_argument("--num_trees", type=int, nargs="?", default=10)
+    parser.add_argument("--failure_level", type=float, nargs="?", default=80.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
-    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
+    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
     parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
@@ -149,6 +148,8 @@ if __name__ == "__main__":
     # Hyperparameters
     L = args.L
     T = args.T
+    num_trees = args.num_trees
+    failure_level = args.failure_level
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
     num_rounds = args.num_rounds
@@ -167,9 +168,11 @@ if __name__ == "__main__":
 
     print("Running prediction/mitigation on overtake with hyperparameters:")
     print(f"\tmodel_path = {args.model_path}")
-    print(f"\timage dimensions (w x h) = 64 x 64")
+    print(f"\timage dimensions (w x h) = 32 x 32")
     print(f"\tT = {T}")
     print(f"\tL = {L}")
+    print(f"\tnum_trees = {num_trees}")
+    print(f"\tfailure_level = {failure_level}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
     print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
     print(f"\tnum_rounds = {num_rounds}")
@@ -185,7 +188,7 @@ if __name__ == "__main__":
     print(f"\tgrad_clip = {grad_clip}")
     print(f"\tnormalize_gradients = {normalize_gradients}")
     print(
-        f"Using alternative algorithm? {reinforce}",
+        f"\tUsing alternative algorithm? {reinforce}",
         f"(reinforce = {reinforce})",
     )
 
@@ -197,8 +200,9 @@ if __name__ == "__main__":
     prng_key = jrandom.PRNGKey(0)
 
     # Make the environment to use
-    image_shape = (64, 64)
-    env = make_drone_landing_env(image_shape)
+    image_shape = (32, 32)
+    env = make_drone_landing_env(image_shape, num_trees)
+    env._collision_penalty = 2e2
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition
@@ -242,54 +246,55 @@ if __name__ == "__main__":
             use_mh,
         )
 
-    # # Run the prediction+mitigation process
-    # t_start = time.perf_counter()
-    # dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
-    #     prng_key,
-    #     initial_dps,
-    #     initial_eps,
-    #     dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
-    #     ep_logprior_fn=lambda ep: env.initial_state_logprior(ep),
-    #     potential_fn=lambda dp, ep: L
-    #     * simulate(env, dp, ep, static_policy, T).potential,
-    #     init_sampler=init_sampler_fn,
-    #     make_kernel=make_kernel_fn,
-    #     num_rounds=num_rounds,
-    #     num_mcmc_steps_per_round=num_steps_per_round,
-    #     dp_mcmc_step_size=dp_mcmc_step_size,
-    #     ep_mcmc_step_size=ep_mcmc_step_size,
-    #     use_stochasticity=use_stochasticity,
-    #     repair=repair,
-    #     predict=predict,
-    #     quench_rounds=quench_rounds,
-    #     tempering_schedule=tempering_schedule,
-    #     normalize_gradients=normalize_gradients,
-    # )
-    # t_end = time.perf_counter()
-    # print(
-    #     f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
-    # )
+    # Run the prediction+mitigation process
+    t_start = time.perf_counter()
+    dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
+        prng_key,
+        initial_dps,
+        initial_eps,
+        dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
+        ep_logprior_fn=lambda ep: env.initial_state_logprior(ep),
+        potential_fn=lambda dp, ep: -L
+        * jax.nn.elu(failure_level - simulate(env, dp, ep, static_policy, T).potential),
+        # potential_fn=lambda dp, ep: L
+        # * simulate(env, dp, ep, static_policy, T).potential,
+        init_sampler=init_sampler_fn,
+        make_kernel=make_kernel_fn,
+        num_rounds=num_rounds,
+        num_mcmc_steps_per_round=num_steps_per_round,
+        dp_mcmc_step_size=dp_mcmc_step_size,
+        ep_mcmc_step_size=ep_mcmc_step_size,
+        use_stochasticity=use_stochasticity,
+        repair=repair,
+        predict=predict,
+        quench_rounds=quench_rounds,
+        tempering_schedule=tempering_schedule,
+    )
+    t_end = time.perf_counter()
+    print(
+        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+    )
 
-    # # Select the policy that performs best against all predicted failures before
-    # # the final round (choose from all chains)
-    # if repair:
-    #     most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
-    # else:
-    #     # Just pick one policy arbitrarily if we didn't optimize the policies.
-    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
+    # Select the policy that performs best against all predicted failures before
+    # the final round (choose from all chains)
+    if repair:
+        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    else:
+        # Just pick one policy arbitrarily if we didn't optimize the policies.
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
 
-    # # Evaluate this single policy against all failures
-    # final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
+    # Evaluate this single policy against all failures
+    final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
 
-    # TODO for debugging plots, just use the initial policy and eps
-    t_end = 0.0
-    t_start = 0.0
-    final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
-    final_eps = initial_eps
-    dp_logprobs = jnp.zeros((num_rounds, num_chains))
-    ep_logprobs = jnp.zeros((num_rounds, num_chains))
-    # TODO debugging bit ends here
+    # # TODO for debugging plots, just use the initial policy and eps
+    # t_end = 0.0
+    # t_start = 0.0
+    # final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
+    # final_eps = initial_eps
+    # dp_logprobs = jnp.zeros((num_rounds, num_chains))
+    # ep_logprobs = jnp.zeros((num_rounds, num_chains))
+    # # TODO debugging bit ends here
 
     # Evaluate the solutions proposed by the prediction+mitigation algorithm
     result = eqx.filter_vmap(
@@ -332,30 +337,34 @@ if __name__ == "__main__":
             result.drone_traj[chain_idx, :, 0].T,
             result.drone_traj[chain_idx, :, 1].T,
             linestyle="-",
-            color=plt.cm.plasma(normalized_potential[chain_idx]),
+            color=plt.cm.plasma_r(normalized_potential[chain_idx]),
             label="Ego" if chain_idx == 0 else None,
         )
-        for tree_location in result.tree_locations:
+        for tree_location in result.tree_locations[chain_idx]:
             axs["trajectory"].add_patch(
                 plt.Circle(
                     tree_location,
                     radius=0.5,
-                    color=plt.cm.plasma(normalized_potential[chain_idx]),
+                    color=plt.cm.plasma_r(normalized_potential[chain_idx]),
                     fill=False,
                 )
             )
-        
-        axs["trajectory"].set_xlabel("x")
-        axs["trajectory"].set_ylabel("y")
-        axs["trajectory"].set_aspect("equal")
+
+    axs["trajectory"].set_xlabel("x")
+    axs["trajectory"].set_ylabel("y")
+    axs["trajectory"].set_aspect("equal")
+    axs["trajectory"].set_ylim([-4.1, 4.1])
+    axs["trajectory"].set_xlim([-15.0, 1.0])
 
     # Plot the wind speed for each case, color-coded by potential
     axs["wind_speed"].scatter(
         result.wind_speed[:, 0],
         result.wind_speed[:, 1],
         marker="o",
-        color=plt.cm.plasma(normalized_potential),
+        color=plt.cm.plasma_r(normalized_potential),
     )
+    axs["wind_speed"].set_xlabel("Wind speed x")
+    axs["wind_speed"].set_ylabel("Wind speed y")
 
     # Plot the reward across all failure cases
     axs["reward"].plot(result.potential, "ko")
@@ -388,11 +397,12 @@ if __name__ == "__main__":
         f"results/{args.savename}/{'predict' if predict else ''}"
         f"{'_' if repair else ''}{'repair' if repair else ''}/"
         f"L_{L:0.1e}/"
-        f"{num_rounds * num_steps_per_round}_samples/"
+        f"{num_rounds * num_steps_per_round}_samples_{num_rounds}x{num_steps_per_round}/"
         f"{num_chains}_chains/"
         f"{quench_rounds}_quench/"
         f"dp_{dp_mcmc_step_size:0.1e}/"
         f"ep_{ep_mcmc_step_size:0.1e}/"
+        f"{'grad_norm' if normalize_gradients else 'no_grad_norm'}/"
     )
     filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}"
     print(f"Saving results to: {filename}")
@@ -403,8 +413,8 @@ if __name__ == "__main__":
     final_policy = eqx.combine(final_dps, static_policy)
     eqx.tree_serialise_leaves(filename + ".eqx", final_policy)
 
-    # # Save the trace of policies
-    # eqx.tree_serialise_leaves(filename + "_trace.eqx", dps)
+    # Save the trace of policies
+    eqx.tree_serialise_leaves(filename + "_trace.eqx", dps)
 
     # Save the initial policy
     shutil.copyfile(args.model_path, f"results/{args.savename}/" + "initial_policy.eqx")
@@ -413,7 +423,9 @@ if __name__ == "__main__":
     with open(filename + ".json", "w") as f:
         json.dump(
             {
-                "eps": final_eps,
+                "eps": final_eps._asdict(),
+                "eps_trace": eps._asdict(),
+                "num_trees": num_trees,
                 "time": t_end - t_start,
                 "L": L,
                 "dp_mcmc_step_size": dp_mcmc_step_size,

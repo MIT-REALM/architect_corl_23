@@ -42,8 +42,8 @@ class DroneLandingPolicy(eqx.Module):
 
         # Create the convolutional encoder
         cnn_keys = jrandom.split(cnn_key, 3)
-        kernel_size = 6
-        stride = 2  # 2 for 64x64, 1 for 32x32
+        kernel_size = 7  # 6 for 64x64, 7 for 32x32
+        stride = 1  # 2 for 64x64, 1 for 32x32
         self.encoder_conv_1 = eqx.nn.Conv2d(
             key=cnn_keys[0],
             in_channels=image_channels,

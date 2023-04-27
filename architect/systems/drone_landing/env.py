@@ -2,10 +2,10 @@
 import jax
 import jax.nn
 import jax.numpy as jnp
-from jax.nn import log_sigmoid
 import jax.random as jrandom
 from beartype import beartype
 from beartype.typing import NamedTuple, Tuple
+from jax.nn import log_sigmoid
 from jaxtyping import Array, Bool, Float, jaxtyped
 
 from architect.systems.components.sensing.vision.render import (
@@ -176,9 +176,9 @@ class DroneLandingEnv:
         goal = jnp.array([0.0, 0.0, 1.0])  # just above the landing pad
         err = next_drone_state[:3] - goal
         distance_to_goal = jnp.sqrt(jnp.sum(err**2) + 1e-3)
-        # And a big reward when we get close
-        distance_reward = self._collision_penalty * jax.nn.sigmoid(
-            5 * (1.0 - distance_to_goal)
+        # And a big reward when we get close (currently disabled)
+        distance_reward = (
+            0 * self._collision_penalty * jax.nn.sigmoid(5 * (1.0 - distance_to_goal))
         )
 
         min_distance_to_obstacle = self._scene.check_for_collision(
@@ -195,10 +195,10 @@ class DroneLandingEnv:
 
         # The episode ends when a collision occurs or we get close to the goal, at which
         # point we reset the environment
-        done = jnp.logical_or(min_distance_to_obstacle < 0.0, distance_to_goal < 1.0)
+        done = jnp.logical_or(min_distance_to_obstacle < 0.05, distance_to_goal < 0.25)
         done = jnp.logical_or(done, distance_to_goal > 15.0)
         done = jnp.logical_or(
-            done, next_drone_state[0] > 0.1
+            done, next_drone_state[0] > 0.5
         )  # stop if we go too far in x
         next_state = jax.lax.cond(
             done,
@@ -272,7 +272,7 @@ class DroneLandingEnv:
         drone_logprior = jax.scipy.stats.multivariate_normal.logpdf(
             drone_state,
             mean=self._initial_drone_state_mean,
-            cov=jnp.diag(self._initial_drone_state_std**2),
+            cov=jnp.diag(self._initial_drone_state_stddev**2),
         )
 
         # Tree locations are sampled from a uniform distribution
