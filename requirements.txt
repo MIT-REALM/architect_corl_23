@@ -14,11 +14,13 @@ ipywidgets==7.6.5
 tqdm>=4.62.3
 scipy>=1.10.0
 tensorboard>=2.8.0
+torch>=2.0.0
 
 # JAX
 jax>=0.4.5
 jaxlib>=0.4.4
 jaxtyping>=0.2.13
+jax-tqdm>=0.1.1
 
 # Optimization
 optax>=0.1.4
