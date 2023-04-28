@@ -1,6 +1,7 @@
 # Project-specific
 *.gif
 tmp/*
+*trace.eqx
 
 # Editor stuff
 .vscode

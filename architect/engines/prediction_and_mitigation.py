@@ -102,6 +102,7 @@ def predict_and_mitigate_failure_modes(
     predict: bool = True,
     quench_rounds: int = 0,
     tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
+    logging_prefix: str = "",
 ) -> Tuple[
     Params,
     Params,
@@ -269,16 +270,21 @@ def predict_and_mitigate_failure_modes(
     keys = jrandom.split(prng_key, num_rounds)
     results = []
     for i, (key, tempering) in enumerate(zip(keys, tempering_schedule)):
-        print(f"Iteration {i}", end="")
+        print(f"{logging_prefix} - Iteration {i}", end="")
         start = time.perf_counter()
         carry, y = one_smc_step(carry, (key, tempering))
         end = time.perf_counter()
+        ep_debug = (
+            y[7]["ep_debug"]["final_grad_norm"].round(2)
+            if "final_grad_norm" in y[7]["ep_debug"]
+            else "N/A"
+        )
         print(
             (
                 f" ({end - start:.2f} s); "
                 f"DP/EP mean logprob: {y[3].mean():.2f}/{y[4].mean():.2f}; "
                 f"DP/EP accept rate: {y[5].mean():.2f}/{y[6].mean():.2f}; "
-                f"EP debug: {y[7]['ep_debug']['final_grad_norm'].round(2)}"
+                f"EP debug: {ep_debug}"
             )
         )
         results.append(y)

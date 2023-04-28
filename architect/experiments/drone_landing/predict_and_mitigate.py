@@ -246,6 +246,21 @@ if __name__ == "__main__":
             use_mh,
         )
 
+    if reinforce:
+        alg_type = "reinforce_l2c_0.05_step"
+    elif use_gradients and use_stochasticity and use_mh:
+        alg_type = "mala"
+    elif use_gradients and use_stochasticity and not use_mh:
+        alg_type = "ula"
+    elif use_gradients and not use_stochasticity:
+        alg_type = "gd"
+    elif not use_gradients and use_stochasticity and use_mh:
+        alg_type = "rmh"
+    elif not use_gradients and use_stochasticity and not use_mh:
+        alg_type = "random_walk"
+    else:
+        alg_type = "static"
+
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
@@ -269,6 +284,7 @@ if __name__ == "__main__":
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
+        logging_prefix=f"{args.savename}/{alg_type}",
     )
     t_end = time.perf_counter()
     print(
@@ -379,20 +395,6 @@ if __name__ == "__main__":
         jnp.concatenate(result.final_obs.image.transpose(0, 2, 1, 3), axis=1)
     )
 
-    if reinforce:
-        alg_type = "reinforce_l2c"
-    elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala"
-    elif use_gradients and use_stochasticity and not use_mh:
-        alg_type = "ula"
-    elif use_gradients and not use_stochasticity:
-        alg_type = "gd"
-    elif not use_gradients and use_stochasticity and use_mh:
-        alg_type = "rmh"
-    elif not use_gradients and use_stochasticity and not use_mh:
-        alg_type = "random_walk"
-    else:
-        alg_type = "static"
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
         f"{'_' if repair else ''}{'repair' if repair else ''}/"

@@ -18,6 +18,7 @@ class ReinforceState(NamedTuple):
 
     position: Params
     baseline: Float[Array, ""]
+    logdensity: Float[Array, ""]
 
 
 @jaxtyped
@@ -35,7 +36,8 @@ def init_sampler(
     """
     # The original "learning to collide" paper does not use a baseline, but let's add
     # it to be sporting.
-    return ReinforceState(position, jnp.array(0.0))
+    logdensity = logdensity_fn(position)
+    return ReinforceState(position, baseline=logdensity, logdensity=logdensity)
 
 
 @jaxtyped
@@ -79,7 +81,8 @@ def make_kernel(
 
         # Step in the direction of increased advantage
         new_position = jtu.tree_map(
-            lambda x, dx: x + step_size / perturbation_stddev**2 * advantage * dx,
+            # lambda x, dx: x + step_size / perturbation_stddev**2 * advantage * dx,
+            lambda x, dx: x + step_size * advantage * dx,
             state.position,
             noise,
         )
@@ -89,7 +92,11 @@ def make_kernel(
             1 - baseline_update_rate
         ) * state.baseline + baseline_update_rate * logdensity
 
+        # Compute the new logdensity at the new state (cheating for pure REINFORCE
+        # but we need to be able to log this)
+        new_logdensity = logdensity_fn(new_position)
+
         # Return the new state
-        return ReinforceState(new_position, updated_baseline)
+        return ReinforceState(new_position, updated_baseline, new_logdensity)
 
     return one_step
