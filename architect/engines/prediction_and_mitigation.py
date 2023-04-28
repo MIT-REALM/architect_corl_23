@@ -279,12 +279,18 @@ def predict_and_mitigate_failure_modes(
             if "final_grad_norm" in y[7]["ep_debug"]
             else "N/A"
         )
+        dp_debug = (
+            y[7]["dp_debug"]["final_grad_norm"].round(2)
+            if "final_grad_norm" in y[7]["dp_debug"]
+            else "N/A"
+        )
         print(
             (
                 f" ({end - start:.2f} s); "
                 f"DP/EP mean logprob: {y[3].mean():.2f}/{y[4].mean():.2f}; "
                 f"DP/EP accept rate: {y[5].mean():.2f}/{y[6].mean():.2f}; "
-                f"EP debug: {ep_debug}"
+                f"EP debug: {ep_debug}; "
+                f"DP debug: {dp_debug}"
             )
         )
         results.append(y)
