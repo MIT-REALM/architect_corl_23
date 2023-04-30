@@ -166,7 +166,7 @@ if __name__ == "__main__":
     grad_clip = args.grad_clip
     normalize_gradients = not args.dont_normalize_gradients
 
-    print("Running prediction/mitigation on overtake with hyperparameters:")
+    print("Running prediction/mitigation on drone landing with hyperparameters:")
     print(f"\tmodel_path = {args.model_path}")
     print(f"\timage dimensions (w x h) = 32 x 32")
     print(f"\tT = {T}")
@@ -405,6 +405,7 @@ if __name__ == "__main__":
         f"dp_{dp_mcmc_step_size:0.1e}/"
         f"ep_{ep_mcmc_step_size:0.1e}/"
         f"{'grad_norm' if normalize_gradients else 'no_grad_norm'}/"
+        f"grad_clip_{grad_clip}/"
     )
     filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}"
     print(f"Saving results to: {filename}")
@@ -435,6 +436,7 @@ if __name__ == "__main__":
                 "num_trees": num_trees,
                 "time": t_end - t_start,
                 "L": L,
+                "T": T,
                 "dp_mcmc_step_size": dp_mcmc_step_size,
                 "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,

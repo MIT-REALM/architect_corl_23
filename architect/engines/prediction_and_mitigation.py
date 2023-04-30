@@ -274,16 +274,23 @@ def predict_and_mitigate_failure_modes(
         start = time.perf_counter()
         carry, y = one_smc_step(carry, (key, tempering))
         end = time.perf_counter()
-        ep_debug = (
-            y[7]["ep_debug"]["final_grad_norm"].round(2)
-            if "final_grad_norm" in y[7]["ep_debug"]
-            else "N/A"
-        )
-        dp_debug = (
-            y[7]["dp_debug"]["final_grad_norm"].round(2)
-            if "final_grad_norm" in y[7]["dp_debug"]
-            else "N/A"
-        )
+        try:
+            ep_debug = (
+                y[7]["ep_debug"]["final_grad_norm"].round(2)
+                if "final_grad_norm" in y[7]["ep_debug"]
+                else "N/A"
+            )
+        except:
+            ep_debug = "N/A"
+
+        try:
+            dp_debug = (
+                y[7]["dp_debug"]["final_grad_norm"].round(2)
+                if "final_grad_norm" in y[7]["dp_debug"]
+                else "N/A"
+            )
+        except:
+            dp_debug = "N/A"
         print(
             (
                 f" ({end - start:.2f} s); "
