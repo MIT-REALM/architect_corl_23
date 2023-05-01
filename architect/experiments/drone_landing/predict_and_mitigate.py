@@ -105,7 +105,7 @@ def simulate(
     # The potential is the negative of the (soft) minimum reward observed, plus a
     # penalty based on how far the drone is from the target.
     potential = (
-        -softmin(reward, sharpness=1.0) + (final_state.drone_state[:2] ** 2).sum()
+        -softmin(reward, sharpness=1.0) + 5 * (final_state.drone_state[:2] ** 2).sum()
     )
 
     return SimulationResults(
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("--T", type=int, nargs="?", default=80)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--num_trees", type=int, nargs="?", default=10)
-    parser.add_argument("--failure_level", type=float, nargs="?", default=80.0)
+    parser.add_argument("--failure_level", type=float, nargs="?", default=0.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
@@ -284,7 +284,7 @@ if __name__ == "__main__":
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
-        logging_prefix=f"{args.savename}/{alg_type}",
+        logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
     )
     t_end = time.perf_counter()
     print(
@@ -437,6 +437,7 @@ if __name__ == "__main__":
                 "time": t_end - t_start,
                 "L": L,
                 "T": T,
+                "failure_level": failure_level,
                 "dp_mcmc_step_size": dp_mcmc_step_size,
                 "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,

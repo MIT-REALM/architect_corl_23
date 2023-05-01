@@ -187,8 +187,8 @@ class DroneLandingEnv:
             tree_locations,
             self._render_sharpness,
         )
-        collision_reward = -self._collision_penalty * jax.nn.sigmoid(
-            -25 * min_distance_to_obstacle
+        collision_reward = -self._collision_penalty * jax.nn.tanh(
+            -5 * min_distance_to_obstacle
         )
 
         reward = distance_reward + collision_reward  #  / self._collision_penalty
