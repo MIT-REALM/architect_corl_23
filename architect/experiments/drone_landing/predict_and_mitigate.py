@@ -126,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("--T", type=int, nargs="?", default=80)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--num_trees", type=int, nargs="?", default=10)
-    parser.add_argument("--failure_level", type=float, nargs="?", default=0.0)
+    parser.add_argument("--failure_level", type=float, nargs="?", default=25.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
