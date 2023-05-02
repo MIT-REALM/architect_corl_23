@@ -189,6 +189,7 @@ def simulate(
 
 
 if __name__ == "__main__":
+    # TODO: smooth potential. Figure out a good failure level. Run experiments.
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
