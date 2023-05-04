@@ -141,6 +141,7 @@ def simulate(
             -0.5 * (state.non_ego_states[:, 1] - initial_state.non_ego_states[:, 1])
             - 0.5 * (state.non_ego_states[:, 3] - initial_state.non_ego_states[:, 3])
         )
+        non_ego_stable_action = 0 * non_ego_stable_action  # TODO
 
         # Take a step in the environment using the action carried over from the previous
         # step.
@@ -177,7 +178,7 @@ def simulate(
     final_obs = env.get_obs(final_state)
 
     # The potential is the negative of the (soft) minimum reward observed
-    potential = -softmin(reward)
+    potential = -softmin(reward, sharpness=1.0)
 
     return SimulationResults(
         potential,
@@ -189,17 +190,19 @@ def simulate(
 
 
 if __name__ == "__main__":
-    # TODO: smooth potential. Figure out a good failure level. Run experiments.
+    # TODO: Figure out a good failure level. Run experiments.
+    # TODO repair: add a different repair potential
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--savename", type=str, default="overtake_actions")
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
-    parser.add_argument("--noise_scale", type=float, nargs="?", default=0.05)
+    parser.add_argument("--noise_scale", type=float, nargs="?", default=0.001)
+    parser.add_argument("--failure_level", type=int, nargs="?", default=0.0)
     parser.add_argument("--T", type=int, nargs="?", default=60)
-    parser.add_argument("--L", type=float, nargs="?", default=10.0)
-    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
+    parser.add_argument("--L", type=float, nargs="?", default=1.0)
+    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
     parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=10)
@@ -220,6 +223,7 @@ if __name__ == "__main__":
     # Hyperparameters
     L = args.L
     noise_scale = args.noise_scale
+    failure_level = args.failure_level
     T = args.T
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
@@ -241,6 +245,7 @@ if __name__ == "__main__":
     print(f"\tmodel_path = {args.model_path}")
     print(f"\timage dimensions (w x h) = {args.image_w} x {args.image_h}")
     print(f"\tnoise_scale = {noise_scale}")
+    print(f"\tfailure_level = {failure_level}")
     print(f"\tT = {T}")
     print(f"\tL = {L}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
@@ -326,6 +331,21 @@ if __name__ == "__main__":
             use_mh,
         )
 
+    if reinforce:
+        alg_type = "reinforce_l2c_0.05_step"
+    elif use_gradients and use_stochasticity and use_mh:
+        alg_type = "mala"
+    elif use_gradients and use_stochasticity and not use_mh:
+        alg_type = "ula"
+    elif use_gradients and not use_stochasticity:
+        alg_type = "gd"
+    elif not use_gradients and use_stochasticity and use_mh:
+        alg_type = "rmh"
+    elif not use_gradients and use_stochasticity and not use_mh:
+        alg_type = "random_walk"
+    else:
+        alg_type = "static"
+
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
@@ -334,8 +354,13 @@ if __name__ == "__main__":
         initial_eps,
         dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
         ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
-        potential_fn=lambda dp, ep: L
-        * simulate(env, dp, initial_state, ep, static_policy, T).potential,
+        # potential_fn=lambda dp, ep: L
+        # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
+        potential_fn=lambda dp, ep: -L
+        * jax.nn.elu(
+            failure_level
+            - simulate(env, dp, initial_state, ep, static_policy, T).potential
+        ),
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
@@ -347,7 +372,7 @@ if __name__ == "__main__":
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
-        normalize_gradients=normalize_gradients,
+        logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
     )
     t_end = time.perf_counter()
     print(
@@ -495,6 +520,7 @@ if __name__ == "__main__":
                 "time": t_end - t_start,
                 "L": L,
                 "noise_scale": noise_scale,
+                "failure_level": failure_level,
                 "image_w": args.image_w,
                 "image_h": args.image_h,
                 "dp_mcmc_step_size": dp_mcmc_step_size,
@@ -508,6 +534,8 @@ if __name__ == "__main__":
                 "predict": predict,
                 "quench_rounds": quench_rounds,
                 "tempering_schedule": tempering_schedule,
+                "ep_logprobs": ep_logprobs,
+                "dp_logprobs": dp_logprobs,
             },
             f,
             default=lambda x: x.tolist() if isinstance(x, Shaped[Array, "..."]) else x,

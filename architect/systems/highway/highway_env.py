@@ -207,7 +207,7 @@ class HighwayEnv:
             self._render_sharpness,
         )
         collision_reward = -self._collision_penalty * jax.nn.sigmoid(
-            -25 * min_distance_to_obstacle
+            -5 * min_distance_to_obstacle
         )
         distance_reward = 1.0 * (next_ego_state[0] - ego_state[0]) / self._dt
         lane_keeping_reward = (
