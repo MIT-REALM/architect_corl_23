@@ -11,6 +11,8 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy
 from beartype.typing import NamedTuple
 from jaxtyping import Array, Float, Shaped
 
@@ -27,6 +29,51 @@ from architect.utils import softmin
 
 # Type for non ego action trajectory
 NonEgoActions = Float[Array, "T n_non_ego_agents num_actions"]
+
+
+# A utility function for getting the LQR feedback gain matrix
+def dlqr(A, B, Q, R):
+    """
+    Solve the discrete time lqr controller.
+
+    x[k+1] = A x[k] + B u[k]
+
+    cost = sum x[k].T*Q*x[k] + u[k].T*R*u[k]
+    """
+    # ref Bertsekas, p.151
+
+    # first, try to solve the ricatti equation
+    X = np.matrix(scipy.linalg.solve_discrete_are(A, B, Q, R))
+
+    # compute the LQR gain
+    K = np.matrix(scipy.linalg.inv(B.T * X * B + R) * (B.T * X * A))
+
+    eigVals, eigVecs = scipy.linalg.eig(A - B * K)
+
+    return K, X, eigVals
+
+
+# get LQR gains
+A = np.array(
+    [
+        [1.0, 0.0, 0.0, 0.1],
+        [0.0, 1.0, 8.5 * 0.1, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+)
+B = np.array(
+    [
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [0.0, 8.5 * 0.1 / 1.0],
+        [0.1, 0.0],
+    ]
+)
+Q = np.eye(4)
+R = np.eye(2)
+K, _, _ = dlqr(A, B, Q, R)
+K = jnp.array(K)
 
 
 def sample_non_ego_actions(
@@ -136,12 +183,18 @@ def simulate(
 
         # The action passed in is a residual applied to a stabilizing policy for each
         # non-ego agent
-        non_ego_stable_action = jnp.zeros_like(non_ego_action)
-        non_ego_stable_action = non_ego_stable_action.at[:, 1].set(
-            -0.5 * (state.non_ego_states[:, 1] - initial_state.non_ego_states[:, 1])
-            - 0.5 * (state.non_ego_states[:, 3] - initial_state.non_ego_states[:, 3])
+        # non_ego_stable_action = jnp.zeros_like(non_ego_action)
+        # non_ego_stable_action = non_ego_stable_action.at[:, 1].set(
+        #     -0.5 * (state.non_ego_states[:, 1] - initial_state.non_ego_states[:, 1])
+        #     - 0.5 * (state.non_ego_states[:, 3] - initial_state.non_ego_states[:, 3])
+        # )
+        compute_lqr = lambda non_ego_state, initial_state: -K @ (
+            non_ego_state - initial_state
         )
-        non_ego_stable_action = 0 * non_ego_stable_action  # TODO
+        non_ego_stable_action = jax.vmap(compute_lqr)(
+            state.non_ego_states,
+            initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
+        )
 
         # Take a step in the environment using the action carried over from the previous
         # step.
@@ -198,7 +251,7 @@ if __name__ == "__main__":
     parser.add_argument("--savename", type=str, default="overtake_actions")
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
-    parser.add_argument("--noise_scale", type=float, nargs="?", default=0.001)
+    parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
     parser.add_argument("--failure_level", type=int, nargs="?", default=0.0)
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
@@ -346,59 +399,59 @@ if __name__ == "__main__":
     else:
         alg_type = "static"
 
-    # Run the prediction+mitigation process
-    t_start = time.perf_counter()
-    dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
-        prng_key,
-        initial_dps,
-        initial_eps,
-        dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
-        ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
-        # potential_fn=lambda dp, ep: L
-        # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
-        potential_fn=lambda dp, ep: -L
-        * jax.nn.elu(
-            failure_level
-            - simulate(env, dp, initial_state, ep, static_policy, T).potential
-        ),
-        init_sampler=init_sampler_fn,
-        make_kernel=make_kernel_fn,
-        num_rounds=num_rounds,
-        num_mcmc_steps_per_round=num_steps_per_round,
-        dp_mcmc_step_size=dp_mcmc_step_size,
-        ep_mcmc_step_size=ep_mcmc_step_size,
-        use_stochasticity=use_stochasticity,
-        repair=repair,
-        predict=predict,
-        quench_rounds=quench_rounds,
-        tempering_schedule=tempering_schedule,
-        logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
-    )
-    t_end = time.perf_counter()
-    print(
-        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
-    )
+    # # Run the prediction+mitigation process
+    # t_start = time.perf_counter()
+    # dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
+    #     prng_key,
+    #     initial_dps,
+    #     initial_eps,
+    #     dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
+    #     ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
+    #     # potential_fn=lambda dp, ep: L
+    #     # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
+    #     potential_fn=lambda dp, ep: -L
+    #     * jax.nn.elu(
+    #         failure_level
+    #         - simulate(env, dp, initial_state, ep, static_policy, T).potential
+    #     ),
+    #     init_sampler=init_sampler_fn,
+    #     make_kernel=make_kernel_fn,
+    #     num_rounds=num_rounds,
+    #     num_mcmc_steps_per_round=num_steps_per_round,
+    #     dp_mcmc_step_size=dp_mcmc_step_size,
+    #     ep_mcmc_step_size=ep_mcmc_step_size,
+    #     use_stochasticity=use_stochasticity,
+    #     repair=repair,
+    #     predict=predict,
+    #     quench_rounds=quench_rounds,
+    #     tempering_schedule=tempering_schedule,
+    #     logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
+    # )
+    # t_end = time.perf_counter()
+    # print(
+    #     f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+    # )
 
-    # Select the policy that performs best against all predicted failures before
-    # the final round (choose from all chains)
-    if repair:
-        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
-    else:
-        # Just pick one policy arbitrarily if we didn't optimize the policies.
-        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
+    # # Select the policy that performs best against all predicted failures before
+    # # the final round (choose from all chains)
+    # if repair:
+    #     most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    # else:
+    #     # Just pick one policy arbitrarily if we didn't optimize the policies.
+    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
 
-    # Evaluate this single policy against all failures
-    final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
+    # # Evaluate this single policy against all failures
+    # final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
 
-    # # TODO for debugging plots, just use the initial policy and eps
-    # t_end = 0.0
-    # t_start = 0.0
-    # final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
-    # final_eps = initial_eps
-    # dp_logprobs = jnp.zeros((num_rounds, num_chains))
-    # ep_logprobs = jnp.zeros((num_rounds, num_chains))
-    # # TODO debugging bit ends here
+    # TODO for debugging plots, just use the initial policy and eps
+    t_end = 0.0
+    t_start = 0.0
+    final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
+    final_eps = initial_eps
+    dp_logprobs = jnp.zeros((num_rounds, num_chains))
+    ep_logprobs = jnp.zeros((num_rounds, num_chains))
+    # TODO debugging bit ends here
 
     # Evaluate the solutions proposed by the prediction+mitigation algorithm
     result = eqx.filter_vmap(
