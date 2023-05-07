@@ -21,7 +21,7 @@ EXPNAME="rmh" CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python 
 EXPNAME="ula" CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/highway/predict_and_mitigate.py --model_path results/overtake_old/overtake_actions/initial_policy.eqx --num_rounds 20 --num_steps_per_round 10 --num_chains 10 --ep_mcmc_step_size 1e-3 --dp_mcmc_step_size 1e-3 --disable_mh --no-temper --savename highway_lqr &
 
 # Run REINFORCE/L2C prediction (without tempering)
-EXPNAME="l2c" CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/highway/predict_and_mitigate.py --model_path results/overtake_old/overtake_actions/initial_policy.eqx --num_rounds 20 --num_steps_per_round 10 --num_chains 10 --ep_mcmc_step_size 1e-3 --dp_mcmc_step_size 1e-3 --reinforce --no-temper --savename highway_lqr &
+EXPNAME="l2c" CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/highway/predict_and_mitigate.py --model_path results/overtake_old/overtake_actions/initial_policy.eqx --num_rounds 20 --num_steps_per_round 10 --num_chains 10 --ep_mcmc_step_size 1e-3 --dp_mcmc_step_size 1e-3 --reinforce --no-temper --savename highway_lqr &
 
 # Run REINFORCE/L2C prediction (with tempering)
 EXPNAME="l2c_t" CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/highway/predict_and_mitigate.py --model_path results/overtake_old/overtake_actions/initial_policy.eqx --num_rounds 20 --num_steps_per_round 10 --num_chains 10 --ep_mcmc_step_size 1e-3 --dp_mcmc_step_size 1e-3 --reinforce --savename highway_lqr &

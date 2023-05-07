@@ -194,7 +194,7 @@ if __name__ == "__main__":
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
-    tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
+    tempering_schedule = 1 - jnp.exp(-40 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
     prng_key = jrandom.PRNGKey(0)
@@ -407,7 +407,7 @@ if __name__ == "__main__":
         f"{'grad_norm' if normalize_gradients else 'no_grad_norm'}/"
         f"grad_clip_{grad_clip}/"
     )
-    filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}"
+    filename = save_dir + f"{alg_type}{'_tempered_40' if temper else ''}"
     print(f"Saving results to: {filename}")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(filename + ".png")
