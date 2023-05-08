@@ -11,7 +11,10 @@ import pandas as pd
 import seaborn as sns
 from jaxtyping import Array, Shaped
 
-from architect.experiments.highway.predict_and_mitigate import simulate
+from architect.experiments.highway.predict_and_mitigate import (
+    non_ego_actions_prior_logprob,
+    simulate,
+)
 from architect.experiments.highway.train_highway_agent import make_highway_env
 from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
@@ -35,7 +38,7 @@ DATA_SOURCES = {
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/200_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c_0.05_step",
+        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/200_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
         "display_name": "L2C",
     },
 }
@@ -52,12 +55,19 @@ def load_data_sources_from_json():
 
             loaded_data[alg] = {
                 "display_name": DATA_SOURCES[alg]["display_name"],
+                "final_eps": jnp.array(data["action_trajectory"]),
                 "eps_trace": jax.tree_util.tree_map(
                     lambda x: jnp.array(x),
                     data["action_trajectory_trace"],
                     is_leaf=lambda x: isinstance(x, list),
                 ),
                 "failure_level": data["failure_level"],
+                "noise_scale": data["noise_scale"],
+                "initial_state": jax.tree_util.tree_map(
+                    lambda x: jnp.array(x),
+                    data["initial_state"],
+                    is_leaf=lambda x: isinstance(x, list),
+                ),
             }
             loaded_data[alg]["T"] = loaded_data[alg]["eps_trace"].shape[2]
 
@@ -65,7 +75,8 @@ def load_data_sources_from_json():
         image_shape = (32, 32)
         dummy_policy = DrivingPolicy(jax.random.PRNGKey(0), image_shape)
         full_policy = eqx.tree_deserialise_leaves(
-            DATA_SOURCES[alg]["path_prefix"] + ".eqx", dummy_policy
+            DATA_SOURCES[alg]["path_prefix"] + ".eqx",
+            dummy_policy,
         )
         dp, static_policy = eqx.partition(full_policy, eqx.is_array)
         loaded_data[alg]["dp"] = dp
@@ -80,9 +91,14 @@ def get_costs(loaded_data):
     alg = "mala_tempered"
     image_shape = (32, 32)
     env = make_highway_env(image_shape)
-    prng_key = jax.jrandom.PRNGKey(0)
-    prng_key, initial_state_key = jax.jrandom.split(prng_key)
-    initial_state = env.reset(initial_state_key)
+    initial_state = HighwayState(
+        ego_state=loaded_data[alg]["initial_state"]["ego_state"],
+        non_ego_states=loaded_data[alg]["initial_state"]["non_ego_states"],
+        shading_light_direction=loaded_data[alg]["initial_state"][
+            "shading_light_direction"
+        ],
+        non_ego_colors=loaded_data[alg]["initial_state"]["non_ego_colors"],
+    )
 
     cost_fn = lambda ep: simulate(
         env,
@@ -93,11 +109,61 @@ def get_costs(loaded_data):
         loaded_data[alg]["T"],
     ).potential
     cost_fn = jax.jit(cost_fn)
-    ep_logprior_fn = jax.jit(env.initial_state_logprior)
+    ep_logprior_fn = jax.jit(
+        lambda ep: non_ego_actions_prior_logprob(
+            ep, env, loaded_data[alg]["noise_scale"]
+        )
+    )
 
     for alg in loaded_data:
         print(f"Computing costs for {alg}...")
         eps = loaded_data[alg]["eps_trace"]
+        final_eps = loaded_data[alg]["final_eps"]
+        final_dps = loaded_data[alg]["dp"]
+        static_policy = loaded_data[alg]["static_policy"]
+        T = loaded_data[alg]["T"]
+
+        result = eqx.filter_vmap(
+            lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
+            in_axes=(None, 0),
+        )(final_dps, final_eps)
+
+        max_potential = jnp.max(result.potential)
+        min_potential = jnp.min(result.potential)
+        normalized_potential = (result.potential - min_potential) / (
+            max_potential - min_potential
+        )
+        _, ax = plt.subplots(1, 1)
+        ax.axhline(7.5, linestyle="--", color="k")
+        ax.axhline(-7.5, linestyle="--", color="k")
+        num_chains = 10
+        for chain_idx in range(num_chains):
+            ax.plot(
+                result.ego_trajectory[chain_idx, :, 0].T,
+                result.ego_trajectory[chain_idx, :, 1].T,
+                linestyle="-",
+                color=plt.cm.plasma(normalized_potential[chain_idx]),
+                label="Ego" if chain_idx == 0 else None,
+            )
+            ax.plot(
+                result.non_ego_trajectory[chain_idx, :, 0, 0],
+                result.non_ego_trajectory[chain_idx, :, 0, 1],
+                linestyle="-.",
+                color=plt.cm.plasma(normalized_potential[chain_idx]),
+                label="Non-ego 1" if chain_idx == 0 else None,
+            )
+            ax.plot(
+                result.non_ego_trajectory[chain_idx, :, 1, 0],
+                result.non_ego_trajectory[chain_idx, :, 1, 1],
+                linestyle="--",
+                color=plt.cm.plasma(normalized_potential[chain_idx]),
+                label="Non-ego 2" if chain_idx == 0 else None,
+            )
+
+        import pdb
+
+        pdb.set_trace()
+
         loaded_data[alg]["ep_costs"] = jax.vmap(jax.vmap(cost_fn))(eps)
         loaded_data[alg]["ep_logpriors"] = jax.vmap(jax.vmap(ep_logprior_fn))(eps)
         loaded_data[alg]["ep_logprobs"] = loaded_data[alg]["ep_logpriors"] - jax.nn.elu(
@@ -236,11 +302,18 @@ if __name__ == "__main__":
 
     # Plot!
     plt.figure(figsize=(12, 8))
-    sns.barplot(
-        data=df[(df["Diffusion steps"] % 10 == 0)],
-        x="Diffusion steps",
-        y="# failures discovered",
-        hue="Algorithm",
-    )
+    # sns.barplot(
+    #     data=df[(df["Diffusion steps"] % 10 == 0)],
+    #     x="Diffusion steps",
+    #     y="# failures discovered",
+    #     hue="Algorithm",
+    # )
+    for alg in DATA_SOURCES:
+        plt.plot(
+            jnp.arange(200),
+            summary_data[alg]["ep_costs"].mean(axis=1),
+            label=summary_data[alg]["display_name"],
+        )
+    plt.legend()
 
     plt.show()
