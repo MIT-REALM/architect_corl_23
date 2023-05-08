@@ -209,6 +209,7 @@ if __name__ == "__main__":
         )
 
     # Plot!
+    plt.figure(figsize=(12, 8))
     sns.boxenplot(
         x="Algorithm",
         y="Cost",
@@ -217,5 +218,6 @@ if __name__ == "__main__":
         # flier_kws={"s": 20},
         data=df,
     )
+    plt.gca().set_xlabel("")
 
     plt.show()
