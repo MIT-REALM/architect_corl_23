@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from jaxtyping import Array, Shaped
 
@@ -18,33 +19,21 @@ from architect.systems.drone_landing.policy import DroneLandingPolicy
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
 # path to save summary data to
-SUMMARY_PATH = "results/drone_landing_smooth/predict/summary.json"
+SUMMARY_PATH = "results/drone_landing_smooth/predict/convergence_summary.json"
 # Define data sources from individual experiments
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered",
-        "display_name": "Ours (tempered)",
+        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "display_name": "RADIUM (ours)",
     },
-    "mala": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala",
-        "display_name": "Ours (no temper)",
-    },
-    # "rmh_tempered": {
-    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh_tempered",
-    #     "display_name": "Ours (no gradients, tempered)",
+    # "mala": {
+    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala",
+    #     "display_name": "Ours (no temper)",
     # },
     "rmh": {
         "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
-    # "ula": {
-    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/ula",
-    #     "display_name": "DiffScene",
-    # },
-    # "gd_tempered": {
-    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_3.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd_tempered",
-    #     "display_name": "AdvGrad (tempered)",
-    # },
     "gd": {
         "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_3.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
@@ -124,7 +113,7 @@ def get_costs(loaded_data):
 
 if __name__ == "__main__":
     # Activate seaborn styling
-    sns.set_theme(context="paper", style="whitegrid")
+    sns.set_theme(context="paper", style="whitegrid", font_scale=1.5)
 
     if REANALYZE or not os.path.exists(SUMMARY_PATH):
         # Load the data
@@ -172,27 +161,90 @@ if __name__ == "__main__":
         failure_level = summary_data[alg]["failure_level"]
         costs = summary_data[alg]["ep_costs"]
         num_failures = (costs >= failure_level).sum(axis=-1)
-        # Cumulative max = how many discovered so far
-        num_failures = jax.lax.cummax(num_failures)
         # Add a 1 at the start (randomly sampling 10 failures gives 1 failure at step 0)
         num_failures = jnp.concatenate([jnp.ones(1), num_failures])
         summary_data[alg]["num_failures"] = num_failures
 
-    # Plot!
-    fig, ax = plt.subplots(figsize=(6, 4))
+    # Make into pandas dataframe
+    iters = pd.Series([], dtype=int)
+    logprobs = pd.Series([], dtype=float)
+    costs = pd.Series([], dtype=float)
+    num_failures = pd.Series([], dtype=float)
+    algs = pd.Series([], dtype=str)
     for alg in DATA_SOURCES:
-        # Plot the failure rate
-        h = ax.plot(
-            np.arange(summary_data[alg]["num_failures"].shape[0]),
-            summary_data[alg]["num_failures"],
-            label=summary_data[alg]["display_name"],
+        num_iters = summary_data[alg]["ep_logprobs"].shape[0]
+        num_chains = summary_data[alg]["ep_logprobs"].shape[1]
+
+        # Add the number of failures discovered initially
+        iters = pd.concat(
+            [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
+        )
+        num_failures = pd.concat(
+            [
+                num_failures,
+                pd.Series([float(summary_data[alg]["num_failures"][0])] * num_chains),
+            ],
+            ignore_index=True,
+        )
+        logprobs = pd.concat(
+            [logprobs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
+        )
+        costs = pd.concat([costs, pd.Series(jnp.zeros(num_chains))], ignore_index=True)
+        algs = pd.concat(
+            [algs, pd.Series([summary_data[alg]["display_name"]] * num_chains)],
+            ignore_index=True,
         )
 
-    # Set the axis labels
-    ax.set_xlabel("Steps")
-    ax.set_ylabel("# failures discovered")
+        # Add the data for the rest of the iterations
+        for i in range(num_iters):
+            iters = pd.concat(
+                [iters, pd.Series(jnp.zeros(num_chains, dtype=int) + i + 1)],
+                ignore_index=True,
+            )
+            logprobs = pd.concat(
+                [logprobs, pd.Series(summary_data[alg]["ep_logprobs"][i, :])],
+                ignore_index=True,
+            )
+            costs = pd.concat(
+                [
+                    costs,
+                    pd.Series(
+                        -jax.nn.elu(
+                            summary_data[alg]["failure_level"]
+                            - summary_data[alg]["ep_costs"][i, :]
+                        )
+                    ),
+                ],
+                ignore_index=True,
+            )
+            num_failures = pd.concat(
+                [
+                    num_failures,
+                    pd.Series(
+                        [float(summary_data[alg]["num_failures"][i + 1])] * num_chains
+                    ),
+                ],
+                ignore_index=True,
+            )
+            algs = pd.concat(
+                [algs, pd.Series([summary_data[alg]["display_name"]] * num_chains)],
+                ignore_index=True,
+            )
 
-    # Set the legend
-    ax.legend()
+    df = pd.DataFrame()
+    df["Diffusion steps"] = iters
+    df["Overall log likelihood"] = logprobs
+    df["$[J^* - J]_+$"] = costs
+    df["# failures discovered"] = num_failures
+    df["Algorithm"] = algs
+
+    # Plot!
+    plt.figure(figsize=(12, 8))
+    sns.barplot(
+        data=df[(df["Diffusion steps"] % 10 == 0)],
+        x="Diffusion steps",
+        y="# failures discovered",
+        hue="Algorithm",
+    )
 
     plt.show()
