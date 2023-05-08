@@ -565,6 +565,7 @@ if __name__ == "__main__":
             {
                 "initial_state": initial_state._asdict(),
                 "action_trajectory": final_eps,
+                "action_trajectory_trace": eps,
                 "time": t_end - t_start,
                 "L": L,
                 "noise_scale": noise_scale,
