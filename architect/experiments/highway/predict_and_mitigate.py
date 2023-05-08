@@ -320,7 +320,7 @@ if __name__ == "__main__":
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
-    seed = 1
+    seed = 4
     prng_key = jrandom.PRNGKey(seed)
 
     # Make the environment to use
