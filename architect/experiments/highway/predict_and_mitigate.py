@@ -320,7 +320,8 @@ if __name__ == "__main__":
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
-    prng_key = jrandom.PRNGKey(0)
+    seed = 1
+    prng_key = jrandom.PRNGKey(seed)
 
     # Make the environment to use
     image_shape = (args.image_h, args.image_w)
@@ -544,7 +545,7 @@ if __name__ == "__main__":
         f"dp_{dp_mcmc_step_size:0.1e}/"
         f"ep_{ep_mcmc_step_size:0.1e}/"
     )
-    filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}"
+    filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}_{seed}"
     print(f"Saving results to: {filename}")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(filename + ".png")
