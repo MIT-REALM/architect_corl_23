@@ -118,51 +118,6 @@ def get_costs(loaded_data):
     for alg in loaded_data:
         print(f"Computing costs for {alg}...")
         eps = loaded_data[alg]["eps_trace"]
-        final_eps = loaded_data[alg]["final_eps"]
-        final_dps = loaded_data[alg]["dp"]
-        static_policy = loaded_data[alg]["static_policy"]
-        T = loaded_data[alg]["T"]
-
-        result = eqx.filter_vmap(
-            lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
-            in_axes=(None, 0),
-        )(final_dps, final_eps)
-
-        max_potential = jnp.max(result.potential)
-        min_potential = jnp.min(result.potential)
-        normalized_potential = (result.potential - min_potential) / (
-            max_potential - min_potential
-        )
-        _, ax = plt.subplots(1, 1)
-        ax.axhline(7.5, linestyle="--", color="k")
-        ax.axhline(-7.5, linestyle="--", color="k")
-        num_chains = 10
-        for chain_idx in range(num_chains):
-            ax.plot(
-                result.ego_trajectory[chain_idx, :, 0].T,
-                result.ego_trajectory[chain_idx, :, 1].T,
-                linestyle="-",
-                color=plt.cm.plasma(normalized_potential[chain_idx]),
-                label="Ego" if chain_idx == 0 else None,
-            )
-            ax.plot(
-                result.non_ego_trajectory[chain_idx, :, 0, 0],
-                result.non_ego_trajectory[chain_idx, :, 0, 1],
-                linestyle="-.",
-                color=plt.cm.plasma(normalized_potential[chain_idx]),
-                label="Non-ego 1" if chain_idx == 0 else None,
-            )
-            ax.plot(
-                result.non_ego_trajectory[chain_idx, :, 1, 0],
-                result.non_ego_trajectory[chain_idx, :, 1, 1],
-                linestyle="--",
-                color=plt.cm.plasma(normalized_potential[chain_idx]),
-                label="Non-ego 2" if chain_idx == 0 else None,
-            )
-
-        import pdb
-
-        pdb.set_trace()
 
         loaded_data[alg]["ep_costs"] = jax.vmap(jax.vmap(cost_fn))(eps)
         loaded_data[alg]["ep_logpriors"] = jax.vmap(jax.vmap(ep_logprior_fn))(eps)
