@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyemd
 import seaborn as sns
 from jaxtyping import Array, Shaped
 from tqdm import tqdm
@@ -41,6 +42,10 @@ DATA_SOURCES = {
     "reinforce": {
         "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
+    },
+    "random": {
+        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/1_samples_1x1/10_chains/0_quench/dp_1.0e-05/ep_1.0e-05/grad_norm/grad_clip_inf/static_tempered",
+        "display_name": "Random sampling",
     },
 }
 
@@ -207,6 +212,38 @@ if __name__ == "__main__":
                 }
             )
         )
+
+    # Compute wassertein distance of each algorithm from the prior
+    bins = 10
+    gt, gt_bins = jnp.histogram(
+        summary_data["random_sample_costs"],
+        bins,
+        density=True,
+        weights=jnp.exp(-jax.nn.elu(25.0 - summary_data["random_sample_costs"])),
+    )
+    gt_bin_centers = (gt_bins[1:] + gt_bins[:-1]) / 2.0
+    print(
+        "Wasserstein distance from ground truth (importance sampling w. "
+        + f"N={summary_data['N'] * summary_data['batches']}):"
+    )
+    for alg in DATA_SOURCES:
+        hist, hist_bins = jnp.histogram(
+            summary_data[alg]["ep_costs"], bins, density=True
+        )
+        hist_bin_centers = (gt_bins[1:] + gt_bins[:-1]) / 2.0
+
+        distance = lambda x, y: jnp.linalg.norm(x - y)
+        distance_to_gt = lambda x: jax.vmap(distance, in_axes=(0, None))(
+            gt_bin_centers, x
+        )
+        distance_matrix = jax.vmap(distance_to_gt)(hist_bin_centers)
+
+        wasserstein = pyemd.emd(
+            np.array(gt, dtype=np.float64),
+            np.array(hist, dtype=np.float64),
+            np.array(distance_matrix, dtype=np.float64),
+        )
+        print(f"{DATA_SOURCES[alg]['display_name']}: {wasserstein}")
 
     # Plot!
     plt.figure(figsize=(12, 8))
