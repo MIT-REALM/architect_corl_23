@@ -20,7 +20,7 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary.json"
 # Define data sources from individual experiments
@@ -178,8 +178,10 @@ if __name__ == "__main__":
         failure_level = summary_data[alg]["failure_level"]
         costs = summary_data[alg]["ep_costs"]
         num_failures = (costs >= failure_level).sum(axis=-1)
-        # Add a 1 at the start (randomly sampling 10 failures gives 1 failure at step 0)
-        num_failures = jnp.concatenate([jnp.ones(1), num_failures])
+        # Cumulative max = 'how many failures have we seen so far?'
+        num_failures = jax.lax.cummax(num_failures)
+        # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
+        num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
         summary_data[alg]["num_failures"] = num_failures
 
     # Make into pandas dataframe
@@ -263,12 +265,12 @@ if __name__ == "__main__":
     #     y="# failures discovered",
     #     hue="Algorithm",
     # )
-    for alg in DATA_SOURCES:
-        plt.plot(
-            jnp.arange(200),
-            summary_data[alg]["ep_costs"].mean(axis=1),
-            label=summary_data[alg]["display_name"],
-        )
-    plt.legend()
+    sns.lineplot(
+        data=df,
+        x="Diffusion steps",
+        y="# failures discovered",
+        hue="Algorithm",
+        linewidth=3,
+    )
 
     plt.show()
