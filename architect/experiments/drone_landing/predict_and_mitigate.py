@@ -123,6 +123,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--savename", type=str, default="drone_cond")
+    parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--T", type=int, nargs="?", default=80)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--num_trees", type=int, nargs="?", default=10)
@@ -147,6 +148,7 @@ if __name__ == "__main__":
 
     # Hyperparameters
     L = args.L
+    seed = args.seed
     T = args.T
     num_trees = args.num_trees
     failure_level = args.failure_level
@@ -168,6 +170,7 @@ if __name__ == "__main__":
 
     print("Running prediction/mitigation on drone landing with hyperparameters:")
     print(f"\tmodel_path = {args.model_path}")
+    print(f"\tseed = {seed}")
     print(f"\timage dimensions (w x h) = 32 x 32")
     print(f"\tT = {T}")
     print(f"\tL = {L}")
@@ -197,7 +200,7 @@ if __name__ == "__main__":
     tempering_schedule = 1 - jnp.exp(-40 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
-    prng_key = jrandom.PRNGKey(0)
+    prng_key = jrandom.PRNGKey(seed)
 
     # Make the environment to use
     image_shape = (32, 32)
@@ -407,7 +410,7 @@ if __name__ == "__main__":
         f"{'grad_norm' if normalize_gradients else 'no_grad_norm'}/"
         f"grad_clip_{grad_clip}/"
     )
-    filename = save_dir + f"{alg_type}{'_tempered_40' if temper else ''}"
+    filename = save_dir + f"{alg_type}{'_tempered_40' if temper else ''}_{seed}"
     print(f"Saving results to: {filename}")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(filename + ".png")

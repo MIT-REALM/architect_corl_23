@@ -20,7 +20,7 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary.json"
 # Define data sources from individual experiments
@@ -186,8 +186,8 @@ if __name__ == "__main__":
             failure_level = result["failure_level"]
             costs = result["ep_costs"]
             num_failures = (costs >= failure_level).sum(axis=-1)
-            # Cumulative max = 'how many failures have we seen so far?'
-            num_failures = jax.lax.cummax(num_failures)
+            # # Cumulative max = 'how many failures have we seen so far?'
+            # num_failures = jax.lax.cummax(num_failures)
             # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
             num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
             result["num_failures"] = num_failures
@@ -198,14 +198,19 @@ if __name__ == "__main__":
     costs = pd.Series([], dtype=float)
     num_failures = pd.Series([], dtype=float)
     algs = pd.Series([], dtype=str)
+    seeds = pd.Series([], dtype=int)
     for alg in DATA_SOURCES:
-        for result in summary_data[alg]:
+        for seed_i, result in enumerate(summary_data[alg]):
             num_iters = result["ep_logprobs"].shape[0]
             num_chains = result["ep_logprobs"].shape[1]
 
             # Add the number of failures discovered initially
             iters = pd.concat(
                 [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
+            )
+            seeds = pd.concat(
+                [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
+                ignore_index=True,
             )
             num_failures = pd.concat(
                 [
@@ -229,6 +234,10 @@ if __name__ == "__main__":
             for i in range(num_iters):
                 iters = pd.concat(
                     [iters, pd.Series(jnp.zeros(num_chains, dtype=int) + i + 1)],
+                    ignore_index=True,
+                )
+                seeds = pd.concat(
+                    [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
                     ignore_index=True,
                 )
                 logprobs = pd.concat(
@@ -264,6 +273,10 @@ if __name__ == "__main__":
     df["$[J^* - J]_+$"] = costs
     df["# failures discovered"] = num_failures
     df["Algorithm"] = algs
+    df["Seed"] = seeds
+
+    print("Collision rate")
+    print(df.groupby(["Algorithm", "Seed"])["# failures discovered"].mean() / 10)
 
     # Plot!
     plt.figure(figsize=(12, 8))
