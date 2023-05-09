@@ -20,7 +20,7 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
 SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary.json"
 # Define data sources from individual experiments
@@ -97,26 +97,26 @@ def get_costs(loaded_data):
     image_shape = (32, 32)
     env = make_highway_env(image_shape)
     initial_state = HighwayState(
-        ego_state=loaded_data[alg]["initial_state"]["ego_state"],
-        non_ego_states=loaded_data[alg]["initial_state"]["non_ego_states"],
-        shading_light_direction=loaded_data[alg]["initial_state"][
+        ego_state=loaded_data[alg][0]["initial_state"]["ego_state"],
+        non_ego_states=loaded_data[alg][0]["initial_state"]["non_ego_states"],
+        shading_light_direction=loaded_data[alg][0]["initial_state"][
             "shading_light_direction"
         ],
-        non_ego_colors=loaded_data[alg]["initial_state"]["non_ego_colors"],
+        non_ego_colors=loaded_data[alg][0]["initial_state"]["non_ego_colors"],
     )
 
     cost_fn = lambda ep: simulate(
         env,
-        loaded_data[alg]["dp"],
+        loaded_data[alg][0]["dp"],
         initial_state,
         ep,
-        loaded_data[alg]["static_policy"],
-        loaded_data[alg]["T"],
+        loaded_data[alg][0]["static_policy"],
+        loaded_data[alg][0]["T"],
     ).potential
     cost_fn = jax.jit(cost_fn)
     ep_logprior_fn = jax.jit(
         lambda ep: non_ego_actions_prior_logprob(
-            ep, env, loaded_data[alg]["noise_scale"]
+            ep, env, loaded_data[alg][0]["noise_scale"]
         )
     )
 
