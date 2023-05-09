@@ -240,6 +240,9 @@ if __name__ == "__main__":
     df["# failures discovered"] = num_failures
     df["Algorithm"] = algs
 
+    print("Collision rate")
+    print(df.groupby(["Algorithm"])["# failures discovered"].mean() / 10)
+
     # Plot!
     plt.figure(figsize=(12, 8))
     # sns.barplot(
