@@ -53,7 +53,7 @@ def load_data_sources_from_json():
     for alg in DATA_SOURCES:
         loaded_data[alg] = []
         for seed in SEEDS:
-            with open(DATA_SOURCES[alg]["path_prefix"] + ".json") as f:
+            with open(DATA_SOURCES[alg]["path_prefix"] + f"_{seed}" + ".json") as f:
                 data = json.load(f)
 
                 new_data = {

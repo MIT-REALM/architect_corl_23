@@ -1,4 +1,4 @@
-"""Define a highway scene with a variable number of lanes and cars."""
+"""Define a drone landing scene with a variable number of trees and cars."""
 import jax
 import jax.numpy as jnp
 from beartype import beartype

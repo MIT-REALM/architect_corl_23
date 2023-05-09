@@ -98,6 +98,46 @@ class Scene(SDFShape):
         )
 
 
+class Subtraction(SDFShape):
+    """Represent the subtraction of one shape from another using SDFs.
+
+    Attributes:
+        shape1: the shape to add (sets the color)
+        shape2: the shape to subtract
+        sharpness: the sharpness of the SDF
+    """
+
+    shape1: SDFShape
+    shape2: SDFShape
+    sharpness: float = 1.0
+
+    def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
+        """Compute the SDF at a given point.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            signed distance from the point to the scene (positive outside)
+        """
+        distance1 = self.shape1(x)
+        distance2 = self.shape2(x)
+        return -softmin(jnp.array([-distance1, distance2]), self.sharpness)
+
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Compute the color at a given point.
+
+        Color is determined by the first shape.
+
+        Args:
+            x: a point in world coordinates
+
+        Returns:
+            RGB color at the point, scaled to [0, 1]
+        """
+        return self.shape1.color(x)
+
+
 @jaxtyped
 @beartype
 class Sphere(SDFShape):
