@@ -249,6 +249,7 @@ if __name__ == "__main__":
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
     parser.add_argument("--failure_level", type=int, nargs="?", default=0.0)
     parser.add_argument("--T", type=int, nargs="?", default=60)
+    parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
@@ -273,6 +274,7 @@ if __name__ == "__main__":
     noise_scale = args.noise_scale
     failure_level = args.failure_level
     T = args.T
+    seed = args.seed
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
     num_rounds = args.num_rounds
@@ -295,6 +297,7 @@ if __name__ == "__main__":
     print(f"\tnoise_scale = {noise_scale}")
     print(f"\tfailure_level = {failure_level}")
     print(f"\tT = {T}")
+    print(f"\tseed = {seed}")
     print(f"\tL = {L}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
     print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
@@ -320,7 +323,6 @@ if __name__ == "__main__":
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
-    seed = 4
     prng_key = jrandom.PRNGKey(seed)
 
     # Make the environment to use
