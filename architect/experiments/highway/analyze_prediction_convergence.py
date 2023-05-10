@@ -20,7 +20,7 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary_4_100steps_1e-3.json"
 # Define data sources from individual experiments
@@ -186,8 +186,8 @@ if __name__ == "__main__":
             failure_level = result["failure_level"]
             costs = result["ep_costs"]
             num_failures = (costs >= failure_level).sum(axis=-1)
-            # # Cumulative max = 'how many failures have we seen so far?'
-            # num_failures = jax.lax.cummax(num_failures)
+            # Cumulative max = 'how many failures have we predicted so far?'
+            num_failures = jax.lax.cumsum(num_failures)
             # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
             num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
             result["num_failures"] = num_failures
