@@ -547,7 +547,9 @@ if __name__ == "__main__":
         f"dp_{dp_mcmc_step_size:0.1e}/"
         f"ep_{ep_mcmc_step_size:0.1e}/"
     )
-    filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}_{seed}"
+    filename = save_dir + f"{alg_type}{'_tempered' if temper else ''}"
+    filename += f"{'_nogradnorm' if not normalize_gradients else ''}"
+    filename += f"_{seed}"
     print(f"Saving results to: {filename}")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(filename + ".png")
