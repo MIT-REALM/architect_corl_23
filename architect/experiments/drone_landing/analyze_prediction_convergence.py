@@ -69,7 +69,7 @@ def load_data_sources_from_json():
             image_shape = (32, 32)
             dummy_policy = DroneLandingPolicy(jax.random.PRNGKey(0), image_shape)
             full_policy = eqx.tree_deserialise_leaves(
-                DATA_SOURCES[alg]["path_prefix"] + ".eqx", dummy_policy
+                DATA_SOURCES[alg]["path_prefix"] + f"_{seed}" + ".eqx", dummy_policy
             )
             dp, static_policy = eqx.partition(full_policy, eqx.is_array)
             new_data["dp"] = dp
