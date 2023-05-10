@@ -131,11 +131,11 @@ if __name__ == "__main__":
             for result in data[alg]:
                 summary_data[alg].append(
                     {
-                        "display_name": data[alg]["display_name"],
-                        "ep_costs": data[alg]["ep_costs"],
-                        "ep_logpriors": data[alg]["ep_logpriors"],
-                        "ep_logprobs": data[alg]["ep_logprobs"],
-                        "failure_level": data[alg]["failure_level"],
+                        "display_name": result["display_name"],
+                        "ep_costs": result["ep_costs"],
+                        "ep_logpriors": result["ep_logpriors"],
+                        "ep_logprobs": result["ep_logprobs"],
+                        "failure_level": result["failure_level"],
                     }
                 )
 
