@@ -20,7 +20,7 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
 SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary_4_100steps_1e-4.json"
 # Define data sources from individual experiments
