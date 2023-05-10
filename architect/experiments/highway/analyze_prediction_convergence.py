@@ -186,8 +186,8 @@ if __name__ == "__main__":
             failure_level = result["failure_level"]
             costs = result["ep_costs"]
             num_failures = (costs >= failure_level).sum(axis=-1)
-            # Cumulative max = 'how many failures have we predicted so far?'
-            num_failures = jax.lax.cumsum(num_failures)
+            # # Cumulative max = 'how many failures have we seen so far?'
+            # num_failures = jax.lax.cummax(num_failures)
             # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
             num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
             result["num_failures"] = num_failures
