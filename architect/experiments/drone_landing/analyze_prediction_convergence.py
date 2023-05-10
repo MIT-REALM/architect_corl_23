@@ -17,7 +17,7 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
 SUMMARY_PATH = "results/drone_landing_smooth/predict/convergence_summary.json"
 # Define data sources from individual experiments
