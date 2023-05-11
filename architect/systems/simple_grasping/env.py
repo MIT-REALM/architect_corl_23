@@ -20,6 +20,7 @@ from architect.systems.components.sensing.vision.shapes import (
     Halfspace,
     Scene,
     SDFShape,
+    Sphere,
     Subtraction,
 )
 from architect.systems.components.sensing.vision.util import look_at
@@ -59,22 +60,81 @@ class MugHandle(SDFShape):
     def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
         """Return the color of the mug handle at the given point"""
         # Highlight grasp affordances, which are on the sides of the handle.
-
-        # Get the normal vector at the given point
-        normal = jax.grad(self)(x)
-        # Transform to the handle frame
-        normal = self.R.T @ normal
-        # Normalize
-        normal = normal / jnp.sqrt((normal**2).sum() + 1e-3)
-
-        # If the normal is pointing in the local +/- x direction, color the
-        # handle white to indicate a grasp affordance
-        normal_x = normal[0] ** 2
-        color = jnp.ones(3) * normal_x
-
-        # Also prefer the top half of the handle
         x_handle = self.R.T @ (x - self.c)
-        color *= jax.nn.sigmoid(50 * x_handle[2])
+        color = jnp.ones(3) * jnp.exp(
+            -10 * jnp.linalg.norm(x_handle - jnp.array([0.0, 0.0, 0.12]))
+        )
+
+        return color
+
+
+class Can(Box):
+    """Represent a can that is colored to highlight grasp affordances."""
+
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Return the color of the mug handle at the given point"""
+        # Highlight grasp affordances, which are on the sides of the can
+        grasp_center = jnp.array([0.0, 0.0, 0.15])
+        grasp_1 = grasp_center + jnp.array([0.0, 0.3, 0.0])
+        grasp_2 = grasp_center - jnp.array([0.0, 0.3, 0.0])
+
+        # Color the can using the minimum distance to either grasp point
+        x_can = self.rotation.T @ (x - self.center)
+        dist_to_grasp_1 = jnp.linalg.norm(x_can - grasp_1)
+        dist_to_grasp_2 = jnp.linalg.norm(x_can - grasp_2)
+        color = jnp.minimum(dist_to_grasp_1, dist_to_grasp_2)
+        color = jnp.ones(3) * jnp.exp(-10 * color)
+
+        return color
+
+
+class Bowl(SDFShape):
+    """Represent a bowl that is colored to highlight grasp affordances."""
+
+    c: Float[Array, " 3"]
+    sharpness: float = 1.0
+
+    def __call__(self, x: Float[Array, " 3"]) -> Float[Array, ""]:
+        """Return the SDF of the bowl at the given point"""
+        bowl_body = Sphere(
+            center=self.c,
+            radius=jnp.array(0.6),
+        )
+        bowl_hole = Sphere(
+            center=self.c,
+            radius=jnp.array(0.5),
+        )
+        bowl_top = Box(
+            center=self.c + jnp.array([0.0, 0.0, 0.6]),
+            rotation=jnp.eye(3),
+            extent=jnp.array([1.2, 1.2, 1.2]),
+            rounding=jnp.array(0.0),
+        )
+        bowl = Subtraction(
+            Subtraction(
+                bowl_body,
+                bowl_hole,
+                sharpness=self.sharpness,
+            ),
+            bowl_top,
+            sharpness=self.sharpness,
+        )
+
+        return bowl(x)
+
+    def color(self, x: Float[Array, " 3"]) -> Float[Array, " 3"]:
+        """Return the color of the bowl at the given point"""
+        # Highlight grasp affordances, which are on the sides of the bowl.
+        x_bowl = x - self.c
+        color = jnp.ones(3) * jnp.exp(
+            -10
+            * jnp.linalg.norm(
+                x_bowl
+                - jnp.array(
+                    [-0.55 * jnp.sin(jnp.pi / 4), 0.55 * jnp.sin(jnp.pi / 4), 0.0]
+                )
+            )
+        )
 
         return color
 
@@ -82,9 +142,21 @@ class MugHandle(SDFShape):
 def make_grasping_scene(
     mug_location: Float[Array, " 2"],
     mug_rotation: Float[Array, ""],
+    distractor_location: Float[Array, " 2"] = jnp.array([-0.6, -1.0]),
     sharpness: float = 1.0,
-) -> SDFShape:
-    """Make a scene with the object on a table"""
+    object: str = "mug",
+) -> Tuple[SDFShape, Float[Array, "2 3"]]:
+    """Make a scene with the object on a table.
+
+    Args:
+        mug_location: The (x, y) location of the mug.
+        mug_rotation: The rotation of the mug.
+        distractor_location: The (x, y) location of the distractor.
+        sharpness: The sharpness of the union operation.
+
+    Returns:
+        The scene and the ground truth grasp location for each of two fingers.
+    """
     # Make the tabletop
     tabletop = Halfspace(
         point=jnp.array([0.0, 0.0, -0.04]),
@@ -92,52 +164,134 @@ def make_grasping_scene(
         c=jnp.zeros(3),
     )
 
-    # Make the object (a mug!)
-    mug_body = Cylinder(
-        center=jnp.array([mug_location[0], mug_location[1], 0.25]),
-        radius=jnp.array(0.3),
-        height=jnp.array(0.5),
+    # Make a distractor object
+    distractor = Box(
+        center=jnp.array([distractor_location[0], distractor_location[1], 0.25]),
+        extent=jnp.array([0.3, 0.3, 0.6]),
         rotation=jnp.eye(3),
         c=jnp.zeros(3),
-    )
-    mug_interior = Cylinder(
-        center=jnp.array([mug_location[0], mug_location[1], 0.3]),
-        radius=jnp.array(0.25),
-        height=jnp.array(0.5),
-        rotation=jnp.eye(3),
-        c=jnp.zeros(3),
-    )
-    handle_rotation = jnp.array(
-        [
-            [jnp.cos(mug_rotation), -jnp.sin(mug_rotation), 0.0],
-            [jnp.sin(mug_rotation), jnp.cos(mug_rotation), 0.0],
-            [0.0, 0.0, 1.0],
-        ]
-    )
-    handle_center = jnp.array([mug_location[0], mug_location[1], 0.25])
-    handle_center += handle_rotation @ jnp.array([0.0, 0.42, 0.0])
-    mug_handle = MugHandle(
-        c=handle_center,
-        R=handle_rotation,
-        sharpness=sharpness,
+        rounding=jnp.array(0.02),
     )
 
-    # Highlight grasp affordances on the handle by making the sides of the handle white
-    # and the top and bottom black. This corresponds to good grasp affordances that
-    # are in the local
+    if object == "mug":
+        # Make the object (a mug!)
+        mug_body = Cylinder(
+            center=jnp.array([mug_location[0], mug_location[1], 0.25]),
+            radius=jnp.array(0.3),
+            height=jnp.array(0.5),
+            rotation=jnp.eye(3),
+            c=jnp.zeros(3),
+        )
+        mug_interior = Cylinder(
+            center=jnp.array([mug_location[0], mug_location[1], 0.3]),
+            radius=jnp.array(0.25),
+            height=jnp.array(0.5),
+            rotation=jnp.eye(3),
+            c=jnp.zeros(3),
+        )
+        handle_rotation = jnp.array(
+            [
+                [jnp.cos(mug_rotation), -jnp.sin(mug_rotation), 0.0],
+                [jnp.sin(mug_rotation), jnp.cos(mug_rotation), 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        handle_center = jnp.array([mug_location[0], mug_location[1], 0.25])
+        handle_center += handle_rotation @ jnp.array([0.0, 0.42, 0.0])
+        mug_handle = MugHandle(
+            c=handle_center,
+            R=handle_rotation,
+            sharpness=sharpness,
+        )
 
-    return Scene(
-        shapes=[
-            tabletop,
-            Subtraction(
-                mug_body,
-                mug_interior,
+        # Figure out where the grasp is
+        grasp_in_handle_frame = jnp.array([0.0, 0.0, 0.12])
+        grasp_1 = mug_handle.c + mug_handle.R @ (
+            grasp_in_handle_frame + jnp.array([0.1, 0.0, 0.0])
+        )
+        grasp_2 = mug_handle.c + mug_handle.R @ (
+            grasp_in_handle_frame - jnp.array([0.1, 0.0, 0.0])
+        )
+        grasp = jnp.vstack([grasp_1, grasp_2])
+
+        return (
+            Scene(
+                shapes=[
+                    tabletop,
+                    Subtraction(
+                        mug_body,
+                        mug_interior,
+                        sharpness=sharpness,
+                    ),
+                    mug_handle,
+                    distractor,
+                ],
                 sharpness=sharpness,
             ),
-            mug_handle,
-        ],
-        sharpness=sharpness,
-    )
+            grasp,
+        )
+    elif object == "can":
+        # Make the object (a mug!)
+        rotation = jnp.array(
+            [
+                [jnp.cos(mug_rotation), -jnp.sin(mug_rotation), 0.0],
+                [jnp.sin(mug_rotation), jnp.cos(mug_rotation), 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        can_body = Can(
+            center=jnp.array([mug_location[0], mug_location[1], 0.25]),
+            extent=jnp.array([0.5, 0.2, 0.5]),
+            rotation=rotation,
+            c=jnp.zeros(3),
+            rounding=jnp.array(0.1),
+        )
+        grasp_center = jnp.array([mug_location[0], mug_location[1], 0.4])
+        grasp_1 = grasp_center + jnp.array([0.0, 0.2, 0.0])
+        grasp_2 = grasp_center - jnp.array([0.0, 0.2, 0.0])
+        grasp = jnp.vstack([rotation @ grasp_1, rotation @ grasp_2])
+
+        return (
+            Scene(
+                shapes=[
+                    tabletop,
+                    can_body,
+                    distractor,
+                ],
+                sharpness=sharpness,
+            ),
+            grasp,
+        )
+    elif object == "bowl":
+        # Make the object (a bowl!)
+        bowl = Bowl(
+            c=jnp.array([mug_location[0], mug_location[1], 0.5]),
+            sharpness=sharpness,
+        )
+        grasp_center = bowl.c + jnp.array(
+            [
+                -0.55 * jnp.sin(jnp.pi / 4),
+                0.55 * jnp.sin(jnp.pi / 4),
+                -0.05,
+            ]
+        )
+        grasp_1 = grasp_center + jnp.array([0.05, -0.05, 0.0])
+        grasp_2 = grasp_center - jnp.array([0.05, -0.05, 0.0])
+        grasp = jnp.vstack([grasp_1, grasp_2])
+
+        return (
+            Scene(
+                shapes=[
+                    tabletop,
+                    bowl,
+                    distractor,
+                ],
+                sharpness=sharpness,
+            ),
+            grasp,
+        )
+    else:
+        raise ValueError(f"Unknown object type {object}")
 
 
 def normal_at_point(
@@ -241,14 +395,16 @@ if __name__ == "__main__":
 
     # Create the scene
     camera_pos = jnp.array([-1.0, 0.0, 1.0])
-    mug_pos = jnp.array([0.0, 0.0])
-    mug_rot = jnp.pi * 1 / 4
-    scene = make_grasping_scene(
+    mug_pos = jnp.array([0.5, 0.0])
+    mug_rot = jnp.pi * 2 / 4
+    scene, grasp_gt = make_grasping_scene(
         mug_location=mug_pos,
         mug_rotation=mug_rot,
         sharpness=50.0,
+        object="can",
     )
     depth_image, color_image = render_rgbd(scene, camera_pos)
+    print(f"grasp gt: {grasp_gt}")
 
     # Reduce color image to single channel
     color_image = jnp.mean(color_image, axis=-1)
@@ -256,7 +412,7 @@ if __name__ == "__main__":
     # Create the affordance predictor
     key = jax.random.PRNGKey(0)
     affordance_predictor = AffordancePredictor(key)
-    prediction = affordance_predictor(depth_image)
+    prediction, _ = affordance_predictor(depth_image)
 
     _, axs = plt.subplots(1, 3, figsize=(12, 4))
     axs[0].set_title("Depth")

@@ -17,7 +17,7 @@ class AffordancePredictor(eqx.Module):
 
     The policy is structured as an image-to-image autoencoder. The input is a depth
     image of the scene and an output is a mask of that image predicting where the
-    agent can grasp the object.
+    agent can grasp the object. Also outputs a 3D pose for each finger of the gripper.
     """
 
     encoder_conv_1: eqx.nn.Conv2d
@@ -28,6 +28,10 @@ class AffordancePredictor(eqx.Module):
     decoder_conv_2: eqx.nn.ConvTranspose2d
     decoder_conv_3: eqx.nn.ConvTranspose2d
 
+    fcn_1: eqx.nn.Linear
+    fcn_2: eqx.nn.Linear
+    fcn_3: eqx.nn.Linear
+
     @jaxtyped
     @beartype
     def __init__(
@@ -36,7 +40,7 @@ class AffordancePredictor(eqx.Module):
         cnn_channels: int = 32,
     ):
         """Initialize the policy."""
-        encoder_key, decoder_key = jrandom.split(key)
+        encoder_key, decoder_key, fcn_key = jrandom.split(key, 3)
 
         # Create the convolutional encoder
         encoder_keys = jrandom.split(encoder_key, 3)
@@ -92,6 +96,13 @@ class AffordancePredictor(eqx.Module):
             output_padding=1,
         )
 
+        # Also create the fully connected layers for predicting the gripper finger poses
+        fcn1_key, fcn2_key, fcn3_key = jrandom.split(fcn_key, 3)
+        input_features = 32 * 3 * 3  # encoding size
+        self.fcn_1 = eqx.nn.Linear(input_features, 32, key=fcn1_key)
+        self.fcn_2 = eqx.nn.Linear(32, 32, key=fcn2_key)
+        self.fcn_3 = eqx.nn.Linear(32, 2 * 3, key=fcn3_key)
+
     def forward(self, img: Float[Array, "w h"]) -> Float[Array, "w h"]:
         """Compute the affordance mask for the given image.
 
@@ -120,8 +131,19 @@ class AffordancePredictor(eqx.Module):
         dec1_in = jnp.concatenate((dec2, enc1), axis=0)
         y = jax.nn.sigmoid(self.decoder_conv_3(dec1_in))
         # print(f"y shape: {y.shape}")
-        y = jnp.squeeze(y, axis=0)
-        return y
+        affordance_mask = jnp.squeeze(y, axis=0)
+
+        # Concatenate the affordance mask with the depth image
+        fcn_input = enc3.reshape(-1)
+        # print(f"fcn_input shape: {fcn_input.shape}")
+        y = jax.nn.relu(self.fcn_1(fcn_input))
+        # print(f"fcn1 shape: {y.shape}")
+        y = jax.nn.relu(self.fcn_2(y))
+        # print(f"fcn2 shape: {y.shape}")
+        predicted_grasp_pose = self.fcn_3(y).reshape(2, 3)
+        # print(f"fcn3 shape: {y.shape}")
+
+        return affordance_mask, predicted_grasp_pose
 
     def __call__(self, img: Float[Array, "w h"]) -> Float[Array, "w h"]:
         """Compute the grasp affordance mask for the given image.

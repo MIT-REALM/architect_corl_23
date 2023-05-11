@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
+import matplotlib.pyplot as plt
 import numpy as np
 import optax
 from beartype import beartype
@@ -26,21 +27,23 @@ class TrainingData(NamedTuple):
 
     depth_image: Float[Array, "H W"]
     affordance_mask: Float[Array, "H W"]
+    gt_grasp_pose: Float[Array, "2 3"]
 
 
-def generate_example(key: PRNGKeyArray) -> TrainingData:
+def generate_example(key: PRNGKeyArray, object: str = "mug") -> TrainingData:
     """Generate a single training example"""
     # Sample a mug position and location
     loc_key, rot_key = jrandom.split(key)
-    mug_position = 0.2 * jrandom.normal(loc_key, shape=(2,))
-    mug_rotation = jnp.pi / 2 * jrandom.normal(rot_key, shape=()) + jnp.pi / 2
+    position = 0.2 * jrandom.normal(loc_key, shape=(2,))
+    rotation = jnp.pi / 2 * jrandom.normal(rot_key, shape=()) + jnp.pi / 2
 
-    # Create a scene with a mug
+    # Create a scene with an object
     camera_pos = jnp.array([-1.0, 0.0, 1.0])
-    scene = make_grasping_scene(
-        mug_location=mug_position,
-        mug_rotation=mug_rotation,
+    scene, gt_grasp = make_grasping_scene(
+        mug_location=position,
+        mug_rotation=rotation,
         sharpness=50.0,
+        object=object,
     )
     depth_image, color_image = render_rgbd(scene, camera_pos)
 
@@ -50,6 +53,7 @@ def generate_example(key: PRNGKeyArray) -> TrainingData:
     return TrainingData(
         depth_image=depth_image,
         affordance_mask=afforance_mask,
+        gt_grasp_pose=gt_grasp,
     )
 
 
@@ -77,9 +81,9 @@ def train_affordance_network(
     learning_rate: float = 1e-3,
     seed: int = 0,
     n_examples: int = 32 * 50,
-    epochs: int = 2000,
+    epochs: int = 1000,
     minibatch_size: int = 32,
-    logdir: str = "./tmp/affordance/7",
+    logdir: str = "./tmp/affordance+grasp/all",
 ):
     """
     Train the affordance network.
@@ -104,10 +108,15 @@ def train_affordance_network(
         predictor: AffordancePredictor, examples: TrainingData
     ) -> Float[Array, ""]:
         # Compute the predicted affordances for each observation
-        predicted_affordances = jax.vmap(predictor)(examples.depth_image)
+        predicted_affordances, predicted_grasps = jax.vmap(predictor)(
+            examples.depth_image
+        )
 
         # Minimize L2 loss between predicted and actual affordances
         loss = jnp.mean(jnp.square(predicted_affordances - examples.affordance_mask))
+
+        # and L2 loss between predicted and actual grasps
+        loss += jnp.mean(jnp.square(predicted_grasps - examples.gt_grasp_pose))
 
         return loss
 
@@ -129,7 +138,15 @@ def train_affordance_network(
     # Generate a batch of labeled images
     key, subkey = jrandom.split(key)
     subkeys = jrandom.split(subkey, n_examples)
-    examples = jax.vmap(generate_example)(subkeys)
+    mug_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "mug")
+    bowl_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "bowl")
+    can_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "can")
+    examples = jax.tree_util.tree_map(
+        lambda *x: jnp.concatenate(x, axis=0),
+        mug_examples,
+        bowl_examples,
+        can_examples,
+    )
 
     # Shuffle the trajectory into minibatches
     key, subkey = jrandom.split(key)
@@ -139,28 +156,57 @@ def train_affordance_network(
     pbar = tqdm(range(epochs))
     for epoch in pbar:
         # Save regularly
-        if epoch % 10 == 0 or epoch == epochs - 1:
+        if epoch % 50 == 0 or epoch == epochs - 1:
             # Save predictor
             eqx.tree_serialise_leaves(
                 os.path.join(logdir, f"predictor_{epoch}.eqx"), predictor
             )
 
             # Predict for the first 10 examples
-            predictions = jax.vmap(predictor)(examples.depth_image[:10])
+            predicted_affordances, predicted_grasps = jax.vmap(predictor)(
+                examples.depth_image[:10]
+            )
             cm_jet = cm.get_cmap("jet")
             displays = [
                 jnp.concatenate(
                     [
                         cm_jet(examples.depth_image[i].T),
                         cm_jet(examples.affordance_mask[i].T),
-                        cm_jet(predictions[i].T),
+                        cm_jet(predicted_affordances[i].T),
                     ],
                     axis=1,
                 )
                 for i in range(10)
             ]
             display = np.array(jnp.concatenate(displays, axis=0))[:, :, :3]
-            writer.add_image("predictions", display, epoch, dataformats="HWC")
+            writer.add_image("predicted_affordances", display, epoch, dataformats="HWC")
+
+            # Plot the predicted and ground truth grasps in 3D
+            for i in range(5):
+                fig = plt.figure()
+                ax = fig.add_subplot(111, projection="3d")
+                ax.set_xlim(-1, 1)
+                ax.set_ylim(-1, 1)
+                ax.set_zlim(-0.1, 1)
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
+                ax.set_zlabel("z")
+                ax.scatter(
+                    predicted_grasps[i, :, 0],
+                    predicted_grasps[i, :, 1],
+                    predicted_grasps[i, :, 2],
+                    c="r",
+                    marker="o",
+                )
+                ax.scatter(
+                    examples.gt_grasp_pose[i, :, 0],
+                    examples.gt_grasp_pose[i, :, 1],
+                    examples.gt_grasp_pose[i, :, 2],
+                    c="b",
+                    marker="o",
+                )
+                ax.view_init(elev=45, azim=180)
+                writer.add_figure(f"predicted_grasps/{i}", fig, epoch)
 
         # Compute the loss and gradient
         epoch_loss = 0.0
