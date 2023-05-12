@@ -22,9 +22,7 @@ from architect.systems.highway.highway_env import HighwayState
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
 # path to save summary data to
-SUMMARY_PATH = (
-    "results/highway_lqr/predict/convergence_summary_4_100steps_1e-3_nonorm.json"
-)
+SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary_4_100steps_1e-3_20.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
@@ -279,14 +277,14 @@ if __name__ == "__main__":
 
     print("Collision rate (mean)")
     print(
-        df[df["Diffusion steps"] >= 0]
+        df[df["Diffusion steps"] >= 10]
         .groupby(["Algorithm"])["# failures discovered"]
         .mean()
         / 10
     )
     print("Collision rate (std)")
     print(
-        df[df["Diffusion steps"] >= 0]
+        df[df["Diffusion steps"] >= 10]
         .groupby(["Algorithm"])["# failures discovered"]
         .std()
         / 10

@@ -23,8 +23,8 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # How many monte carlo trials to use to compute true failure rate
-N = 500
-BATCHES = 100
+N = 1000
+BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
 # path to save summary data to
@@ -226,8 +226,8 @@ if __name__ == "__main__":
                     df,
                     pd.DataFrame(
                         {
-                            "Algorithm": summary_data[alg]["display_name"],
-                            "Cost": summary_data[alg]["ep_costs"].flatten(),
+                            "Algorithm": result["display_name"],
+                            "Cost": result["ep_costs"].flatten(),
                         }
                     ),
                 ]
@@ -247,9 +247,10 @@ if __name__ == "__main__":
         + f"N={summary_data['N'] * summary_data['batches']}):"
     )
     for alg in DATA_SOURCES:
-        hist, hist_bins = jnp.histogram(
-            summary_data[alg]["ep_costs"], bins, density=True
+        costs = jnp.concatenate(
+            [x["ep_costs"][10:].reshape(-1) for x in summary_data[alg]]
         )
+        hist, hist_bins = jnp.histogram(costs, bins, density=True)
         hist_bin_centers = (hist_bins[1:] + hist_bins[:-1]) / 2.0
 
         distance = lambda x, y: jnp.linalg.norm(x - y)
@@ -267,11 +268,11 @@ if __name__ == "__main__":
 
     # Plot!
     plt.figure(figsize=(12, 8))
-    sns.boxenplot(
+    sns.violinplot(
         x="Algorithm",
         y="Cost",
-        showfliers=False,
-        outlier_prop=1e-7,
+        # showfliers=False,
+        # outlier_prop=1e-7,
         # flier_kws={"s": 20},
         data=df,
     )

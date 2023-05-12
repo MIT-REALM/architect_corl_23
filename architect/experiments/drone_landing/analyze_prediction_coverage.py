@@ -19,10 +19,10 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 # How many monte carlo trials to use to compute true failure rate
-N = 500
-BATCHES = 100
+N = 1000
+BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
 SUMMARY_PATH = (
     "results/drone_landing_smooth/predict/coverage_summary_gradnorm_mcmc_1e-2.json"
