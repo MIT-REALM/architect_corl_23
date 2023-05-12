@@ -17,34 +17,38 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = (
-    "results/drone_landing_smooth/predict/convergence_summary_nogradnorm_mcmc_1e-3.json"
+    "results/drone_landing_smooth/predict/convergence_summary_gradnorm_mcmc_1e-2.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/no_grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "RADIUM (ours)",
     },
-    "ula_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/no_grad_norm/grad_clip_inf/ula_tempered_40",
-        "display_name": "ULA (tempered)",
-    },
+    # "ula_tempered": {
+    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/ula_tempered_40",
+    #     "display_name": "ULA (tempered)",
+    # },
     "rmh": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/no_grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_3.0e-03/ep_3.0e-03/no_grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_3.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/no_grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
+    # "random": {
+    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/1_samples_1x1/10_chains/0_quench/dp_1.0e-05/ep_1.0e-05/grad_norm/grad_clip_inf/static_tempered_40",
+    #     "display_name": "Random sampling",
+    # },
 }
 
 
@@ -105,9 +109,14 @@ def get_costs(loaded_data):
     for alg in loaded_data:
         for i, result in enumerate(loaded_data[alg]):
             print(f"Computing costs for {alg} seed {i}...")
+            if "tree_velocities" in result["eps_trace"]:
+                tree_velocities = result["eps_trace"]["tree_velocities"]
+            else:
+                tree_velocities = jnp.zeros_like(result["eps_trace"]["tree_locations"])
             eps = DroneState(
                 drone_state=result["eps_trace"]["drone_state"],
                 tree_locations=result["eps_trace"]["tree_locations"],
+                tree_velocities=tree_velocities,
                 wind_speed=result["eps_trace"]["wind_speed"],
             )
             result["ep_costs"] = jax.vmap(jax.vmap(cost_fn))(eps)
@@ -261,9 +270,19 @@ if __name__ == "__main__":
     df["Seed"] = seeds
 
     print("Collision rate (mean)")
-    print(df.groupby(["Algorithm"])["# failures discovered"].mean() / 10)
+    print(
+        df[df["Diffusion steps"] >= 10]
+        .groupby(["Algorithm"])["# failures discovered"]
+        .mean()
+        / 10
+    )
     print("Collision rate (std)")
-    print(df.groupby(["Algorithm"])["# failures discovered"].std() / 10)
+    print(
+        df[df["Diffusion steps"] >= 10]
+        .groupby(["Algorithm"])["# failures discovered"]
+        .std()
+        / 10
+    )
 
     # Plot!
     plt.figure(figsize=(12, 8))

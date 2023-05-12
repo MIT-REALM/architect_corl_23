@@ -317,8 +317,8 @@ class DroneLandingEnv:
             jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None)
         )(
             tree_velocities,
-            mean=jnp.zeros(2),
-            cov=jnp.eye(2) * 0.5**2,
+            jnp.zeros(2),
+            jnp.eye(2) * 0.5**2,
         ).sum()
         if not self._moving_obstacles:
             tree_vel_logprior = 0.0
