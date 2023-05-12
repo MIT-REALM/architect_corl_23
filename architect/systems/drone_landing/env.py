@@ -255,7 +255,7 @@ class DroneLandingEnv:
         tree_vel_keys = jax.random.split(tree_vel_key, self._num_trees)
         tree_velocities = jax.vmap(
             jax.random.multivariate_normal, in_axes=(0, None, None)
-        )(tree_vel_keys, jnp.zeros(2), jnp.eye(2) * 0.5**2)
+        )(tree_vel_keys, jnp.zeros(2), jnp.eye(2) * 0.25**2)
         if not self._moving_obstacles:
             tree_velocities = jnp.zeros_like(tree_velocities)
 
@@ -318,7 +318,7 @@ class DroneLandingEnv:
         )(
             tree_velocities,
             jnp.zeros(2),
-            jnp.eye(2) * 0.5**2,
+            jnp.eye(2) * 0.25**2,
         ).sum()
         if not self._moving_obstacles:
             tree_vel_logprior = 0.0
