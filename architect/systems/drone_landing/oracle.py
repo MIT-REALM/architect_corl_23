@@ -42,11 +42,25 @@ def rollout(
         new_drone_state = env.drone_dynamics(
             state.drone_state, action, state.wind_speed
         )
-        new_state = DroneState(new_drone_state, state.tree_locations, state.wind_speed)
+        # Update the tree positions
+        new_tree_locations = state.tree_locations + state.tree_velocities * env._dt
+        new_state = DroneState(
+            new_drone_state,
+            new_tree_locations,
+            state.tree_velocities,
+            state.wind_speed,
+        )
 
         # Get the running cost (squared distance to goal)
         target = jnp.array([0.0, 0.0, 0.5, 0.0])
-        cost = jnp.sum((new_drone_state - target) ** 2) * env._dt
+        cost = jnp.sum((new_drone_state - target)[:3] ** 2) * env._dt
+
+        # Add a cost for bearing error relative to the goal
+        bearing_to_goal = jnp.arctan2(
+            target[1] - new_drone_state[1], target[0] - new_drone_state[0]
+        )
+        bearing_error = new_drone_state[3] - bearing_to_goal
+        cost += 2 * jnp.sum(bearing_error**2) * env._dt
 
         # Add the collision cost
         min_distance_to_obstacle = env._scene.check_for_collision(
@@ -55,7 +69,7 @@ def rollout(
             new_state.tree_locations,
             50.0,
         )
-        cost += 1e2 * jax.nn.sigmoid(-25 * (min_distance_to_obstacle - 0.1))
+        cost += 1e2 * jax.nn.sigmoid(-10 * (min_distance_to_obstacle - 0.1))
 
         return new_state, cost
 

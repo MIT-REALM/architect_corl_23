@@ -395,13 +395,13 @@ if __name__ == "__main__":
 
     # Create the scene
     camera_pos = jnp.array([-1.0, 0.0, 1.0])
-    mug_pos = jnp.array([0.5, 0.0])
-    mug_rot = jnp.pi * 2 / 4
+    mug_pos = jnp.array([0.0, 0.0])
+    mug_rot = jnp.pi * 1 / 4
     scene, grasp_gt = make_grasping_scene(
         mug_location=mug_pos,
         mug_rotation=mug_rot,
         sharpness=50.0,
-        object="can",
+        object="mug",
     )
     depth_image, color_image = render_rgbd(scene, camera_pos)
     print(f"grasp gt: {grasp_gt}")

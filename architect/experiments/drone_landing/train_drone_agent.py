@@ -192,7 +192,9 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
         )
 
 
-def make_drone_landing_env(image_shape: Tuple[int, int], num_trees: int = 10):
+def make_drone_landing_env(
+    image_shape: Tuple[int, int], num_trees: int = 10, moving_obstacles: bool = False
+):
     """Make the drone landing environment."""
     scene = DroneLandingScene()
     intrinsics = CameraIntrinsics(
@@ -209,6 +211,7 @@ def make_drone_landing_env(image_shape: Tuple[int, int], num_trees: int = 10):
         num_trees=num_trees,
         initial_drone_state=initial_drone_state,
         collision_penalty=25.0,
+        moving_obstacles=moving_obstacles,
     )
     return env
 
@@ -221,18 +224,22 @@ def train_ppo_drone(
     epochs: int = 200,
     gd_steps_per_update: int = 1000,
     minibatch_size: int = 32,
-    logdir: str = "./tmp/oracle_32",
+    moving_obstacles: bool = True,
+    logdir: str = "./tmp/oracle_32_moving",
 ):
     """
     Train the drone using behavior cloning.
 
-    Args: various hyperparameters.
+    Args: various hyperparameters.moving_obstacles: bool = False
     """
+    if moving_obstacles:
+        logdir += "_moving_obstacles"
+
     # Set up logging
     writer = SummaryWriter(logdir)
 
     # Set up the environment
-    env = make_drone_landing_env(image_shape)
+    env = make_drone_landing_env(image_shape, moving_obstacles=moving_obstacles)
 
     # Set up the policy
     key = jrandom.PRNGKey(seed)

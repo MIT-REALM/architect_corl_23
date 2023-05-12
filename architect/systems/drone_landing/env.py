@@ -42,6 +42,7 @@ class DroneState(NamedTuple):
 
     drone_state: Float[Array, " 3"]
     tree_locations: Float[Array, "num_trees 2"]
+    tree_velocities: Float[Array, "num_trees 2"]
     wind_speed: Float[Array, " 2"]
 
 
@@ -68,6 +69,7 @@ class DroneLandingEnv:
         collision_penalty: the penalty to apply when the ego vehicle collides with
             any obstacle in the scene.
         render_sharpness: the sharpness of the scene.
+        moving_obstacles: whether or not to move the obstacles in the scene.
     """
 
     _scene: DroneLandingScene
@@ -79,6 +81,7 @@ class DroneLandingEnv:
     _initial_drone_state_mean: Float[Array, " n_states"]
     _initial_drone_state_stddev: Float[Array, " n_states"]
     _wind_speed_stddev: Float[Array, " "]
+    _moving_obstacles: bool
 
     @jaxtyped
     @beartype
@@ -91,6 +94,7 @@ class DroneLandingEnv:
         initial_drone_state: Float[Array, " n_states"],
         collision_penalty: float = 100.0,
         render_sharpness: float = 100.0,
+        moving_obstacles: bool = False,
     ):
         """Initialize the environment."""
         self._scene = scene
@@ -102,6 +106,7 @@ class DroneLandingEnv:
         self._wind_speed_stddev = jnp.array(0.1)
         self._collision_penalty = collision_penalty
         self._render_sharpness = render_sharpness
+        self._moving_obstacles = moving_obstacles
 
     @jaxtyped
     @beartype
@@ -165,11 +170,17 @@ class DroneLandingEnv:
             crashes or gets close enough to the goal.
         """
         # Unpack the state
-        drone_state, tree_locations, wind_speed = state
+        drone_state, tree_locations, tree_velocities, wind_speed = state
 
         # Compute the next state of the drone
         next_drone_state = self.drone_dynamics(drone_state, action, wind_speed)
-        next_state = DroneState(next_drone_state, tree_locations, wind_speed)
+        # Compute the next state of the trees
+        if self._moving_obstacles:
+            tree_locations += self._dt * tree_velocities
+
+        next_state = DroneState(
+            next_drone_state, tree_locations, tree_velocities, wind_speed
+        )
 
         # Compute the reward, which increases as the drone gets closer to the goal
         # at the origin and decreases if it collides with anything
@@ -223,7 +234,7 @@ class DroneLandingEnv:
             The initial state of the environment.
         """
         # Split the PRNG key
-        initial_state_key, tree_key, wind_key = jax.random.split(key, 3)
+        initial_state_key, tree_key, tree_vel_key, wind_key = jax.random.split(key, 4)
 
         # Sample a new initial state
         initial_drone_state = jax.random.multivariate_normal(
@@ -240,6 +251,14 @@ class DroneLandingEnv:
             maxval=jnp.array([-1.0, 4.0]),
         )
 
+        # Sample new tree velocities
+        tree_vel_keys = jax.random.split(tree_vel_key, self._num_trees)
+        tree_velocities = jax.vmap(
+            jax.random.multivariate_normal, in_axes=(0, None, None)
+        )(tree_vel_keys, jnp.zeros(2), jnp.eye(2) * 0.5**2)
+        if not self._moving_obstacles:
+            tree_velocities = jnp.zeros_like(tree_velocities)
+
         # Sample a new wind speed from a multivariate gaussian
         wind_speed = jax.random.multivariate_normal(
             wind_key, jnp.zeros(2), jnp.eye(2) * self._wind_speed_stddev**2
@@ -248,6 +267,7 @@ class DroneLandingEnv:
         return DroneState(
             drone_state=initial_drone_state,
             tree_locations=tree_locations,
+            tree_velocities=tree_velocities,
             wind_speed=wind_speed,
         )
 
@@ -264,7 +284,7 @@ class DroneLandingEnv:
             The logprior of the given state.
         """
         # Unpack the state
-        drone_state, tree_locations, wind_speed = state
+        drone_state, tree_locations, tree_velocities, wind_speed = state
 
         # Compute the prior logprobabilities
 
@@ -292,6 +312,17 @@ class DroneLandingEnv:
             tree_locations[:, 1], tree_min_y, tree_max_y
         ).sum()
 
+        # Tree velocities are sampled from a normal distribution
+        tree_vel_logprior = jax.vmap(
+            jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None)
+        )(
+            tree_velocities,
+            mean=jnp.zeros(2),
+            cov=jnp.eye(2) * 0.5**2,
+        ).sum()
+        if not self._moving_obstacles:
+            tree_vel_logprior = 0.0
+
         # Wind speed is also from a normal distribution
         wind_logprior = jax.scipy.stats.multivariate_normal.logpdf(
             wind_speed,
@@ -299,7 +330,7 @@ class DroneLandingEnv:
             cov=jnp.eye(2) * self._wind_speed_stddev**2,
         )
 
-        return drone_logprior + tree_logprior + wind_logprior
+        return drone_logprior + tree_logprior + wind_logprior + tree_vel_logprior
 
     @jaxtyped
     @beartype

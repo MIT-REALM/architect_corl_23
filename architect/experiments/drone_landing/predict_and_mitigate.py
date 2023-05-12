@@ -138,6 +138,7 @@ if __name__ == "__main__":
     parser.add_argument("--disable_stochasticity", action="store_true")
     parser.add_argument("--disable_mh", action="store_true")
     parser.add_argument("--reinforce", action="store_true")
+    parser.add_argument("--moving_obstacles", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
     parser.add_argument("--predict", action=boolean_action, default=True)
@@ -151,6 +152,7 @@ if __name__ == "__main__":
     seed = args.seed
     T = args.T
     num_trees = args.num_trees
+    moving_obstacles = args.moving_obstacles
     failure_level = args.failure_level
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
@@ -175,6 +177,7 @@ if __name__ == "__main__":
     print(f"\tT = {T}")
     print(f"\tL = {L}")
     print(f"\tnum_trees = {num_trees}")
+    print(f"\tmoving_obstacles = {moving_obstacles}")
     print(f"\tfailure_level = {failure_level}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
     print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
@@ -204,7 +207,7 @@ if __name__ == "__main__":
 
     # Make the environment to use
     image_shape = (32, 32)
-    env = make_drone_landing_env(image_shape, num_trees)
+    env = make_drone_landing_env(image_shape, num_trees, moving_obstacles)
     env._collision_penalty = 2e2
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
@@ -367,6 +370,19 @@ if __name__ == "__main__":
                     color=plt.cm.plasma_r(normalized_potential[chain_idx]),
                     fill=False,
                 )
+            )
+
+        # Add the tree velocities as arrows
+        if moving_obstacles:
+            axs["trajectory"].quiver(
+                result.tree_locations[chain_idx][:, 0],
+                result.tree_locations[chain_idx][:, 1],
+                result.tree_velocities[chain_idx][:, 0],
+                result.tree_velocities[chain_idx][:, 1],
+                color=plt.cm.plasma_r(normalized_potential[chain_idx]),
+                angles="xy",
+                scale_units="xy",
+                scale=1.0,
             )
 
     axs["trajectory"].set_xlabel("x")
