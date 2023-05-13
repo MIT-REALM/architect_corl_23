@@ -140,7 +140,7 @@ def train_affordance_network(
     subkeys = jrandom.split(subkey, n_examples)
     mug_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "mug")
     bowl_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "bowl")
-    can_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "can")
+    can_examples = jax.vmap(generate_example, in_axes=(0, None))(subkeys, "box")
     examples = jax.tree_util.tree_map(
         lambda *x: jnp.concatenate(x, axis=0),
         mug_examples,

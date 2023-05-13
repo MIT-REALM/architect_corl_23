@@ -230,7 +230,7 @@ def make_grasping_scene(
             ),
             grasp,
         )
-    elif object == "can":
+    elif object == "box":
         # Make the object (a mug!)
         rotation = jnp.array(
             [
@@ -337,7 +337,11 @@ def clamp_force_in_friction_cone(
 
     # Adjust for friction
     tangential_f = tangential_f * jax.nn.sigmoid(
-        sharpness * (jnp.sqrt(jnp.sum(tangential_f**2) + 1e-3) - mu * normal_f)
+        sharpness
+        * (
+            jnp.sqrt(jnp.sum(tangential_f**2) + 1e-3)
+            - mu * jnp.sqrt(jnp.sum(normal_f**2) + 1e-3)
+        )
     )
 
     # Check if the tangential component is in the friction cone

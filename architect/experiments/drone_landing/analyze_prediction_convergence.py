@@ -17,7 +17,7 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/drone_landing_smooth_dynamic/predict/convergence_summary_gradnorm_mcmc_1e-2.json"
 # Define data sources from individual experiments
@@ -261,14 +261,14 @@ if __name__ == "__main__":
 
     print("Collision rate (mean)")
     print(
-        df[df["Diffusion steps"] >= 10]
+        df[df["Diffusion steps"] >= 5]
         .groupby(["Algorithm"])["# failures discovered"]
         .mean()
         / 10
     )
     print("Collision rate (std)")
     print(
-        df[df["Diffusion steps"] >= 10]
+        df[df["Diffusion steps"] >= 5]
         .groupby(["Algorithm"])["# failures discovered"]
         .std()
         / 10
