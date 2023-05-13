@@ -34,6 +34,7 @@ class SimulationResults(NamedTuple):
     final_obs: DroneObs
     drone_traj: Float[Array, "T 4"]
     tree_locations: Float[Array, "num_trees 2"]
+    tree_velocities: Float[Array, "num_trees 2"]
     wind_speed: Float[Array, " 2"]
 
 
@@ -114,6 +115,7 @@ def simulate(
         final_obs,
         drone_traj=state_traj.drone_state,
         tree_locations=initial_state.tree_locations,
+        tree_velocities=initial_state.tree_velocities,
         wind_speed=initial_state.wind_speed,
     )
 
