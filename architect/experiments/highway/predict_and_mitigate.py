@@ -581,7 +581,12 @@ if __name__ == "__main__":
     # eqx.tree_serialise_leaves(filename + "_trace.eqx", dps)
 
     # Save the initial policy
-    shutil.copyfile(args.model_path, f"results/{args.savename}/" + "initial_policy.eqx")
+    try:
+        shutil.copyfile(
+            args.model_path, f"results/{args.savename}/" + "initial_policy.eqx"
+        )
+    except shutil.SameFileError:
+        pass
 
     # Save the hyperparameters
     with open(filename + ".json", "w") as f:
