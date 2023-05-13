@@ -22,7 +22,7 @@ from architect.systems.drone_landing.policy import DroneLandingPolicy
 N = 1000
 BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/drone_landing_smooth_dynamic/predict/coverage_summary_gradnorm_mcmc_1e-2.json"
 # path to load convergence data from
@@ -222,7 +222,7 @@ if __name__ == "__main__":
     )
     for alg in DATA_SOURCES:
         costs = jnp.concatenate(
-            [x["ep_costs"][10:].reshape(-1) for x in summary_data[alg]]
+            [x["ep_costs"][5:].reshape(-1) for x in summary_data[alg]]
         )
         hist, hist_bins = jnp.histogram(costs, bins, density=True)
         hist_bin_centers = (hist_bins[1:] + hist_bins[:-1]) / 2.0
