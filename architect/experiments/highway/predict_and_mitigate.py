@@ -1,6 +1,7 @@
 """Code to predict and mitigate failure modes in the highway scenario."""
 import argparse
 import json
+import operator
 import os
 import shutil
 import time
@@ -251,6 +252,7 @@ if __name__ == "__main__":
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
+    parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1e2)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
@@ -275,6 +277,7 @@ if __name__ == "__main__":
     failure_level = args.failure_level
     T = args.T
     seed = args.seed
+    dp_logprior_scale = args.dp_logprior_scale
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
     num_rounds = args.num_rounds
@@ -299,6 +302,7 @@ if __name__ == "__main__":
     print(f"\tT = {T}")
     print(f"\tseed = {seed}")
     print(f"\tL = {L}")
+    print(f"\tdp_logprior_scale = {dp_logprior_scale}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
     print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
     print(f"\tnum_rounds = {num_rounds}")
@@ -337,7 +341,20 @@ if __name__ == "__main__":
     get_dps = lambda _: eqx.partition(load_policy(_), eqx.is_array)[0]
     initial_dps = eqx.filter_vmap(get_dps)(jnp.arange(num_chains))
     # Also save out the static part of the policy
-    _, static_policy = eqx.partition(load_policy(None), eqx.is_array)
+    initial_dp, static_policy = eqx.partition(load_policy(None), eqx.is_array)
+
+    # Make a prior logprob for the policy that penalizes large updates to the policy
+    # parameters
+    def dp_prior_logprob(dp):
+        block_logprobs = jtu.tree_map(
+            lambda x_updated, x: jax.scipy.stats.norm.logpdf(
+                x_updated - x, scale=dp_logprior_scale
+            ).sum(),
+            dp,
+            initial_dp,
+        )
+        overall_logprob = jtu.tree_reduce(operator.add, block_logprobs)
+        return overall_logprob
 
     # Initialize some fixed initial states
     # Hack: reset covariances to remove variation in initial state
@@ -403,7 +420,7 @@ if __name__ == "__main__":
         prng_key,
         initial_dps,
         initial_eps,
-        dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
+        dp_logprior_fn=dp_prior_logprob,
         ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
         # potential_fn=lambda dp, ep: L
         # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
@@ -538,7 +555,7 @@ if __name__ == "__main__":
         alg_type = "static"
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
-        f"{'_' if repair else ''}{'repair' if repair else ''}/"
+        f"{'_' if repair else ''}{'repair_' + dp_logprior_scale if repair else ''}/"
         f"noise_{noise_scale:0.1e}/"
         f"L_{L:0.1e}/"
         f"{num_rounds * num_steps_per_round}_samples/"
@@ -577,6 +594,7 @@ if __name__ == "__main__":
                 "failure_level": failure_level,
                 "image_w": args.image_w,
                 "image_h": args.image_h,
+                "dp_logprior_scale": dp_logprior_scale,
                 "dp_mcmc_step_size": dp_mcmc_step_size,
                 "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,

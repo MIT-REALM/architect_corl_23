@@ -1,6 +1,7 @@
 """Code to predict and mitigate failure modes in the drone scenario."""
 import argparse
 import json
+import operator
 import os
 import shutil
 import time
@@ -130,6 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--num_trees", type=int, nargs="?", default=10)
     parser.add_argument("--failure_level", type=float, nargs="?", default=25.0)
+    parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1e2)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
@@ -156,6 +158,7 @@ if __name__ == "__main__":
     num_trees = args.num_trees
     moving_obstacles = args.moving_obstacles
     failure_level = args.failure_level
+    dp_logprior_scale = args.dp_logprior_scale
     dp_mcmc_step_size = args.dp_mcmc_step_size
     ep_mcmc_step_size = args.ep_mcmc_step_size
     num_rounds = args.num_rounds
@@ -181,6 +184,7 @@ if __name__ == "__main__":
     print(f"\tnum_trees = {num_trees}")
     print(f"\tmoving_obstacles = {moving_obstacles}")
     print(f"\tfailure_level = {failure_level}")
+    print(f"\tdp_logprior_scale = {dp_logprior_scale}")
     print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
     print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
     print(f"\tnum_rounds = {num_rounds}")
@@ -220,7 +224,20 @@ if __name__ == "__main__":
     get_dps = lambda _: eqx.partition(load_policy(_), eqx.is_array)[0]
     initial_dps = eqx.filter_vmap(get_dps)(jnp.arange(num_chains))
     # Also save out the static part of the policy
-    _, static_policy = eqx.partition(load_policy(None), eqx.is_array)
+    initial_dp, static_policy = eqx.partition(load_policy(None), eqx.is_array)
+
+    # Make a prior logprob for the policy that penalizes large updates to the policy
+    # parameters
+    def dp_prior_logprob(dp):
+        block_logprobs = jtu.tree_map(
+            lambda x_updated, x: jax.scipy.stats.norm.logpdf(
+                x_updated - x, scale=dp_logprior_scale
+            ).sum(),
+            dp,
+            initial_dp,
+        )
+        overall_logprob = jtu.tree_reduce(operator.add, block_logprobs)
+        return overall_logprob
 
     # Initialize some initial states (these serve as our initial exogenous parameters)
     prng_key, initial_state_key = jrandom.split(prng_key)
@@ -275,7 +292,7 @@ if __name__ == "__main__":
         prng_key,
         initial_dps,
         initial_eps,
-        dp_logprior_fn=lambda _: jnp.array(0.0),  # uniform prior over policies
+        dp_logprior_fn=dp_prior_logprob,
         ep_logprior_fn=lambda ep: env.initial_state_logprior(ep),
         potential_fn=lambda dp, ep: -L
         * jax.nn.elu(failure_level - simulate(env, dp, ep, static_policy, T).potential),
@@ -418,7 +435,7 @@ if __name__ == "__main__":
 
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
-        f"{'_' if repair else ''}{'repair' if repair else ''}/"
+        f"{'_' if repair else ''}{'repair_' + dp_logprior_scale if repair else ''}/"
         f"L_{L:0.1e}/"
         f"{num_rounds * num_steps_per_round}_samples_{num_rounds}x{num_steps_per_round}/"
         f"{num_chains}_chains/"
@@ -459,6 +476,7 @@ if __name__ == "__main__":
                 "L": L,
                 "T": T,
                 "failure_level": failure_level,
+                "dp_logprior_scale": dp_logprior_scale,
                 "dp_mcmc_step_size": dp_mcmc_step_size,
                 "ep_mcmc_step_size": ep_mcmc_step_size,
                 "num_rounds": num_rounds,
