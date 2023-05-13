@@ -309,54 +309,56 @@ if __name__ == "__main__":
     else:
         alg_type = "static"
 
-    # # Run the prediction+mitigation process
-    # t_start = time.perf_counter()
-    # dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
-    #     prng_key,
-    #     initial_dps,
-    #     initial_eps,
-    #     dp_logprior_fn=dp_prior_logprob,
-    #     ep_logprior_fn=ep_logprior,
-    #     potential_fn=lambda dp, ep: -L
-    #     * jax.nn.elu(failure_level - simulate(object_type, ep, dp, static_policy).potential),
-    #     init_sampler=init_sampler_fn,
-    #     make_kernel=make_kernel_fn,
-    #     num_rounds=num_rounds,
-    #     num_mcmc_steps_per_round=num_steps_per_round,
-    #     dp_mcmc_step_size=dp_mcmc_step_size,
-    #     ep_mcmc_step_size=ep_mcmc_step_size,
-    #     use_stochasticity=use_stochasticity,
-    #     repair=repair,
-    #     predict=predict,
-    #     quench_rounds=quench_rounds,
-    #     tempering_schedule=tempering_schedule,
-    #     logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
-    # )
-    # t_end = time.perf_counter()
-    # print(
-    #     f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
-    # )
+    # Run the prediction+mitigation process
+    t_start = time.perf_counter()
+    dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
+        prng_key,
+        initial_dps,
+        initial_eps,
+        dp_logprior_fn=dp_prior_logprob,
+        ep_logprior_fn=ep_logprior,
+        potential_fn=lambda dp, ep: -L
+        * jax.nn.elu(
+            failure_level - simulate(object_type, ep, dp, static_policy).potential
+        ),
+        init_sampler=init_sampler_fn,
+        make_kernel=make_kernel_fn,
+        num_rounds=num_rounds,
+        num_mcmc_steps_per_round=num_steps_per_round,
+        dp_mcmc_step_size=dp_mcmc_step_size,
+        ep_mcmc_step_size=ep_mcmc_step_size,
+        use_stochasticity=use_stochasticity,
+        repair=repair,
+        predict=predict,
+        quench_rounds=quench_rounds,
+        tempering_schedule=tempering_schedule,
+        logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
+    )
+    t_end = time.perf_counter()
+    print(
+        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+    )
 
-    # # Select the policy that performs best against all predicted failures before
-    # # the final round (choose from all chains)
-    # if repair:
-    #     most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
-    # else:
-    #     # Just pick one policy arbitrarily if we didn't optimize the policies.
-    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
+    # Select the policy that performs best against all predicted failures before
+    # the final round (choose from all chains)
+    if repair:
+        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    else:
+        # Just pick one policy arbitrarily if we didn't optimize the policies.
+        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
 
-    # # Evaluate this single policy against all failures
-    # final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
+    # Evaluate this single policy against all failures
+    final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
 
-    # TODO for debugging plots, just use the initial policy and eps
-    t_end = 0.0
-    t_start = 0.0
-    final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
-    final_eps = initial_eps
-    dp_logprobs = jnp.zeros((num_rounds, num_chains))
-    ep_logprobs = jnp.zeros((num_rounds, num_chains))
-    # TODO debugging bit ends here
+    # # TODO for debugging plots, just use the initial policy and eps
+    # t_end = 0.0
+    # t_start = 0.0
+    # final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
+    # final_eps = initial_eps
+    # dp_logprobs = jnp.zeros((num_rounds, num_chains))
+    # ep_logprobs = jnp.zeros((num_rounds, num_chains))
+    # # TODO debugging bit ends here
 
     # Evaluate the solutions proposed by the prediction+mitigation algorithm
     result = eqx.filter_vmap(
@@ -449,8 +451,8 @@ if __name__ == "__main__":
     final_policy = eqx.combine(final_dps, static_policy)
     eqx.tree_serialise_leaves(filename + ".eqx", final_policy)
 
-    # # Save the trace of policies TODO
-    # eqx.tree_serialise_leaves(filename + "_trace.eqx", dps)
+    # Save the trace of policies
+    eqx.tree_serialise_leaves(filename + "_trace.eqx", dps)
 
     # Save the initial policy
     try:
@@ -466,7 +468,7 @@ if __name__ == "__main__":
         json.dump(
             {
                 "eps": final_eps._asdict(),
-                # "eps_trace": eps._asdict(),  # TODO
+                # "eps_trace": eps._asdict(),
                 "object_type": object_type,
                 "L": L,
                 "failure_level": failure_level,
