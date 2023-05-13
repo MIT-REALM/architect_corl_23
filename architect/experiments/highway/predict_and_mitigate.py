@@ -557,7 +557,7 @@ if __name__ == "__main__":
         alg_type = "static"
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
-        f"{'_' if repair else ''}{'repair_' + dp_logprior_scale if repair else ''}/"
+        f"{'_' if repair else ''}{'repair_' + str(dp_logprior_scale) if repair else ''}/"
         f"noise_{noise_scale:0.1e}/"
         f"L_{L:0.1e}/"
         f"{num_rounds * num_steps_per_round}_samples/"

@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
-        f"{'_' if repair else ''}{'repair_' + dp_logprior_scale if repair else ''}/"
+        f"{'_' if repair else ''}{'repair_' + str(dp_logprior_scale) if repair else ''}/"
         f"L_{L:0.1e}/"
         f"{num_rounds * num_steps_per_round}_samples_{num_rounds}x{num_steps_per_round}/"
         f"{num_chains}_chains/"
