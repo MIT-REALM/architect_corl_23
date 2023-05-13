@@ -134,7 +134,7 @@ def simulate(
     )
 
     # The potential is the squared distance from the true grasp point
-    potential = jnp.sum((grasp_pose - grasp_gt) ** 2)
+    potential = 10 * jnp.sqrt(jnp.sum((grasp_pose - grasp_gt) ** 2) + 1e-3)
 
     return SimulationResults(
         potential=potential,

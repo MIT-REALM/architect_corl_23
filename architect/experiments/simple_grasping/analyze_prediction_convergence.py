@@ -22,25 +22,25 @@ from architect.systems.simple_grasping.policy import AffordancePredictor
 REANALYZE = True
 # path to save summary data to
 SUMMARY_PATH = (
-    "results/grasping_bowl/predict/convergence_summary_gradnorm_mcmc_1.0e-03.json"
+    "results/grasping_bowl/predict/convergence_summary_gradnorm_mcmc_1.0e-02.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/1000_samples_50x20/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/1000_samples_50x20/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/1000_samples_50x20/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/1000_samples_50x20/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -65,7 +65,7 @@ def load_data_sources_from_json():
                         is_leaf=lambda x: isinstance(x, list),
                     ),
                     "object_type": data["object_type"],
-                    "failure_level": 0.25,  # data["failure_level"],
+                    "failure_level": data["failure_level"],
                 }
 
             # Also load in the design parameters
