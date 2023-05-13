@@ -131,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--num_trees", type=int, nargs="?", default=10)
     parser.add_argument("--failure_level", type=float, nargs="?", default=25.0)
-    parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1e2)
+    parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
@@ -229,14 +229,17 @@ if __name__ == "__main__":
     # Make a prior logprob for the policy that penalizes large updates to the policy
     # parameters
     def dp_prior_logprob(dp):
+        # Take a mean rather than a sum to make this not crazy large
         block_logprobs = jtu.tree_map(
             lambda x_updated, x: jax.scipy.stats.norm.logpdf(
                 x_updated - x, scale=dp_logprior_scale
-            ).sum(),
+            ).mean(),
             dp,
             initial_dp,
         )
-        overall_logprob = jtu.tree_reduce(operator.add, block_logprobs)
+        # Take a block mean rather than the sum of all blocks to avoid a crazy large
+        # logprob
+        overall_logprob = jax.flatten_util.ravel_pytree(block_logprobs)[0].mean()
         return overall_logprob
 
     # Initialize some initial states (these serve as our initial exogenous parameters)

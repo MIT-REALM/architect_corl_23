@@ -252,7 +252,7 @@ if __name__ == "__main__":
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
-    parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1e2)
+    parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
@@ -349,11 +349,13 @@ if __name__ == "__main__":
         block_logprobs = jtu.tree_map(
             lambda x_updated, x: jax.scipy.stats.norm.logpdf(
                 x_updated - x, scale=dp_logprior_scale
-            ).sum(),
+            ).mean(),
             dp,
             initial_dp,
         )
-        overall_logprob = jtu.tree_reduce(operator.add, block_logprobs)
+        # Take a block mean rather than the sum of all blocks to avoid a crazy large
+        # logprob
+        overall_logprob = jax.flatten_util.ravel_pytree(block_logprobs)[0].mean()
         return overall_logprob
 
     # Initialize some fixed initial states
