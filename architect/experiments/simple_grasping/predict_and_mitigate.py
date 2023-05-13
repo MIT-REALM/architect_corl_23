@@ -468,7 +468,7 @@ if __name__ == "__main__":
         json.dump(
             {
                 "eps": final_eps._asdict(),
-                # "eps_trace": eps._asdict(),
+                "eps_trace": eps._asdict(),
                 "object_type": object_type,
                 "L": L,
                 "failure_level": failure_level,
