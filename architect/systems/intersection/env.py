@@ -168,8 +168,13 @@ class IntersectionEnv:
             state.non_ego_colors,
         )
 
-        # Compute the reward, which increases as the vehicle travels farther in
-        # the positive x direction and decreases if it collides with anything
+        # Add a reward term to get across the intersection
+        target = jnp.array([20.0, -7.5 / 2, 0.0, 3.0])
+        Q = jnp.diag(jnp.array([0.1, 2.0, 2.0, 1.0]))
+        state_err = next_ego_state - target
+        goal_reward = state_err.T @ Q @ state_err * self._dt
+
+        # Decrease the reward if we collide with anything
         min_distance_to_obstacle = self._scene.check_for_collision(
             next_ego_state[:3],  # trim out speed; not needed for collision checking
             next_non_ego_states[:, :3],
@@ -178,11 +183,7 @@ class IntersectionEnv:
         collision_reward = -self._collision_penalty * jax.nn.sigmoid(
             -5 * min_distance_to_obstacle
         )
-        distance_reward = 1.0 * (next_ego_state[0] - ego_state[0]) / self._dt
-        lane_keeping_reward = (
-            0.0 * (next_ego_state[1] - self._initial_ego_state[1]) ** 2
-        )
-        reward = distance_reward + lane_keeping_reward + collision_reward
+        reward = goal_reward + collision_reward
 
         # The episode ends when a collision occurs, at which point we reset the
         # environment (or if we run out of road)

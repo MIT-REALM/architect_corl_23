@@ -81,14 +81,14 @@ def rollout(
     return jnp.mean(costs)
 
 
-# @functools.partial(
-#     jax.jit,
-#     static_argnums=(
-#         1,
-#         2,
-#         4,
-#     ),
-# )
+@functools.partial(
+    jax.jit,
+    static_argnums=(
+        1,
+        2,
+        4,
+    ),
+)
 def oracle_policy(
     initial_state: HighwayState,
     horizon: int,
