@@ -65,7 +65,7 @@ def generate_trajectory_learner(
         obs, state = carry
 
         # Sample an action from the policy
-        action = policy(obs, key)
+        action = policy(obs, key)[0]
 
         # Also get the expert's label for this state
         key, subkey = jrandom.split(key)
@@ -289,7 +289,7 @@ def train_intersection(
         # Compute the predicted action for each observation
         predicted_actions = jax.vmap(policy, in_axes=(0, None))(
             trajectory.observations, jrandom.PRNGKey(0)
-        )
+        )[0]
 
         # Minimize L2 loss between predicted and actual actions
         action_loss = jnp.mean(

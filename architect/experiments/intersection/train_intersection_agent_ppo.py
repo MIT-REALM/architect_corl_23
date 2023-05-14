@@ -132,7 +132,7 @@ def generate_trajectory(
         step_key, action_subkey = jrandom.split(key)
 
         # Sample an action from the policy
-        action, action_logprob, value = policy(obs, action_subkey)
+        action, action_logprob, value = policy(obs, action_subkey, deterministic=False)
 
         # Take a step in the environment using that action
         next_state, next_observation, reward, done = env.step(
