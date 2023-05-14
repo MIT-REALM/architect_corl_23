@@ -1,4 +1,4 @@
-"""Define a highway scene with a variable number of lanes and cars."""
+"""Define an intersection scene."""
 import jax
 import jax.numpy as jnp
 from beartype import beartype
@@ -21,207 +21,85 @@ from architect.systems.components.sensing.vision.shapes import (
     Scene,
     SDFShape,
 )
+from architect.systems.highway.highway_scene import Car
 
 
 @beartype
-class Car(NamedTuple):
-    """Represent a car as a composite of primitive shapes.
-
-    Attributes:
-        height: the height of the car
-        width: the width of the car
-        length: the length of the car
-    """
-
-    w_base: Float[Array, ""] = jnp.array(2.8)  # width at base of car
-    w_top: Float[Array, ""] = jnp.array(2.3)  # width at top of car
-
-    h_base: Float[Array, ""] = jnp.array(0.4)  # height to undecarriage
-    h_chassis: Float[Array, ""] = jnp.array(1.0)  # height of chassis
-    h_top: Float[Array, ""] = jnp.array(0.75)  # height of top of car
-
-    l_hood: Float[Array, ""] = jnp.array(0.9)  # length of hood
-    l_trunk: Float[Array, ""] = jnp.array(0.4)  # length of trunk
-    l_cabin: Float[Array, ""] = jnp.array(3.0)  # length of cabin
-
-    r_wheel: Float[Array, ""] = jnp.array(0.4)  # radius of wheel
-    w_wheel: Float[Array, ""] = jnp.array(0.3)  # width of wheel
-
-    @property
-    def length(self):
-        return self.l_hood + self.l_trunk + self.l_cabin
-
-    @property
-    def width(self):
-        return self.w_base
-
-    @property
-    def height(self):
-        return self.h_base + self.h_chassis + self.h_top
-
-    @jaxtyped
-    @beartype
-    def get_shapes(
-        self,
-        state: Float[Array, " 3"],
-        color: Float[Array, " 3"] = jnp.array([0.972549, 0.4, 0.14117648]),
-    ) -> List[SDFShape]:
-        """Return a list of primitive shapes representing this car
-
-        Args:
-            state: the [x, y, heading] state of the car
-            color: the color of the car
-
-        Returns:
-            A list of SDF shapes representing the car
-        """
-        # Unpack state
-        x, y, theta = state
-        # Most shapes have the same rotation matrix
-        rotation = jnp.array(
-            [
-                [jnp.cos(theta), -jnp.sin(theta), 0],
-                [jnp.sin(theta), jnp.cos(theta), 0],
-                [0, 0, 1],
-            ]
-        )
-
-        # Create the primitive shapes that make up the car
-        chassis = Box(
-            center=jnp.array([x, y, self.h_base + self.h_chassis / 2]),
-            extent=jnp.array(
-                [
-                    self.l_cabin + self.l_hood + self.l_trunk,
-                    self.w_base,
-                    self.h_chassis,
-                ]
-            ),
-            rotation=rotation,
-            c=color,
-            rounding=jnp.array(0.1),
-        )
-        cab = Box(
-            center=jnp.array(
-                [
-                    x + (self.l_trunk - self.l_hood) / 2,
-                    y,
-                    self.h_base + self.h_chassis + self.h_top / 2,
-                ]
-            ),
-            extent=jnp.array(
-                [
-                    self.l_cabin,
-                    self.w_top,
-                    self.h_top,
-                ]
-            ),
-            rotation=rotation,
-            c=jnp.array([255, 244, 236]) / 255.0,
-            rounding=jnp.array(0.3),
-        )
-
-        l_all = self.l_cabin + self.l_trunk + self.l_hood
-        # The wheels are rotated 90 degrees around the x axis from the car
-        wheel_rotation = (
-            jnp.array(
-                [
-                    [1, 0, 0],
-                    [0, 0, -1],
-                    [0, 1, 0],
-                ]
-            )
-            @ rotation
-        )
-        wheel_color = jnp.array([45, 48, 71]) / 255.0
-        wheels = [
-            Cylinder(
-                jnp.array([x, y, 0.0])
-                + rotation
-                @ jnp.array([-0.3 * l_all, -0.5 * self.w_base, self.h_base / 2]),
-                self.r_wheel,
-                self.w_wheel,
-                wheel_rotation,
-                wheel_color,
-            ),
-            Cylinder(
-                jnp.array([x, y, 0.0])
-                + rotation
-                @ jnp.array([-0.3 * l_all, 0.5 * self.w_base, self.h_base / 2]),
-                self.r_wheel,
-                self.w_wheel,
-                wheel_rotation,
-                wheel_color,
-            ),
-            Cylinder(
-                jnp.array([x, y, 0.0])
-                + rotation
-                @ jnp.array([0.3 * l_all, -0.5 * self.w_base, self.h_base / 2]),
-                self.r_wheel,
-                self.w_wheel,
-                wheel_rotation,
-                wheel_color,
-            ),
-            Cylinder(
-                jnp.array([x, y, 0.0])
-                + rotation
-                @ jnp.array([0.3 * l_all, +0.4 * self.w_base, self.h_base / 2]),
-                self.r_wheel,
-                self.w_wheel,
-                wheel_rotation,
-                wheel_color,
-            ),
-        ]
-
-        return [chassis, cab] + wheels
-
-
-@beartype
-class HighwayScene:
-    """Represent a highway scene with multiple cars and lanes."""
+class IntersectionScene:
+    """Represent an intersection scene with multiple cars and lanes."""
 
     ground: Halfspace
     walls: List[Box]
     car: Car
-    lane_width: float
 
     @beartype
-    def __init__(
-        self,
-        num_lanes: int,
-        lane_width: float = 4.0,
-        segment_length: float = 100.0,
-    ):
-        """Initialize the highway scene.
-
-        Args:
-            num_lanes: the number of lanes in the scene
-            lane_width: the width of each lane
-            segment_length: the length of the highway segment to represent
-        """
-        # Create the ground plane and walls on each side of the highway
+    def __init__(self):
+        """Initialize the highway scene."""
+        # Create the ground plane and walls around the intersection
         self.ground = Halfspace(
             point=jnp.array([0.0, 0.0, 0.0]),
             normal=jnp.array([0.0, 0.0, 1.0]),
             c=jnp.array([229, 220, 197]) / 255.0,
         )
         self.walls = [
-            Box(
-                center=jnp.array([0.0, -lane_width * num_lanes / 2.0 - 0.5, 0.0]),
-                extent=jnp.array([segment_length, 1.0, 3.0]),
+            Box(  # NE vertical
+                center=jnp.array([15.0, -7.5 - 0.5, 0.0]),
+                extent=jnp.array([15.0, 1.0, 3.0]),
                 rotation=jnp.eye(3),
                 c=jnp.array([167, 117, 77]) / 255.0,
                 rounding=jnp.array(0.3),
             ),
-            Box(
-                center=jnp.array([0.0, lane_width * num_lanes / 2 + 0.5, 0.0]),
-                extent=jnp.array([segment_length, 1.0, 3.0]),
+            Box(  # NW vertical
+                center=jnp.array([15.0, 7.5 + 0.5, 0.0]),
+                extent=jnp.array([15.0, 1.0, 3.0]),
+                rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
+            ),
+            Box(  # SE vertical
+                center=jnp.array([-15.0, -7.5 - 0.5, 0.0]),
+                extent=jnp.array([15.0, 1.0, 3.0]),
+                rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
+            ),
+            Box(  # SW vertical
+                center=jnp.array([-15.0, 7.5 + 0.5, 0.0]),
+                extent=jnp.array([15.0, 1.0, 3.0]),
+                rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
+            ),
+            Box(  # NW horizontal
+                center=jnp.array([7.5 + 0.5, 15.0, 0.0]),
+                extent=jnp.array([1.0, 15.0, 3.0]),
+                rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
+            ),
+            Box(  # NE horizontal
+                center=jnp.array([-7.5 - 0.5, 15.0, 0.0]),
+                extent=jnp.array([1.0, 15.0, 3.0]),
+                rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
+            ),
+            Box(  # SW horizontal
+                center=jnp.array([7.5 + 0.5, -15.0, 0.0]),
+                extent=jnp.array([1.0, 15.0, 3.0]),
+                rotation=jnp.eye(3),
+                c=jnp.array([167, 117, 77]) / 255.0,
+                rounding=jnp.array(0.3),
+            ),
+            Box(  # SE horizontal
+                center=jnp.array([-7.5 - 0.5, -15.0, 0.0]),
+                extent=jnp.array([1.0, 15.0, 3.0]),
                 rotation=jnp.eye(3),
                 c=jnp.array([167, 117, 77]) / 255.0,
                 rounding=jnp.array(0.3),
             ),
         ]
         self.car = Car()  # re-used for all cars
-        self.lane_width = lane_width
 
     @jaxtyped
     @beartype
@@ -287,10 +165,10 @@ class HighwayScene:
         )
         collider_pts_car_frame = jnp.array(
             [
-                [-self.car.length / 2, self.car.width / 2, self.car.height / 2],
-                [self.car.length / 2, self.car.width / 2, self.car.height / 2],
-                [-self.car.length / 2, -self.car.width / 2, self.car.height / 2],
-                [self.car.length / 2, -self.car.width / 2, self.car.height / 2],
+                [-self.car.length / 2, self.car.width / 2, self.car.height * 0.75],
+                [self.car.length / 2, self.car.width / 2, self.car.height * 0.75],
+                [-self.car.length / 2, -self.car.width / 2, self.car.height * 0.75],
+                [self.car.length / 2, -self.car.width / 2, self.car.height * 0.75],
             ]
         )
         collider_pts_world = collider_pts_car_frame @ car_R_to_world.T
@@ -394,12 +272,11 @@ if __name__ == "__main__":
     from architect.systems.components.sensing.vision.util import look_at
 
     # Create a test highway scene and render it
-    highway = HighwayScene(num_lanes=3, lane_width=5.0, segment_length=200.0)
+    highway = IntersectionScene()
     car_states = jnp.array(
         [
-            [-90.0, -3.0, 0.0],
-            [-70, 3.0, 0.0],
-            # [-5.0, -highway.lane_width, 0.0],
+            [-10.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0],
         ]
     )
 
@@ -410,11 +287,11 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([-100.0, 10, 10]),
-        camera_R_to_world=look_at(jnp.array([-100.0, 10, 10]), jnp.zeros(3)),
+        camera_origin=jnp.array([-15.0, -15, 15]),
+        camera_R_to_world=look_at(jnp.array([-15.0, -15, 15]), jnp.zeros(3)),
     )
 
-    light_direction = jnp.array([-0.2, -1.0, 1.5])
+    light_direction = jnp.array([0.0, 0.0, 1.5])
     depth_image, color_image = highway.render_rgbd(
         intrinsics, extrinsics, car_states, shading_light_direction=light_direction
     )
