@@ -22,25 +22,25 @@ from architect.systems.simple_grasping.policy import AffordancePredictor
 REANALYZE = True
 # path to save summary data to
 SUMMARY_PATH = (
-    "results/grasping_bowl/predict/convergence_summary_gradnorm_mcmc_1.0e-02.json"
+    "results/grasping_bowl/predict/convergence_summary_gradnorm_mcmc_1.0e-01.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/500_samples_50x10/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -166,8 +166,6 @@ if __name__ == "__main__":
             num_failures = (costs >= failure_level).sum(axis=-1)
             # # Cumulative max = 'how many failures have we seen so far?'
             # num_failures = jax.lax.cummax(num_failures)
-            # Add a 1 at the start (randomly sampling 10 failures gives 1 failure at step 0)
-            num_failures = jnp.concatenate([jnp.ones(1), num_failures])
             result["num_failures"] = num_failures
 
     # Make into pandas dataframe

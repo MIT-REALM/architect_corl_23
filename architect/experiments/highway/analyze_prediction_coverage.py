@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyemd
+import scipy
 import seaborn as sns
 from jaxtyping import Array, Shaped
 from tqdm import tqdm
@@ -26,7 +27,7 @@ from architect.systems.highway.highway_env import HighwayState
 N = 1000
 BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/highway_lqr/predict/coverage_summary.json"
 # path to load convergence data from
@@ -265,6 +266,21 @@ if __name__ == "__main__":
             np.array(distance_matrix, dtype=np.float64),
         )
         print(f"{DATA_SOURCES[alg]['display_name']}: {wasserstein}")
+
+    # Also compute and print the JS divergence
+    print(f"JS divergence from ground truth (importance sampling w. {N * BATCHES}):")
+    for alg in DATA_SOURCES:
+        costs = jnp.concatenate(
+            [x["ep_costs"][0:].reshape(-1) for x in summary_data[alg]]
+        )
+        # re-compute the histogram to use the same bins as the ground truth
+        hist, hist_bins = jnp.histogram(costs, bins, density=True)
+
+        # Convert to numpy
+        gt = np.array(gt, dtype=np.float64)
+        hist = np.array(hist, dtype=np.float64)
+        js = scipy.spatial.distance.jensenshannon(gt, hist)
+        print(f"{DATA_SOURCES[alg]['display_name']} JS: {js}")
 
     # Plot!
     plt.figure(figsize=(12, 8))
