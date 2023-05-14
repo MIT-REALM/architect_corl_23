@@ -145,7 +145,7 @@ class DrivingPolicy(eqx.Module):
 
         if deterministic:
             # Return the mean action, a constant logprob, and the value estimate
-            return action_mean  # no RL right now, jnp.array(0.0), value
+            return action_mean, jnp.array(0.0), value
 
         action = jrandom.multivariate_normal(
             key, action_mean, action_noise * jnp.eye(action_mean.shape[0])
@@ -154,7 +154,7 @@ class DrivingPolicy(eqx.Module):
             action, action_mean, action_noise * jnp.eye(action_mean.shape[0])
         )
 
-        return action  # todo no RL right now, action_logp, value
+        return action, action_logp, value
 
     def action_log_prob_and_value(
         self, obs: HighwayObs, action: Float[Array, " 2"]
