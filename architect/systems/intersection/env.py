@@ -169,10 +169,12 @@ class IntersectionEnv:
         )
 
         # Add a reward term to get across the intersection
-        target = jnp.array([20.0, -7.5 / 2, 0.0, 3.0])
+        target = jnp.array([20.0, -7.5 / 2, 0.0, 4.0])
         Q = jnp.diag(jnp.array([0.01, 2.0, 2.0, 1.0]))
         state_err = next_ego_state - target
-        goal_reward = -state_err.T @ Q @ state_err * self._dt
+        # goal_reward = -state_err.T @ Q @ state_err * self._dt
+        # Just go forward
+        goal_reward = 1.0 * (next_ego_state[0] - ego_state[0]) / self._dt
 
         # Decrease the reward if we collide with anything
         min_distance_to_obstacle = self._scene.check_for_collision(
@@ -187,7 +189,9 @@ class IntersectionEnv:
 
         # The episode ends when a collision occurs, at which point we reset the
         # environment (or if we run out of road)
+        distance_to_goal = jnp.linalg.norm(state_err[:2])
         done = jnp.logical_or(min_distance_to_obstacle < 0.0, next_ego_state[0] > 15.0)
+        done = jnp.logical_or(done, distance_to_goal > 60.0)
         next_state = jax.lax.cond(
             done,
             lambda: self.reset(key),

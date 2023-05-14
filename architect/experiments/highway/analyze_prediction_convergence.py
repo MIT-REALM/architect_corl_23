@@ -277,33 +277,33 @@ if __name__ == "__main__":
 
     print("Collision rate (mean)")
     print(
-        df[df["Diffusion steps"] >= 10]
+        df[df["Diffusion steps"] >= 50]
         .groupby(["Algorithm"])["# failures discovered"]
         .mean()
         / 10
     )
     print("Collision rate (std)")
     print(
-        df[df["Diffusion steps"] >= 10]
+        df[df["Diffusion steps"] >= 50]
         .groupby(["Algorithm"])["# failures discovered"]
         .std()
         / 10
     )
 
-    # # Plot!
-    # plt.figure(figsize=(12, 8))
-    # # sns.barplot(
-    # #     data=df[(df["Diffusion steps"] % 10 == 0)],
-    # #     x="Diffusion steps",
-    # #     y="# failures discovered",
-    # #     hue="Algorithm",
-    # # )
-    # sns.lineplot(
-    #     data=df,
+    # Plot!
+    plt.figure(figsize=(12, 8))
+    # sns.barplot(
+    #     data=df[(df["Diffusion steps"] % 10 == 0)],
     #     x="Diffusion steps",
     #     y="# failures discovered",
     #     hue="Algorithm",
-    #     linewidth=3,
     # )
+    sns.lineplot(
+        data=df,
+        x="Diffusion steps",
+        y="# failures discovered",
+        hue="Algorithm",
+        linewidth=3,
+    )
 
-    # plt.show()
+    plt.show()

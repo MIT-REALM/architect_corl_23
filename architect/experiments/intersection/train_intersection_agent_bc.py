@@ -233,6 +233,7 @@ def make_intersection_env(image_shape: Tuple[int, int]):
         [
             [-3.75, 10, -jnp.pi / 2, 4.5],
             [-3.75, 20, -jnp.pi / 2, 4.5],
+            [3.75, -30, jnp.pi / 2, 4.5],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.2]) ** 2)

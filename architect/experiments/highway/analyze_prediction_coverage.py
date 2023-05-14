@@ -271,7 +271,7 @@ if __name__ == "__main__":
     print(f"JS divergence from ground truth (importance sampling w. {N * BATCHES}):")
     for alg in DATA_SOURCES:
         costs = jnp.concatenate(
-            [x["ep_costs"][0:].reshape(-1) for x in summary_data[alg]]
+            [x["ep_costs"][50:].reshape(-1) for x in summary_data[alg]]
         )
         # re-compute the histogram to use the same bins as the ground truth
         hist, hist_bins = jnp.histogram(costs, bins, density=True)

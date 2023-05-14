@@ -136,7 +136,7 @@ def generate_trajectory(
 
         # Take a step in the environment using that action
         next_state, next_observation, reward, done = env.step(
-            state, action, non_ego_actions, key
+            state, action, non_ego_actions, step_key
         )
 
         next_carry = (next_observation, next_state)
@@ -260,9 +260,12 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
     img_dir = os.path.join(logdir, f"epoch_{epoch_num}_imgs")
     os.makedirs(img_dir, exist_ok=True)
     for i, img in enumerate(color_images):
-        matplotlib.image.imsave(
-            os.path.join(img_dir, f"img_{i}.png"), img.transpose(1, 0, 2)
-        )
+        try:
+            matplotlib.image.imsave(
+                os.path.join(img_dir, f"img_{i}.png"), img.transpose(1, 0, 2)
+            )
+        except ValueError:
+            pass
 
 
 def make_intersection_env(image_shape: Tuple[int, int]):
@@ -278,6 +281,7 @@ def make_intersection_env(image_shape: Tuple[int, int]):
         [
             [-3.75, 10, -jnp.pi / 2, 4.5],
             [-3.75, 20, -jnp.pi / 2, 4.5],
+            [3.75, -30, jnp.pi / 2, 4.5],
         ]
     )
     initial_state_covariance = jnp.diag(jnp.array([0.5, 0.5, 0.001, 0.2]) ** 2)
@@ -310,12 +314,12 @@ def train_ppo_driver(
     critic_weight: float = 1.0,
     entropy_weight: float = 0.1,
     seed: int = 0,
-    steps_per_epoch: int = 32 * 20,
+    steps_per_epoch: int = 32 * 50,
     epochs: int = 200,
     gd_steps_per_update: int = 50,
     minibatch_size: int = 32,
     max_grad_norm: float = 1.0,
-    logdir: str = "./tmp/intersection_ppo",
+    logdir: str = "./tmp/intersection_ppo_reward",
 ):
     """Train the driver using PPO.
 
@@ -328,7 +332,7 @@ def train_ppo_driver(
     env = make_intersection_env(image_shape)
 
     # Fix non-ego actions to be constant (drive straight at fixed speed)
-    n_non_ego = 2
+    n_non_ego = 3
     non_ego_actions = jnp.zeros((n_non_ego, 2))
 
     # Set up the policy
