@@ -212,9 +212,12 @@ def save_traj_imgs(trajectory: Trajectory, logdir: str, epoch_num: int) -> None:
     img_dir = os.path.join(logdir, f"epoch_{epoch_num}_imgs")
     os.makedirs(img_dir, exist_ok=True)
     for i, img in enumerate(color_images):
-        matplotlib.image.imsave(
-            os.path.join(img_dir, f"img_{i}.png"), img.transpose(1, 0, 2)
-        )
+        try:
+            matplotlib.image.imsave(
+                os.path.join(img_dir, f"img_{i}.png"), img.transpose(1, 0, 2)
+            )
+        except ValueError:
+            pass
 
 
 def make_intersection_env(image_shape: Tuple[int, int]):
