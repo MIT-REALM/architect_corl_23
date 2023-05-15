@@ -274,10 +274,12 @@ if __name__ == "__main__":
             use_mh,
         )
 
+    quench_dps = False
     if reinforce:
         alg_type = "reinforce_l2c_0.05_step"
     elif use_gradients and use_stochasticity and use_mh:
         alg_type = "mala"
+        quench_dps = True
     elif use_gradients and use_stochasticity and not use_mh:
         alg_type = "ula"
     elif use_gradients and not use_stochasticity:
@@ -311,6 +313,7 @@ if __name__ == "__main__":
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
+        quench_dps=quench_dps,
         tempering_schedule=tempering_schedule,
         logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
     )

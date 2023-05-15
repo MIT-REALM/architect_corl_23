@@ -101,6 +101,7 @@ def predict_and_mitigate_failure_modes(
     repair: bool = True,
     predict: bool = True,
     quench_rounds: int = 0,
+    quench_dps: bool = True,
     tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
     logging_prefix: str = "",
 ) -> Tuple[
@@ -140,6 +141,7 @@ def predict_and_mitigate_failure_modes(
         repair: if True, run the repair steps
         predict: if True, run the predict steps
         quench_rounds: if True, turn off stochasticity for the last round
+        quench_dps: if True, turn off stochasticity for the design parameters
         tempering_schedule: a monotonically increasing array of positive tempering
             values. If not provided, defaults to all 1s (no tempering).
         dp_grad_clip: clip design param gradients at this value
@@ -200,7 +202,10 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Make the sampling kernel
-            dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, stochasticity)
+            if quench_dps:
+                dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, False)
+            else:
+                dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, stochasticity)
 
             # Run the chains and update the design parameters
             n_chains = initial_dp_sampler_states.logdensity.shape[0]

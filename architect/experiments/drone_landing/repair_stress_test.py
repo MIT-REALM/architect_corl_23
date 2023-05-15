@@ -20,35 +20,33 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 # How many monte carlo trials to use to compute true failure rate
-N = 1000
+N = 10
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
-# path to save summary data to in predict_repair folder
-SUMMARY_PATH = "results/drone_landing_smooth/predict_repair/stress_test_seed_0.json"
+# path to save summary data to in predict_repair_1.0 folder
+SUMMARY_PATH = (
+    "results/drone_landing_smooth/predict_repair_1.0/stress_test_dp_1.0e-03.json"
+)
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "Ours (tempered)",
     },
     "rmh": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_3.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
-    # "random": {
-    #     "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/1_samples_1x1/10_chains/0_quench/dp_1.0e-05/ep_1.0e-05/grad_norm/grad_clip_inf/static_tempered_40",
-    #     "display_name": "Random sampling",
-    # },
 }
 
 
@@ -169,7 +167,7 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Algorithm": result["display_name"],
-                        "Cost": result["ep_costs"].flatten(),
+                        "Cost": result["costs"].flatten(),
                     }
                 )
             )
@@ -185,5 +183,5 @@ if __name__ == "__main__":
         data=df,
     )
     plt.gca().set_xlabel("")
-    # plt.savefig('results/drone_landing_smooth/predict_repair/seed_0.png') #saving images to file for each seed
+    # plt.savefig('results/drone_landing_smooth/predict_repair_1.0/seed_0.png') #saving images to file for each seed
     plt.show()
