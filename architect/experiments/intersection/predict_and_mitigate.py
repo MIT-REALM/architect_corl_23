@@ -273,7 +273,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
-    parser.add_argument("--failure_level", type=int, nargs="?", default=0.0)
+    parser.add_argument("--failure_level", type=int, nargs="?", default=2.5)
     parser.add_argument("--T", type=int, nargs="?", default=100)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
