@@ -191,12 +191,12 @@ def simulate(
         compute_lqr = lambda non_ego_state, initial_state: -K @ (
             non_ego_state - initial_state
         )
-        target = initial_state.non_ego_states
-        target = target.at[:, 0].set(state.non_ego_states[:, 0])
+        # target = initial_state.non_ego_states  # uncomment to patch
+        # target = target.at[:, 0].set(state.non_ego_states[:, 0])  # uncomment to patch
         non_ego_stable_action = jax.vmap(compute_lqr)(
             state.non_ego_states,
-            # initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
-            target,
+            initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
+            # target,  # uncomment to patch
         )
 
         # Take a step in the environment using the action carried over from the previous
