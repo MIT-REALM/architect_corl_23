@@ -181,6 +181,7 @@ def generate_trajectory_expert(
     trajectory = Trajectory(
         observations=obs,
         actions=actions,
+        expert_actions=actions,
     )
 
     return trajectory
@@ -265,7 +266,7 @@ def train_intersection(
     epochs: int = 100,
     gd_steps_per_update: int = 500,
     minibatch_size: int = 32,
-    logdir: str = "./tmp/intersection",
+    logdir: str = "./tmp/intersection_bc_exp",
 ):
     """
     Train the agent using behavior cloning.
@@ -319,8 +320,8 @@ def train_intersection(
     for epoch in range(epochs):
         # Generate a trajectory with the learner policy, getting labels from the expert
         key, subkey = jrandom.split(key)
-        trajectory = generate_trajectory_learner(env, policy, subkey, steps_per_epoch)
-        # trajectory = generate_trajectory_expert(env, subkey, steps_per_epoch)
+        # trajectory = generate_trajectory_learner(env, policy, subkey, steps_per_epoch)
+        trajectory = generate_trajectory_expert(env, subkey, steps_per_epoch)
 
         # Save regularly
         if epoch % 5 == 0 or epoch == epochs - 1:

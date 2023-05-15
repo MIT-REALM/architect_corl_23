@@ -1,4 +1,4 @@
-"""Code to predict and mitigate failure modes in the highway scenario."""
+"""Code to predict and mitigate failure modes in the intersection scenario."""
 import argparse
 import json
 import operator
@@ -22,9 +22,12 @@ from architect.engines.reinforce import init_sampler as init_reinforce_sampler
 from architect.engines.reinforce import make_kernel as make_reinforce_kernel
 from architect.engines.samplers import init_sampler as init_mcmc_sampler
 from architect.engines.samplers import make_kernel as make_mcmc_kernel
-from architect.experiments.highway.train_highway_agent import make_highway_env
-from architect.systems.highway.driving_policy import DrivingPolicy
-from architect.systems.highway.highway_env import HighwayEnv, HighwayObs, HighwayState
+from architect.experiments.intersection.train_intersection_agent_bc import (
+    make_intersection_env,
+)
+from architect.systems.highway.highway_env import HighwayObs, HighwayState
+from architect.systems.intersection.env import IntersectionEnv
+from architect.systems.intersection.policy import DrivingPolicy
 from architect.types import PRNGKeyArray
 from architect.utils import softmin
 
@@ -55,10 +58,12 @@ def dlqr(A, B, Q, R):
 
 
 # get LQR gains
-A = np.array(
+v = 2.0
+dt = 0.1
+A = lambda theta: np.array(
     [
-        [1.0, 0.0, 0.0, 0.1],
-        [0.0, 1.0, 8.5 * 0.1, 0.0],
+        [1.0, 0.0, -v * np.sin(theta) * dt, np.cos(theta) * dt],
+        [0.0, 1.0, v * np.cos(theta) * dt, np.sin(theta) * dt],
         [0.0, 0.0, 1.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ]
@@ -67,19 +72,21 @@ B = np.array(
     [
         [0.0, 0.0],
         [0.0, 0.0],
-        [0.0, 8.5 * 0.1 / 1.0],
+        [0.0, 2 * 0.1 / 1.0],
         [0.1, 0.0],
     ]
 )
 Q = np.eye(4)
 R = np.eye(2)
-K, _, _ = dlqr(A, B, Q, R)
-K = jnp.array(K)
+K_left, _, _ = dlqr(A(-np.pi / 2), B, Q, R)
+K_left = jnp.array(K_left)
+K_right, _, _ = dlqr(A(np.pi / 2), B, Q, R)
+K_right = jnp.array(K_right)
 
 
 def sample_non_ego_actions(
     key: PRNGKeyArray,
-    env: HighwayEnv,
+    env: IntersectionEnv,
     horizon: int,
     n_non_ego: int,
     noise_scale: float = 0.05,
@@ -109,7 +116,7 @@ def sample_non_ego_actions(
 
 def non_ego_actions_prior_logprob(
     actions: NonEgoActions,
-    env: HighwayEnv,
+    env: IntersectionEnv,
     noise_scale: float = 0.05,
 ) -> Float[Array, ""]:
     """Compute the log probability of a set of non-ego actions.
@@ -141,14 +148,14 @@ class SimulationResults(NamedTuple):
 
 
 def simulate(
-    env: HighwayEnv,
+    env: IntersectionEnv,
     policy: DrivingPolicy,
     initial_state: HighwayState,
     non_ego_actions: NonEgoActions,
     static_policy: DrivingPolicy,
     max_steps: int = 60,
 ) -> Float[Array, ""]:
-    """Simulate the highway environment.
+    """Simulate the intersection environment.
 
     Disables randomness in the policy and environment (all randomness should be
     factored out into the initial_state argument).
@@ -170,6 +177,12 @@ def simulate(
     # Merge the policy back together
     policy = eqx.combine(policy, static_policy)
 
+    # Set goals for the non-ego agents that are far in front of their initial
+    # positions
+    non_ego_goals = initial_state.non_ego_states  # immutable arrays = no worries
+    non_ego_goals = non_ego_goals.at[:, 0].add(60 * jnp.cos(non_ego_goals[:, 2]))
+    non_ego_goals = non_ego_goals.at[:, 1].add(60 * jnp.sin(non_ego_goals[:, 2]))
+
     @jax.checkpoint
     def step(carry, scan_inputs):
         # Unpack the input
@@ -184,12 +197,12 @@ def simulate(
 
         # The action passed in is a residual applied to a stabilizing policy for each
         # non-ego agent
-        compute_lqr = lambda non_ego_state, initial_state: -K @ (
-            non_ego_state - initial_state
+        compute_lqr = lambda non_ego_state, target_state: -K @ (
+            non_ego_state - target_state
         )
         non_ego_stable_action = jax.vmap(compute_lqr)(
             state.non_ego_states,
-            initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
+            non_ego_goals,
         )
 
         # Take a step in the environment using the action carried over from the previous
@@ -242,7 +255,7 @@ if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--savename", type=str, default="overtake_actions")
+    parser.add_argument("--savename", type=str, default="intersection_lqr")
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
@@ -292,7 +305,7 @@ if __name__ == "__main__":
     grad_clip = args.grad_clip
     normalize_gradients = not args.dont_normalize_gradients
 
-    print("Running prediction/mitigation on overtake with hyperparameters:")
+    print("Running prediction/mitigation on intersection with hyperparameters:")
     print(f"\tmodel_path = {args.model_path}")
     print(f"\timage dimensions (w x h) = {args.image_w} x {args.image_h}")
     print(f"\tnoise_scale = {noise_scale}")
@@ -329,7 +342,7 @@ if __name__ == "__main__":
 
     # Make the environment to use
     image_shape = (args.image_h, args.image_w)
-    env = make_highway_env(image_shape)
+    env = make_intersection_env(image_shape)
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition
@@ -414,59 +427,59 @@ if __name__ == "__main__":
     else:
         alg_type = "static"
 
-    # Run the prediction+mitigation process
-    t_start = time.perf_counter()
-    dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
-        prng_key,
-        initial_dps,
-        initial_eps,
-        dp_logprior_fn=dp_prior_logprob,
-        ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
-        # potential_fn=lambda dp, ep: L
-        # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
-        potential_fn=lambda dp, ep: -L
-        * jax.nn.elu(
-            failure_level
-            - simulate(env, dp, initial_state, ep, static_policy, T).potential
-        ),
-        init_sampler=init_sampler_fn,
-        make_kernel=make_kernel_fn,
-        num_rounds=num_rounds,
-        num_mcmc_steps_per_round=num_steps_per_round,
-        dp_mcmc_step_size=dp_mcmc_step_size,
-        ep_mcmc_step_size=ep_mcmc_step_size,
-        use_stochasticity=use_stochasticity,
-        repair=repair,
-        predict=predict,
-        quench_rounds=quench_rounds,
-        tempering_schedule=tempering_schedule,
-        logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
-    )
-    t_end = time.perf_counter()
-    print(
-        f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
-    )
+    # # Run the prediction+mitigation process
+    # t_start = time.perf_counter()
+    # dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
+    #     prng_key,
+    #     initial_dps,
+    #     initial_eps,
+    #     dp_logprior_fn=dp_prior_logprob,
+    #     ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
+    #     # potential_fn=lambda dp, ep: L
+    #     # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
+    #     potential_fn=lambda dp, ep: -L
+    #     * jax.nn.elu(
+    #         failure_level
+    #         - simulate(env, dp, initial_state, ep, static_policy, T).potential
+    #     ),
+    #     init_sampler=init_sampler_fn,
+    #     make_kernel=make_kernel_fn,
+    #     num_rounds=num_rounds,
+    #     num_mcmc_steps_per_round=num_steps_per_round,
+    #     dp_mcmc_step_size=dp_mcmc_step_size,
+    #     ep_mcmc_step_size=ep_mcmc_step_size,
+    #     use_stochasticity=use_stochasticity,
+    #     repair=repair,
+    #     predict=predict,
+    #     quench_rounds=quench_rounds,
+    #     tempering_schedule=tempering_schedule,
+    #     logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
+    # )
+    # t_end = time.perf_counter()
+    # print(
+    #     f"Ran {num_rounds:,} rounds with {num_chains} chains in {t_end - t_start:.2f} s"
+    # )
 
-    # Select the policy that performs best against all predicted failures before
-    # the final round (choose from all chains)
-    if repair:
-        most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
-        final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
-    else:
-        # Just pick one policy arbitrarily if we didn't optimize the policies.
-        final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
+    # # Select the policy that performs best against all predicted failures before
+    # # the final round (choose from all chains)
+    # if repair:
+    #     most_likely_dps_idx = jnp.argmax(dp_logprobs[-1], axis=-1)
+    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, most_likely_dps_idx], dps)
+    # else:
+    #     # Just pick one policy arbitrarily if we didn't optimize the policies.
+    #     final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
 
-    # Evaluate this single policy against all failures
-    final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
+    # # Evaluate this single policy against all failures
+    # final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
 
-    # # TODO for debugging plots, just use the initial policy and eps
-    # t_end = 0.0
-    # t_start = 0.0
-    # final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
-    # final_eps = initial_eps
-    # dp_logprobs = jnp.zeros((num_rounds, num_chains))
-    # ep_logprobs = jnp.zeros((num_rounds, num_chains))
-    # # TODO debugging bit ends here
+    # TODO for debugging plots, just use the initial policy and eps
+    t_end = 0.0
+    t_start = 0.0
+    final_dps = jtu.tree_map(lambda leaf: leaf[-1], initial_dps)
+    final_eps = initial_eps
+    dp_logprobs = jnp.zeros((num_rounds, num_chains))
+    ep_logprobs = jnp.zeros((num_rounds, num_chains))
+    # TODO debugging bit ends here
 
     # Evaluate the solutions proposed by the prediction+mitigation algorithm
     result = eqx.filter_vmap(
@@ -478,8 +491,9 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(32, 16), constrained_layout=True)
     axs = fig.subplot_mosaic(
         [
-            ["trace", "trajectory", "trajectory", "trajectory", "trajectory"],
-            ["initial_obs", "initial_obs", "initial_obs", "initial_obs", "initial_obs"],
+            ["trace", "trace", "trace", "trajectory", "trajectory"],
+            ["trace", "trace", "trace", "trajectory", "trajectory"],
+            ["trace", "trace", "trace", "trajectory", "trajectory"],
             ["final_obs", "final_obs", "final_obs", "final_obs", "final_obs"],
             ["reward", "reward", "reward", "reward", "reward"],
         ],
@@ -501,8 +515,10 @@ if __name__ == "__main__":
     normalized_potential = (result.potential - min_potential) / (
         max_potential - min_potential
     )
-    axs["trajectory"].axhline(7.5, linestyle="--", color="k")
-    axs["trajectory"].axhline(-7.5, linestyle="--", color="k")
+    axs["trajectory"].plot([-7.5 - 15, -7.5, -7.5], [7.5, 7.5, 7.5 + 15], "k--")
+    axs["trajectory"].plot([-7.5 - 15, -7.5, -7.5], [-7.5, -7.5, -7.5 - 15], "k--")
+    axs["trajectory"].plot([7.5 + 15, 7.5, 7.5], [7.5, 7.5, 7.5 + 15], "k--")
+    axs["trajectory"].plot([7.5 + 15, 7.5, 7.5], [-7.5, -7.5, -7.5 - 15], "k--")
     for chain_idx in range(num_chains):
         axs["trajectory"].plot(
             result.ego_trajectory[chain_idx, :, 0].T,
@@ -525,16 +541,19 @@ if __name__ == "__main__":
             color=plt.cm.plasma(normalized_potential[chain_idx]),
             label="Non-ego 2" if chain_idx == 0 else None,
         )
+        axs["trajectory"].plot(
+            result.non_ego_trajectory[chain_idx, :, 2, 0],
+            result.non_ego_trajectory[chain_idx, :, 2, 1],
+            linestyle="--",
+            color=plt.cm.plasma(normalized_potential[chain_idx]),
+            label="Non-ego 3" if chain_idx == 0 else None,
+        )
 
     # Plot the reward across all failure cases
     axs["reward"].plot(result.potential, "ko")
     axs["reward"].set_ylabel("Potential (negative min reward)")
 
-    # Plot the initial RGB observations tiled on the same subplot
-    axs["initial_obs"].imshow(
-        jnp.concatenate(result.initial_obs.color_image.transpose(0, 2, 1, 3), axis=1)
-    )
-    # And do the same for the final observations
+    # Plot the final RGB observations tiled on the same subplot
     axs["final_obs"].imshow(
         jnp.concatenate(result.final_obs.color_image.transpose(0, 2, 1, 3), axis=1)
     )
@@ -592,7 +611,7 @@ if __name__ == "__main__":
             {
                 "initial_state": initial_state._asdict(),
                 "action_trajectory": final_eps,
-                "action_trajectory_trace": eps,
+                # "action_trajectory_trace": eps,  # TODO
                 "time": t_end - t_start,
                 "L": L,
                 "noise_scale": noise_scale,
