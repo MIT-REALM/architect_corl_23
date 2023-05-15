@@ -34,7 +34,7 @@ REANALYZE = True
 SUMMARY_PATH = "results/intersection_lqr_patch/predict/coverage_summary.json"
 # path to load convergence data from
 CONVERGENCE_SUMMARY_PATH = (
-    "results/intersection_lqr_patch/predict/convergence_summary_4_100steps_1e-3_20.json"
+    "results/intersection_lqr_patch/predict/convergence_summary_4_50steps_1e-3_20.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
