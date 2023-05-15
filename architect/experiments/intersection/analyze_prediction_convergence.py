@@ -11,35 +11,39 @@ import pandas as pd
 import seaborn as sns
 from jaxtyping import Array, Shaped
 
-from architect.experiments.highway.predict_and_mitigate import (
+from architect.experiments.intersection.predict_and_mitigate import (
     non_ego_actions_prior_logprob,
     simulate,
 )
-from architect.experiments.highway.train_highway_agent import make_highway_env
-from architect.systems.highway.driving_policy import DrivingPolicy
+from architect.experiments.intersection.train_intersection_agent_bc import (
+    make_intersection_env,
+)
 from architect.systems.highway.highway_env import HighwayState
+from architect.systems.intersection.policy import DrivingPolicy
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
-SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary_4_100steps_1e-3_20.json"
+SUMMARY_PATH = (
+    "results/intersection_lqr_patch/predict/convergence_summary_4_100steps_1e-3_20.json"
+)
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered",
+        "path_prefix": "results/intersection_lqr_patch/predict/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
+        "path_prefix": "results/intersection_lqr_patch/predict/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
+        "path_prefix": "results/intersection_lqr_patch/predict/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
+        "path_prefix": "results/intersection_lqr_patch/predict/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
         "display_name": "L2C",
     },
 }
@@ -95,7 +99,7 @@ def get_costs(loaded_data):
     # Pre-compile the same cost function for all
     alg = "mala_tempered"
     image_shape = (32, 32)
-    env = make_highway_env(image_shape)
+    env = make_intersection_env(image_shape)
     initial_state = HighwayState(
         ego_state=loaded_data[alg][0]["initial_state"]["ego_state"],
         non_ego_states=loaded_data[alg][0]["initial_state"]["non_ego_states"],
