@@ -456,4 +456,4 @@ def train_ppo_driver(
 
 
 if __name__ == "__main__":
-    train_ppo_driver((64, 64))
+    train_ppo_driver((32, 32))

@@ -200,7 +200,7 @@ def simulate(
         compute_lqr_left = lambda non_ego_state, target_state: -K_left @ (
             non_ego_state - target_state
         )
-        compute_lqr_right = lambda non_ego_state, target_state: -K_left @ (
+        compute_lqr_right = lambda non_ego_state, target_state: -K_right @ (
             non_ego_state - target_state
         )
         compute_lqr = lambda non_ego_state, target_state: jax.lax.cond(

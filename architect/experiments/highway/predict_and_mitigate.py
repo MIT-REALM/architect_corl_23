@@ -184,12 +184,19 @@ def simulate(
 
         # The action passed in is a residual applied to a stabilizing policy for each
         # non-ego agent
+        # TODO: This causes them to slow down and stop, since they're tracking their
+        # initial state. They should instead track some state further down the road,
+        # but we can't change this now since we've already done the pre-training etc.,
+        # but we should change it for any future use.
         compute_lqr = lambda non_ego_state, initial_state: -K @ (
             non_ego_state - initial_state
         )
+        target = initial_state.non_ego_states
+        target = target.at[:, 0].set(state.non_ego_states[:, 0])
         non_ego_stable_action = jax.vmap(compute_lqr)(
             state.non_ego_states,
-            initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
+            # initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
+            target,
         )
 
         # Take a step in the environment using the action carried over from the previous

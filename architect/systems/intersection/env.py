@@ -122,7 +122,7 @@ class IntersectionEnv:
         v_next = v + a * self._dt
 
         # Clip the velocity to some maximum
-        v_next = jnp.clip(v_next, 0.0, 20.0)
+        v_next = jnp.clip(v_next, 0.1, 20.0)
 
         return jnp.array([x_next, y_next, theta_next, v_next])
 
@@ -193,7 +193,7 @@ class IntersectionEnv:
         moving_forward_reward = 1.0 * (next_ego_state[0] - ego_state[0]) / self._dt
 
         # A reward for waiting patiently
-        waiting_reward = -(moving_forward_reward**2)
+        waiting_reward = jnp.exp(-((next_ego_state[3] - 0.2) ** 2))
 
         # Figure out which reward to use
         ego_at_intersection = next_ego_state[0] >= -10.0
