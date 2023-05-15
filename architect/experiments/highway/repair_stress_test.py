@@ -24,8 +24,8 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # How many monte carlo trials to use to compute true failure rate
-N = 1000
-BATCHES = 1
+N = 100
+BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
 # path to save summary data to in predict_repair folder
