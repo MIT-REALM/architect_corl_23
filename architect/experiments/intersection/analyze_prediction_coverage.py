@@ -284,6 +284,12 @@ if __name__ == "__main__":
         js = scipy.spatial.distance.jensenshannon(gt, hist)
         print(f"{DATA_SOURCES[alg]['display_name']} JS: {js}")
 
+    # Also give the failure rate on prior data
+    failure_level = summary_data["mala_tempered"][0]["failure_level"]
+    print(
+        f"Failure rate from prior: {(summary_data['random_sample_costs'] >= failure_level).mean()}"
+    )
+
     # Plot!
     plt.figure(figsize=(12, 8))
     sns.violinplot(

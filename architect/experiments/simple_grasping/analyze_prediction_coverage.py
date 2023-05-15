@@ -26,12 +26,12 @@ from architect.systems.simple_grasping.policy import AffordancePredictor
 N = 1000
 BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
-SUMMARY_PATH = "results/grasping_bowl/predict/coverage_summary.json"
+SUMMARY_PATH = "results/grasping_mug/predict/coverage_summary.json"
 # path to load convergence data from
 CONVERGENCE_SUMMARY_PATH = (
-    "results/grasping_bowl/predict/convergence_summary_gradnorm_mcmc_1.0e-01.json"
+    "results/grasping_mug/predict/convergence_summary_gradnorm_mcmc_1.0e-02.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
@@ -39,19 +39,19 @@ SEEDS = [0, 1, 2, 3]
 # These data sources are from results/highway, can be changed to results/highway_lqr
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -253,6 +253,12 @@ if __name__ == "__main__":
         hist = np.array(hist, dtype=np.float64)
         js = scipy.spatial.distance.jensenshannon(gt, hist)
         print(f"{DATA_SOURCES[alg]['display_name']} JS: {js}")
+
+    # Also give the failure rate on prior data
+    failure_level = summary_data["mala_tempered"][0]["failure_level"]
+    print(
+        f"Failure rate from prior: {(summary_data['random_sample_costs'] >= failure_level).mean()}"
+    )
 
     # Plot!
     plt.figure(figsize=(12, 8))
