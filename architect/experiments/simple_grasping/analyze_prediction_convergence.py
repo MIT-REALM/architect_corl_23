@@ -19,28 +19,28 @@ from architect.experiments.simple_grasping.predict_and_mitigate import (
 from architect.systems.simple_grasping.policy import AffordancePredictor
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = (
-    "results/grasping_bowl/predict/convergence_summary_gradnorm_mcmc_1.0e-01.json"
+    "results/grasping_mug/predict/convergence_summary_gradnorm_mcmc_1.0e-02.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/grasping_bowl/predict/L_1.0e+01/20_samples_20x1/10_chains/0_quench/dp_1.0e-01/ep_1.0e-01/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -263,6 +263,20 @@ if __name__ == "__main__":
         df[df["Diffusion steps"] >= 5]
         .groupby(["Algorithm"])["# failures discovered"]
         .std()
+        / 10
+    )
+    print("Collision rate (75th)")
+    print(
+        df[df["Diffusion steps"] >= 5]
+        .groupby(["Algorithm"])["# failures discovered"]
+        .quantile(0.75)
+        / 10
+    )
+    print("Collision rate (25)")
+    print(
+        df[df["Diffusion steps"] >= 5]
+        .groupby(["Algorithm"])["# failures discovered"]
+        .quantile(0.25)
         / 10
     )
 

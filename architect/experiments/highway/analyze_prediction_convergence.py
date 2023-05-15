@@ -289,6 +289,20 @@ if __name__ == "__main__":
         .std()
         / 10
     )
+    print("Collision rate (75th)")
+    print(
+        df[df["Diffusion steps"] >= 25]
+        .groupby(["Algorithm"])["# failures discovered"]
+        .quantile(0.75)
+        / 10
+    )
+    print("Collision rate (25)")
+    print(
+        df[df["Diffusion steps"] >= 25]
+        .groupby(["Algorithm"])["# failures discovered"]
+        .quantile(0.25)
+        / 10
+    )
 
     # Plot!
     plt.figure(figsize=(12, 8))

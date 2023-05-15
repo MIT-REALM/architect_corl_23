@@ -8,11 +8,15 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyemd
+import scipy
 import seaborn as sns
 from jaxtyping import Array, Shaped
+from tqdm import tqdm
 
 from architect.experiments.intersection.predict_and_mitigate import (
     non_ego_actions_prior_logprob,
+    sample_non_ego_actions,
     simulate,
 )
 from architect.experiments.intersection.train_intersection_agent_bc import (
@@ -21,14 +25,21 @@ from architect.experiments.intersection.train_intersection_agent_bc import (
 from architect.systems.highway.highway_env import HighwayState
 from architect.systems.intersection.policy import DrivingPolicy
 
+# How many monte carlo trials to use to compute true failure rate
+N = 1000
+BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
-SUMMARY_PATH = (
+SUMMARY_PATH = "results/intersection_lqr_patch/predict/coverage_summary.json"
+# path to load convergence data from
+CONVERGENCE_SUMMARY_PATH = (
     "results/intersection_lqr_patch/predict/convergence_summary_4_100steps_1e-3_20.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
+
+# These data sources are from results/highway, can be changed to results/intersection_lqr_patch
 DATA_SOURCES = {
     "mala_tempered": {
         "path_prefix": "results/intersection_lqr_patch/predict/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered",
@@ -49,6 +60,7 @@ DATA_SOURCES = {
 }
 
 
+# This is the same function as in drone_landing/analyze_prediction_coverage
 def load_data_sources_from_json():
     """Load data sources from a JSON file."""
     loaded_data = {}
@@ -94,9 +106,9 @@ def load_data_sources_from_json():
     return loaded_data
 
 
-def get_costs(loaded_data):
-    """Get the cost at each step of each algorithm in the loaded data."""
-    # Pre-compile the same cost function for all
+# This is the same function as in drone_landing/analyze_prediction_coverage, added initial state from highway/analyze_prediction_converge
+def monte_carlo_test(N, batches, loaded_data):
+    """Stress test the given policy using N samples in batches"""
     alg = "mala_tempered"
     image_shape = (32, 32)
     env = make_intersection_env(image_shape)
@@ -118,42 +130,58 @@ def get_costs(loaded_data):
         loaded_data[alg][0]["T"],
     ).potential
     cost_fn = jax.jit(cost_fn)
-    ep_logprior_fn = jax.jit(
-        lambda ep: non_ego_actions_prior_logprob(
-            ep, env, loaded_data[alg][0]["noise_scale"]
-        )
+
+    sample_fn = lambda key: sample_non_ego_actions(
+        key,
+        env,
+        horizon=loaded_data[alg][0]["T"],
+        n_non_ego=2,
+        noise_scale=0.5,
     )
 
-    for alg in loaded_data:
-        for i, result in enumerate(loaded_data[alg]):
-            print(f"Computing costs for {alg}, seed {i}...")
-            eps = result["eps_trace"]
+    # Sample N environmental parameters at random
+    key = jax.random.PRNGKey(0)
+    costs = []
+    print("Running stress test...")
+    for _ in tqdm(range(batches)):
+        key, subkey = jax.random.split(key)
+        initial_state_keys = jax.random.split(subkey, N)
+        eps = jax.vmap(sample_fn)(initial_state_keys)
+        costs.append(jax.vmap(cost_fn)(eps))
 
-            result["ep_costs"] = jax.vmap(jax.vmap(cost_fn))(eps)
-            result["ep_logpriors"] = jax.vmap(jax.vmap(ep_logprior_fn))(eps)
-            result["ep_logprobs"] = result["ep_logpriors"] - jax.nn.elu(
-                result["failure_level"] - result["ep_costs"]
-            )
-
-    return loaded_data
+    return jnp.concatenate(costs)
 
 
 if __name__ == "__main__":
     # Activate seaborn styling
-    sns.set_theme(context="paper", style="whitegrid", font_scale=1.5)
+    sns.set_theme(context="paper", style="whitegrid")
+
+    # Load convergence data (has costs for each algorithm)
+    with open(CONVERGENCE_SUMMARY_PATH, "rb") as f:
+        convergence_summary_data = json.load(f)
+
+        for alg in convergence_summary_data:
+            for result in convergence_summary_data[alg]:
+                result["ep_costs"] = jnp.array(result["ep_costs"])
+                result["ep_logpriors"] = jnp.array(result["ep_logpriors"])
+                result["ep_logprobs"] = jnp.array(result["ep_logprobs"])
 
     if REANALYZE or not os.path.exists(SUMMARY_PATH):
         # Load the data
         data = load_data_sources_from_json()
 
         # Compute costs
-        data = get_costs(data)
+        monte_carlo_costs = monte_carlo_test(N, BATCHES, data)
 
         # Extract the summary data we want to save
-        summary_data = {}
+        summary_data = {
+            "random_sample_costs": monte_carlo_costs,
+            "N": N,
+            "batches": BATCHES,
+        }
         for alg in data:
             summary_data[alg] = []
-            for result in data[alg]:
+            for result in convergence_summary_data[alg]:
                 summary_data[alg].append(
                     {
                         "display_name": result["display_name"],
@@ -178,150 +206,94 @@ if __name__ == "__main__":
         with open(SUMMARY_PATH, "rb") as f:
             summary_data = json.load(f)
 
-            for alg in summary_data:
+            summary_data["random_sample_costs"] = jnp.array(
+                summary_data["random_sample_costs"]
+            )
+            for alg in DATA_SOURCES:
                 for result in summary_data[alg]:
                     result["ep_costs"] = jnp.array(result["ep_costs"])
                     result["ep_logpriors"] = jnp.array(result["ep_logpriors"])
                     result["ep_logprobs"] = jnp.array(result["ep_logprobs"])
 
-    # Post-process
+    # Post-process into a dataframe
+    df = pd.DataFrame(
+        {
+            "Algorithm": "Monte Carlo from prior",
+            "Cost": summary_data["random_sample_costs"],
+        }
+    )
     for alg in DATA_SOURCES:
         for result in summary_data[alg]:
-            failure_level = result["failure_level"]
-            costs = result["ep_costs"]
-            num_failures = (costs >= failure_level).sum(axis=-1)
-            # # Cumulative max = 'how many failures have we seen so far?'
-            # num_failures = jax.lax.cummax(num_failures)
-            # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
-            num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
-            result["num_failures"] = num_failures
-
-    # Make into pandas dataframe
-    iters = pd.Series([], dtype=int)
-    logprobs = pd.Series([], dtype=float)
-    costs = pd.Series([], dtype=float)
-    num_failures = pd.Series([], dtype=float)
-    algs = pd.Series([], dtype=str)
-    seeds = pd.Series([], dtype=int)
-    for alg in DATA_SOURCES:
-        for seed_i, result in enumerate(summary_data[alg]):
-            num_iters = result["ep_logprobs"].shape[0]
-            num_chains = result["ep_logprobs"].shape[1]
-
-            # Add the number of failures discovered initially
-            iters = pd.concat(
-                [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
-            )
-            seeds = pd.concat(
-                [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
-                ignore_index=True,
-            )
-            num_failures = pd.concat(
+            df = pd.concat(
                 [
-                    num_failures,
-                    pd.Series([float(result["num_failures"][0])] * num_chains),
-                ],
-                ignore_index=True,
-            )
-            logprobs = pd.concat(
-                [logprobs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
-            )
-            costs = pd.concat(
-                [costs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
-            )
-            algs = pd.concat(
-                [algs, pd.Series([result["display_name"]] * num_chains)],
-                ignore_index=True,
+                    df,
+                    pd.DataFrame(
+                        {
+                            "Algorithm": result["display_name"],
+                            "Cost": result["ep_costs"].flatten(),
+                        }
+                    ),
+                ]
             )
 
-            # Add the data for the rest of the iterations
-            for i in range(num_iters):
-                iters = pd.concat(
-                    [iters, pd.Series(jnp.zeros(num_chains, dtype=int) + i + 1)],
-                    ignore_index=True,
-                )
-                seeds = pd.concat(
-                    [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
-                    ignore_index=True,
-                )
-                logprobs = pd.concat(
-                    [logprobs, pd.Series(result["ep_logprobs"][i, :])],
-                    ignore_index=True,
-                )
-                costs = pd.concat(
-                    [
-                        costs,
-                        pd.Series(
-                            -jax.nn.elu(
-                                result["failure_level"] - result["ep_costs"][i, :]
-                            )
-                        ),
-                    ],
-                    ignore_index=True,
-                )
-                num_failures = pd.concat(
-                    [
-                        num_failures,
-                        pd.Series([float(result["num_failures"][i + 1])] * num_chains),
-                    ],
-                    ignore_index=True,
-                )
-                algs = pd.concat(
-                    [algs, pd.Series([result["display_name"]] * num_chains)],
-                    ignore_index=True,
-                )
+    # Compute wassertein distance of each algorithm from the prior
+    bins = 10
+    gt, gt_bins = jnp.histogram(
+        summary_data["random_sample_costs"],
+        bins,
+        density=True,
+        weights=jnp.exp(-jax.nn.elu(0.0 - summary_data["random_sample_costs"])),
+    )
+    gt_bin_centers = (gt_bins[1:] + gt_bins[:-1]) / 2.0
+    print(
+        "Wasserstein distance from ground truth (importance sampling w. "
+        + f"N={summary_data['N'] * summary_data['batches']}):"
+    )
+    for alg in DATA_SOURCES:
+        costs = jnp.concatenate(
+            [x["ep_costs"][10:].reshape(-1) for x in summary_data[alg]]
+        )
+        hist, hist_bins = jnp.histogram(costs, bins, density=True)
+        hist_bin_centers = (hist_bins[1:] + hist_bins[:-1]) / 2.0
 
-    df = pd.DataFrame()
-    df["Diffusion steps"] = iters
-    df["Overall log likelihood"] = logprobs
-    df["$[J^* - J]_+$"] = costs
-    df["# failures discovered"] = num_failures
-    df["Algorithm"] = algs
-    df["Seed"] = seeds
+        distance = lambda x, y: jnp.linalg.norm(x - y)
+        distance_to_gt = lambda x: jax.vmap(distance, in_axes=(0, None))(
+            gt_bin_centers, x
+        )
+        distance_matrix = jax.vmap(distance_to_gt)(hist_bin_centers)
 
-    print("Collision rate (mean)")
-    print(
-        df[df["Diffusion steps"] >= 25]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .mean()
-        / 10
-    )
-    print("Collision rate (std)")
-    print(
-        df[df["Diffusion steps"] >= 25]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .std()
-        / 10
-    )
-    print("Collision rate (75th)")
-    print(
-        df[df["Diffusion steps"] >= 25]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .quantile(0.75)
-        / 10
-    )
-    print("Collision rate (25)")
-    print(
-        df[df["Diffusion steps"] >= 25]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .quantile(0.25)
-        / 10
-    )
+        wasserstein = pyemd.emd(
+            np.array(gt, dtype=np.float64),
+            np.array(hist, dtype=np.float64),
+            np.array(distance_matrix, dtype=np.float64),
+        )
+        print(f"{DATA_SOURCES[alg]['display_name']}: {wasserstein}")
+
+    # Also compute and print the JS divergence
+    print(f"JS divergence from ground truth (importance sampling w. {N * BATCHES}):")
+    for alg in DATA_SOURCES:
+        costs = jnp.concatenate(
+            [x["ep_costs"][50:].reshape(-1) for x in summary_data[alg]]
+        )
+        # re-compute the histogram to use the same bins as the ground truth
+        hist, hist_bins = jnp.histogram(costs, bins, density=True)
+
+        # Convert to numpy
+        gt = np.array(gt, dtype=np.float64)
+        hist = np.array(hist, dtype=np.float64)
+        js = scipy.spatial.distance.jensenshannon(gt, hist)
+        print(f"{DATA_SOURCES[alg]['display_name']} JS: {js}")
 
     # Plot!
     plt.figure(figsize=(12, 8))
-    # sns.barplot(
-    #     data=df[(df["Diffusion steps"] % 10 == 0)],
-    #     x="Diffusion steps",
-    #     y="# failures discovered",
-    #     hue="Algorithm",
-    # )
-    sns.lineplot(
+    sns.violinplot(
+        x="Algorithm",
+        y="Cost",
+        # showfliers=False,
+        # outlier_prop=1e-7,
+        # flier_kws={"s": 20},
         data=df,
-        x="Diffusion steps",
-        y="# failures discovered",
-        hue="Algorithm",
-        linewidth=3,
     )
+    plt.gca().set_xlabel("")
 
     plt.show()
