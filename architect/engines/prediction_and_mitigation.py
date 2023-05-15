@@ -176,7 +176,12 @@ def predict_and_mitigate_failure_modes(
         i += 1
 
         # If we're in the last round, turn off stochasticity if we're quenching
-        stochasticity = jax.lax.cond(
+        ep_stochasticity = jax.lax.cond(
+            jnp.logical_and(not quench_dps, i > num_rounds - quench_rounds),
+            lambda: False,
+            lambda: use_stochasticity,
+        )
+        dp_stochasticity = jax.lax.cond(
             i > num_rounds - quench_rounds,
             lambda: False,
             lambda: use_stochasticity,
@@ -202,10 +207,7 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Make the sampling kernel
-            if quench_dps:
-                dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, False)
-            else:
-                dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, stochasticity)
+            dp_kernel = make_kernel(dp_logprob_fn, dp_mcmc_step_size, dp_stochasticity)
 
             # Run the chains and update the design parameters
             n_chains = initial_dp_sampler_states.logdensity.shape[0]
@@ -242,7 +244,7 @@ def predict_and_mitigate_failure_modes(
             )
 
             # Make the sampling kernel
-            ep_kernel = make_kernel(ep_logprob_fn, ep_mcmc_step_size, stochasticity)
+            ep_kernel = make_kernel(ep_logprob_fn, ep_mcmc_step_size, ep_stochasticity)
 
             # Run the chains and update the design parameters
             n_chains = initial_ep_sampler_states.logdensity.shape[0]

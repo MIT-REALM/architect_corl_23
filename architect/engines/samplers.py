@@ -56,6 +56,10 @@ def init_sampler(
         lambda: normalized_logdensity_grad,
         lambda: logdensity_grad,
     )
+    # Drop nans
+    logdensity_grad = jtu.tree_map(
+        lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), logdensity_grad
+    )
 
     return SamplerState(position, logdensity, logdensity_grad, jnp.array(0))
 
@@ -190,6 +194,10 @@ def make_kernel(
             normalize_gradients,
             lambda: normalized_new_grad,
             lambda: new_grad,
+        )
+        # Drop nans
+        new_grad = jtu.tree_map(
+            lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), new_grad
         )
         new_state = SamplerState(
             new_position,
