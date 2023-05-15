@@ -58,7 +58,7 @@ def dlqr(A, B, Q, R):
 
 
 # get LQR gains
-v = 2.0
+v = 4.5
 dt = 0.1
 A = lambda theta: np.array(
     [
@@ -197,8 +197,18 @@ def simulate(
 
         # The action passed in is a residual applied to a stabilizing policy for each
         # non-ego agent
-        compute_lqr = lambda non_ego_state, target_state: -K @ (
+        compute_lqr_left = lambda non_ego_state, target_state: -K_left @ (
             non_ego_state - target_state
+        )
+        compute_lqr_right = lambda non_ego_state, target_state: -K_left @ (
+            non_ego_state - target_state
+        )
+        compute_lqr = lambda non_ego_state, target_state: jax.lax.cond(
+            non_ego_state[2] < 0.0,
+            compute_lqr_left,
+            compute_lqr_right,
+            non_ego_state,
+            target_state,
         )
         non_ego_stable_action = jax.vmap(compute_lqr)(
             state.non_ego_states,
@@ -208,7 +218,11 @@ def simulate(
         # Take a step in the environment using the action carried over from the previous
         # step.
         next_state, next_observation, reward, done = env.step(
-            state, action, non_ego_action + non_ego_stable_action, step_subkey
+            state,
+            action,
+            non_ego_action + non_ego_stable_action,
+            step_subkey,
+            eval=True,
         )
 
         # Compute the action for the next step
@@ -240,7 +254,7 @@ def simulate(
     final_obs = env.get_obs(final_state)
 
     # The potential is the negative of the (soft) minimum reward observed
-    potential = -softmin(reward, sharpness=1.0)
+    potential = -softmin(reward, sharpness=5.0)
 
     return SimulationResults(
         potential,
@@ -260,14 +274,14 @@ if __name__ == "__main__":
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
     parser.add_argument("--failure_level", type=int, nargs="?", default=0.0)
-    parser.add_argument("--T", type=int, nargs="?", default=60)
+    parser.add_argument("--T", type=int, nargs="?", default=100)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
-    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
-    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
+    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-3)
+    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-3)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
-    parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=10)
+    parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=1)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
     parser.add_argument("--disable_gradients", action="store_true")
@@ -382,7 +396,7 @@ if __name__ == "__main__":
     prng_key, ep_key = jrandom.split(prng_key)
     ep_keys = jrandom.split(ep_key, num_chains)
     initial_eps = jax.vmap(
-        lambda key: sample_non_ego_actions(key, env, T, 2, noise_scale)
+        lambda key: sample_non_ego_actions(key, env, T, 3, noise_scale)
     )(ep_keys)
 
     # Choose which sampler to use
@@ -519,6 +533,8 @@ if __name__ == "__main__":
     axs["trajectory"].plot([-7.5 - 15, -7.5, -7.5], [-7.5, -7.5, -7.5 - 15], "k--")
     axs["trajectory"].plot([7.5 + 15, 7.5, 7.5], [7.5, 7.5, 7.5 + 15], "k--")
     axs["trajectory"].plot([7.5 + 15, 7.5, 7.5], [-7.5, -7.5, -7.5 - 15], "k--")
+    axs["trajectory"].set_xlim([-7.5 - 15, 7.5 + 15])
+    axs["trajectory"].set_ylim([-7.5 - 15, 7.5 + 15])
     for chain_idx in range(num_chains):
         axs["trajectory"].plot(
             result.ego_trajectory[chain_idx, :, 0].T,
@@ -534,12 +550,24 @@ if __name__ == "__main__":
             color=plt.cm.plasma(normalized_potential[chain_idx]),
             label="Non-ego 1" if chain_idx == 0 else None,
         )
+        axs["trajectory"].scatter(
+            result.non_ego_trajectory[chain_idx, 0, 0, 0],
+            result.non_ego_trajectory[chain_idx, 0, 0, 1],
+            marker="o",
+            color="k",
+        )
         axs["trajectory"].plot(
             result.non_ego_trajectory[chain_idx, :, 1, 0],
             result.non_ego_trajectory[chain_idx, :, 1, 1],
             linestyle="--",
             color=plt.cm.plasma(normalized_potential[chain_idx]),
             label="Non-ego 2" if chain_idx == 0 else None,
+        )
+        axs["trajectory"].scatter(
+            result.non_ego_trajectory[chain_idx, 0, 1, 0],
+            result.non_ego_trajectory[chain_idx, 0, 1, 1],
+            marker="o",
+            color="k",
         )
         axs["trajectory"].plot(
             result.non_ego_trajectory[chain_idx, :, 2, 0],
@@ -548,6 +576,13 @@ if __name__ == "__main__":
             color=plt.cm.plasma(normalized_potential[chain_idx]),
             label="Non-ego 3" if chain_idx == 0 else None,
         )
+        axs["trajectory"].scatter(
+            result.non_ego_trajectory[chain_idx, 0, 2, 0],
+            result.non_ego_trajectory[chain_idx, 0, 2, 1],
+            marker="o",
+            color="k",
+        )
+    axs["trajectory"].set_aspect("equal")
 
     # Plot the reward across all failure cases
     axs["reward"].plot(result.potential, "ko")

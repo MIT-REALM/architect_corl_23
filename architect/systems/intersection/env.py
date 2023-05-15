@@ -134,6 +134,7 @@ class IntersectionEnv:
         ego_action: Float[Array, " n_actions"],
         non_ego_actions: Float[Array, "n_non_ego n_actions"],
         key: PRNGKeyArray,
+        eval: bool = False,
     ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""], Bool[Array, ""]]:
         """Take a step in the environment.
 
@@ -147,6 +148,8 @@ class IntersectionEnv:
             non_ego_actions: the control action to take for all other vehicles
                 (acceleration and steering angle)
             key: a random number generator key
+            eval: whether to evaluate the environment (i.e. only include collision
+                information in the reward)
 
         Returns:
             The next state of the environment, the observations, the reward, and a
@@ -190,7 +193,7 @@ class IntersectionEnv:
         moving_forward_reward = 1.0 * (next_ego_state[0] - ego_state[0]) / self._dt
 
         # A reward for waiting patiently
-        waiting_reward = -1.0 * next_ego_state[3] ** 2
+        waiting_reward = -(moving_forward_reward**2)
 
         # Figure out which reward to use
         ego_at_intersection = next_ego_state[0] >= -10.0
@@ -199,11 +202,12 @@ class IntersectionEnv:
             axis=0,
         )
         reward = collision_reward
-        reward += jax.lax.cond(
-            jnp.logical_and(ego_at_intersection, non_egos_in_intersection),
-            lambda: waiting_reward,
-            lambda: moving_forward_reward,
-        )
+        if not eval:
+            reward += jax.lax.cond(
+                jnp.logical_and(ego_at_intersection, non_egos_in_intersection),
+                lambda: waiting_reward,
+                lambda: moving_forward_reward,
+            )
 
         # The episode ends when a collision occurs, at which point we reset the
         # environment (or if we run out of road)
