@@ -274,10 +274,7 @@ if __name__ == "__main__":
     # Create a test highway scene and render it
     highway = IntersectionScene()
     car_states = jnp.array(
-        [
-            [-10.0, 0.0, 0.0],
-            [10.0, 0.0, 0.0],
-        ]
+        [[-3.75, -7.5, -jnp.pi / 2], [-3.75, 1, -jnp.pi / 2], [3.75, 10, jnp.pi / 2]]
     )
 
     # Set the camera parameters
@@ -287,13 +284,17 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([-15.0, -15, 15]),
-        camera_R_to_world=look_at(jnp.array([-15.0, -15, 15]), jnp.zeros(3)),
+        camera_origin=jnp.array([-20, -2, 2.5]),
+        camera_R_to_world=look_at(jnp.array([-20, -2, 2.5]), jnp.zeros(3)),
     )
 
-    light_direction = jnp.array([0.0, 0.0, 1.5])
+    light_direction = jnp.array([-1.0, -1.0, 1.5])
     depth_image, color_image = highway.render_rgbd(
-        intrinsics, extrinsics, car_states, shading_light_direction=light_direction
+        intrinsics,
+        extrinsics,
+        car_states,
+        shading_light_direction=light_direction,
+        car_colors=jax.random.uniform(jax.random.PRNGKey(0), (3, 3)),
     )
 
     _, axs = plt.subplots(1, 2)

@@ -243,19 +243,28 @@ if __name__ == "__main__":
     # around the landing pad (excluding the landing pad)
     num_trees = 5
     tree_locations = jax.random.uniform(
-        jax.random.PRNGKey(0),
+        jax.random.PRNGKey(2),
         shape=(num_trees, 2),
         minval=jnp.array([-8.0, -4.0]),
         maxval=jnp.array([-1.0, 4.0]),
+    )
+    tree_locations = jnp.array(
+        [
+            [-5.0, 0.0],
+            [-3.0, 0.0],
+            [-1.0, 0.0],
+            [-7.0, 0.0],
+            [-9.0, 0.0],
+        ]
     )
 
     # Set the camera parameters
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
-        resolution=(128, 128),
+        resolution=(512, 512),
     )
-    camera_pos = jnp.array([-10.0, 0.0, 0.5])
+    camera_pos = jnp.array([-10.0, 0.0, 1.0])
     # R_straight_down = jnp.array(
     #     [
     #         [1.0, 0.0, 0.0],
@@ -281,7 +290,7 @@ if __name__ == "__main__":
         camera_R_to_world=R_forward,
     )
 
-    light_direction = jnp.array([-1.0, -1.0, 5.0])
+    light_direction = jnp.array([-1.0, -1.0, 1.0])
     _, color_image = scene.render_rgbd(
         intrinsics,
         extrinsics,

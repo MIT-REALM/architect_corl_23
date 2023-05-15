@@ -371,7 +371,7 @@ def render_rgbd(
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
-        resolution=(64, 64),
+        resolution=(512, 512),
     )
     R = look_at(camera_pos, jnp.zeros(3))
     extrinsics = CameraExtrinsics(
@@ -413,19 +413,20 @@ if __name__ == "__main__":
     # Reduce color image to single channel
     color_image = jnp.mean(color_image, axis=-1)
 
-    # Create the affordance predictor
-    key = jax.random.PRNGKey(0)
-    affordance_predictor = AffordancePredictor(key)
-    prediction, _ = affordance_predictor(depth_image)
+    # # Create the affordance predictor
+    # key = jax.random.PRNGKey(0)
+    # affordance_predictor = AffordancePredictor(key)
+    # prediction, _ = affordance_predictor(depth_image)
 
     _, axs = plt.subplots(1, 3, figsize=(12, 4))
     axs[0].set_title("Depth")
     axs[0].imshow((depth_image).T)
     axs[1].set_title("GT Affordance")
     axs[1].imshow(color_image.T)
-    axs[2].set_title("Predicted Affordance")
-    axs[2].imshow((prediction).T)
-    plt.savefig("test.png")
+    # axs[2].set_title("Predicted Affordance")
+    # axs[2].imshow((prediction).T)
+    # plt.savefig("test.png")
+    plt.show()
 
     contact_pt = jnp.array([0.15, 0.5, 0.2])
     normal = normal_at_point(scene, contact_pt)

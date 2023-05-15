@@ -122,15 +122,12 @@ class Car(NamedTuple):
 
         l_all = self.l_cabin + self.l_trunk + self.l_hood
         # The wheels are rotated 90 degrees around the x axis from the car
-        wheel_rotation = (
-            jnp.array(
-                [
-                    [1, 0, 0],
-                    [0, 0, -1],
-                    [0, 1, 0],
-                ]
-            )
-            @ rotation
+        wheel_rotation = rotation @ jnp.array(
+            [
+                [1, 0, 0],
+                [0, 0, -1],
+                [0, 1, 0],
+            ]
         )
         wheel_color = jnp.array([45, 48, 71]) / 255.0
         wheels = [
@@ -410,11 +407,11 @@ if __name__ == "__main__":
         resolution=(512, 512),
     )
     extrinsics = CameraExtrinsics(
-        camera_origin=jnp.array([-100.0, 10, 10]),
-        camera_R_to_world=look_at(jnp.array([-100.0, 10, 10]), jnp.zeros(3)),
+        camera_origin=jnp.array([-100.0, -1.5, 2.0]),
+        camera_R_to_world=look_at(jnp.array([-100.0, -1.5, 2.0]), jnp.zeros(3)),
     )
 
-    light_direction = jnp.array([-0.2, -1.0, 1.5])
+    light_direction = jnp.array([-1.0, -1.0, 1.5])
     depth_image, color_image = highway.render_rgbd(
         intrinsics, extrinsics, car_states, shading_light_direction=light_direction
     )
