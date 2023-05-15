@@ -42,6 +42,11 @@ def init_sampler(
     grad_fn = jax.value_and_grad(logdensity_fn)
     logdensity, logdensity_grad = grad_fn(position)
 
+    # Drop nans
+    logdensity_grad = jtu.tree_map(
+        lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), logdensity_grad
+    )
+
     # Normalize the gradients if requested
     overall_grad_norm = jnp.sqrt(
         jtu.tree_reduce(
@@ -55,10 +60,6 @@ def init_sampler(
         normalize_gradients,
         lambda: normalized_logdensity_grad,
         lambda: logdensity_grad,
-    )
-    # Drop nans
-    logdensity_grad = jtu.tree_map(
-        lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), logdensity_grad
     )
 
     return SamplerState(position, logdensity, logdensity_grad, jnp.array(0))
@@ -181,6 +182,12 @@ def make_kernel(
         # Make the state proposal
         new_position = jtu.tree_map(lambda x, dx: x + dx, state.position, delta_x)
         new_logdensity, new_grad = jax.value_and_grad(logdensity_fn)(new_position)
+
+        # Drop nans
+        new_grad = jtu.tree_map(
+            lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), new_grad
+        )
+
         # Normalize the gradients if requested
         overall_grad_norm = jnp.sqrt(
             jtu.tree_reduce(
@@ -195,10 +202,7 @@ def make_kernel(
             lambda: normalized_new_grad,
             lambda: new_grad,
         )
-        # Drop nans
-        new_grad = jtu.tree_map(
-            lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), new_grad
-        )
+
         new_state = SamplerState(
             new_position,
             new_logdensity,
