@@ -22,7 +22,7 @@ from architect.systems.highway.highway_env import HighwayState
 from architect.systems.intersection.policy import DrivingPolicy
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = (
     "results/intersection_lqr_patch/predict/convergence_summary_4_100steps_1e-3_20.json"
@@ -281,18 +281,34 @@ if __name__ == "__main__":
 
     print("Collision rate (mean)")
     print(
-        df[df["Diffusion steps"] >= 50]
+        df[df["Diffusion steps"] >= 25]
         .groupby(["Algorithm"])["# failures discovered"]
         .mean()
         / 10
     )
     print("Collision rate (std)")
     print(
-        df[df["Diffusion steps"] >= 50]
+        df[df["Diffusion steps"] >= 25]
         .groupby(["Algorithm"])["# failures discovered"]
         .std()
         / 10
     )
+    print("Collision rate (95th)")
+    print(
+        df[df["Diffusion steps"] >= 25]
+        .groupby(["Algorithm"])["# failures discovered"] 
+        .quantile(0.75)
+        / 10
+    )
+    print("Collision rate (std)")
+    print(
+        df[df["Diffusion steps"] >= 25]
+        .groupby(["Algorithm"])["# failures discovered"] 
+        .quantile(0.25)
+        / 10
+    )
+
+
 
     # Plot!
     plt.figure(figsize=(12, 8))
