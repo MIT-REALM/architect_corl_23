@@ -135,7 +135,7 @@ def monte_carlo_test(N, batches, loaded_data):
         key,
         env,
         horizon=loaded_data[alg][0]["T"],
-        n_non_ego=2,
+        n_non_ego=3,
         noise_scale=0.5,
     )
 
