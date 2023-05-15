@@ -27,7 +27,7 @@ from architect.systems.highway.highway_env import HighwayState
 N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to in predict_repair folder
 SUMMARY_PATH = "results/highway_lqr/predict_repair_1.0/stress_test.json"
 # Define data sources from individual experiments
@@ -41,14 +41,14 @@ DATA_SOURCES = {
         "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
         "display_name": "ROCUS",
     },
-    "gd": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
-        "display_name": "ML",
-    },
-    "reinforce": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
-        "display_name": "L2C",
-    },
+    # "gd": {
+    #     "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
+    #     "display_name": "ML",
+    # },
+    # "reinforce": {
+    #     "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
+    #     "display_name": "L2C",
+    # },
 }
 
 
@@ -193,19 +193,16 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Algorithm": result["display_name"],
-                        "Cost": result["ep_costs"].flatten(),
+                        "Cost": result["costs"].flatten(),
                     }
                 )
             )
 
     # Plot!
     plt.figure(figsize=(12, 8))
-    sns.boxenplot(
+    sns.violinplot(
         x="Algorithm",
         y="Cost",
-        showfliers=False,
-        outlier_prop=1e-7,
-        # flier_kws={"s": 20},
         data=df,
     )
     plt.gca().set_xlabel("")
