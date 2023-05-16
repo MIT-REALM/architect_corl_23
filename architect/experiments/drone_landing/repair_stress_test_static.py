@@ -23,7 +23,7 @@ from architect.systems.drone_landing.policy import DroneLandingPolicy
 N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to in predict_repair_0.1 folder
 SUMMARY_PATH = (
     "results/drone_landing_smooth/predict_repair_0.1/stress_test_dp_1.0e-02_+0.json"
@@ -187,6 +187,11 @@ if __name__ == "__main__":
         df.groupby(["Algorithm", "Seed"])["Cost"].mean().groupby(["Algorithm"]).std()
         / 2
     )
+    print("Cost (75th)")
+    print(df.groupby(["Algorithm"])["Cost"].quantile(0.75))
+    print("Cost (25th)")
+    print(df.groupby(["Algorithm"])["Cost"].quantile(0.25))
+
     print(f"Failure rate level={failure_level}")
     print(df.groupby(["Algorithm"])["Failure"].mean())
     print(f"Failure rate {failure_level} stderr")
