@@ -215,6 +215,9 @@ if __name__ == "__main__":
     image_shape = (32, 32)
     env = make_drone_landing_env(image_shape, num_trees, moving_obstacles)
     env._collision_penalty = 2e2
+    # If it's repair time, substep for extra efficiency
+    if repair:
+        env._substeps = 2
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition

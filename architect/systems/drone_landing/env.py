@@ -70,6 +70,7 @@ class DroneLandingEnv:
             any obstacle in the scene.
         render_sharpness: the sharpness of the scene.
         moving_obstacles: whether or not to move the obstacles in the scene.
+        substeps: the number of substeps to use for simulation.
     """
 
     _scene: DroneLandingScene
@@ -82,6 +83,7 @@ class DroneLandingEnv:
     _initial_drone_state_stddev: Float[Array, " n_states"]
     _wind_speed_stddev: Float[Array, " "]
     _moving_obstacles: bool
+    _substeps: int
 
     @jaxtyped
     @beartype
@@ -95,6 +97,7 @@ class DroneLandingEnv:
         collision_penalty: float = 100.0,
         render_sharpness: float = 100.0,
         moving_obstacles: bool = False,
+        substeps: int = 1,
     ):
         """Initialize the environment."""
         self._scene = scene
@@ -107,6 +110,7 @@ class DroneLandingEnv:
         self._collision_penalty = collision_penalty
         self._render_sharpness = render_sharpness
         self._moving_obstacles = moving_obstacles
+        self._substeps = substeps
 
     @jaxtyped
     @beartype
@@ -173,10 +177,12 @@ class DroneLandingEnv:
         drone_state, tree_locations, tree_velocities, wind_speed = state
 
         # Compute the next state of the drone
-        next_drone_state = self.drone_dynamics(drone_state, action, wind_speed)
-        # Compute the next state of the trees
-        if self._moving_obstacles:
-            tree_locations += self._dt * tree_velocities
+        next_drone_state = drone_state
+        for _ in range(self._substeps):
+            next_drone_state = self.drone_dynamics(next_drone_state, action, wind_speed)
+            # Compute the next state of the trees
+            if self._moving_obstacles:
+                tree_locations += self._dt * tree_velocities
 
         next_state = DroneState(
             next_drone_state, tree_locations, tree_velocities, wind_speed

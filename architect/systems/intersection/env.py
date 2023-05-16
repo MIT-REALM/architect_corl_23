@@ -44,6 +44,7 @@ class IntersectionEnv:
             any obstacle in the scene.
         max_render_dist: the maximum distance to render in the depth image.
         render_sharpness: the sharpness of the scene.
+        substeps: the number of substeps to use for simulation.
     """
 
     _scene: IntersectionScene
@@ -57,6 +58,7 @@ class IntersectionEnv:
     _initial_state_covariance: Float[Array, "n_states n_states"]
     _mean_shading_light_direction: Float[Array, " 3"]
     _shading_light_direction_covariance: Float[Array, " 3 3"]
+    _substeps: int
 
     _axle_length: float = 1.0
 
@@ -75,6 +77,7 @@ class IntersectionEnv:
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
+        substeps: int = 1,
     ):
         """Initialize the environment."""
         self._scene = scene
@@ -88,6 +91,7 @@ class IntersectionEnv:
         self._collision_penalty = collision_penalty
         self._max_render_dist = max_render_dist
         self._render_sharpness = render_sharpness
+        self._substeps = substeps
 
     @jaxtyped
     @beartype

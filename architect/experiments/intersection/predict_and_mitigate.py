@@ -357,6 +357,9 @@ if __name__ == "__main__":
     # Make the environment to use
     image_shape = (args.image_h, args.image_w)
     env = make_intersection_env(image_shape)
+    if repair:
+        T = T // 3
+        env._substeps = 3  # speed up sim for repair
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition
