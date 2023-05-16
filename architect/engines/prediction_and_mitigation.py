@@ -198,12 +198,12 @@ def predict_and_mitigate_failure_modes(
         if repair:
             # Create a loglikelihood function to minimize the average potential across
             # all currently predicted failure modes.
-            dp_potential_fn = lambda dp: jax.vmap(dp_potential_fn, in_axes=(None, 0))(
-                dp, current_eps
-            ).mean()
-            dp_logprob_fn = lambda dp: dp_logprior_fn(dp) + tempering * dp_potential_fn(
+            dp_mean_potential_fn = lambda dp: jax.vmap(
+                dp_potential_fn, in_axes=(None, 0)
+            )(dp, current_eps).mean()
+            dp_logprob_fn = lambda dp: dp_logprior_fn(
                 dp
-            )
+            ) + tempering * dp_mean_potential_fn(dp)
 
             # Initialize the chains for this kernel
             initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
@@ -234,13 +234,13 @@ def predict_and_mitigate_failure_modes(
             # Create a loglikelihood function that maximizes the minimum potential
             # across all current design parameters. Need to make this positive so that
             # large potentials/costs -> higher likelihoods
-            ep_potential_fn = lambda ep: softmin(
+            ep_mean_potential_fn = lambda ep: softmin(
                 jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
                 sharpness=0.05,
             )
-            ep_logprob_fn = lambda ep: ep_logprior_fn(ep) + tempering * ep_potential_fn(
+            ep_logprob_fn = lambda ep: ep_logprior_fn(
                 ep
-            )
+            ) + tempering * ep_mean_potential_fn(ep)
 
             # Initialize the chains for this kernel
             initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
