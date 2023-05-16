@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
     # Count failures
     failure_level = summary_data["mala_tempered"][0]["failure_level"]
-    failure_level = 50.0
+    failure_level = 25.0
     df["Failure"] = df["Cost"] >= failure_level
 
     # Print failure rates
@@ -187,10 +187,10 @@ if __name__ == "__main__":
         df.groupby(["Algorithm", "Seed"])["Cost"].mean().groupby(["Algorithm"]).std()
         / 2
     )
-    print("Cost (75th)")
-    print(df.groupby(["Algorithm"])["Cost"].quantile(0.75))
-    print("Cost (25th)")
-    print(df.groupby(["Algorithm"])["Cost"].quantile(0.25))
+    # print("Cost (75th)")
+    # print(df.groupby(["Algorithm"])["Cost"].quantile(0.75))
+    # print("Cost (25th)")
+    # print(df.groupby(["Algorithm"])["Cost"].quantile(0.25))
 
     print(f"Failure rate level={failure_level}")
     print(df.groupby(["Algorithm"])["Failure"].mean())

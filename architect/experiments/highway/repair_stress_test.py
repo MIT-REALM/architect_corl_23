@@ -29,7 +29,7 @@ BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
 # path to save summary data to in predict_repair folder
-SUMMARY_PATH = "results/highway_lqr/predict_repair_1.0/stress_test_dp_1.0e-03.json"
+SUMMARY_PATH = "results/highway_lqr/predict_repair_1.0/stress_test_dp_1.0e-03+0.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
@@ -41,14 +41,14 @@ DATA_SOURCES = {
         "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
         "display_name": "ROCUS",
     },
-    # "gd": {
-    #     "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
-    #     "display_name": "ML",
-    # },
-    # "reinforce": {
-    #     "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
-    #     "display_name": "L2C",
-    # },
+    "gd": {
+        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
+        "display_name": "ML",
+    },
+    "reinforce": {
+        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
+        "display_name": "L2C",
+    },
 }
 
 
