@@ -24,21 +24,21 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # How many monte carlo trials to use to compute true failure rate
-N = 100
+N = 10
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
 # path to save summary data to in predict_repair folder
-SUMMARY_PATH = "results/highway_lqr/predict_repair_1.0/stress_test.json"
+SUMMARY_PATH = "results/highway_lqr/predict_repair_1.0/stress_test_dp_1.0e-03.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered",
+        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/5_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered",
         "display_name": "Ours (tempered)",
     },
     "rmh": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
+        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
         "display_name": "ROCUS",
     },
     # "gd": {
@@ -186,17 +186,39 @@ if __name__ == "__main__":
                     result["costs"] = jnp.array(result["costs"])
 
     # Post-process into a dataframe
-    df = pd.DataFrame()
+    algs = []
+    costs = []
+    seeds = []
     for alg in DATA_SOURCES:
-        for result in summary_data[alg]:
-            df = df.append(
-                pd.DataFrame(
-                    {
-                        "Algorithm": result["display_name"],
-                        "Cost": result["costs"].flatten(),
-                    }
-                )
-            )
+        for seed, result in enumerate(summary_data[alg]):
+            algs += [result["display_name"]] * len(result["costs"])
+            costs += result["costs"].flatten().tolist()
+            seeds += [seed] * len(result["costs"])
+
+    df = pd.DataFrame({"Algorithm": algs, "Cost": costs, "Seed": seeds})
+
+    # Assign maximum cost to any nans
+    df["Cost"] = df["Cost"].fillna(df["Cost"].max())
+
+    # Count failures
+    failure_level = summary_data["mala_tempered"][0]["failure_level"]
+    df["Failure"] = df["Cost"] >= failure_level
+
+    # Print failure rates
+    print("Mean cost")
+    print(df.groupby(["Algorithm"])["Cost"].mean())
+    print("cost std err")
+    print(
+        df.groupby(["Algorithm", "Seed"])["Cost"].mean().groupby(["Algorithm"]).std()
+        / 2
+    )
+    print(f"Failure rate {failure_level}")
+    print(df.groupby(["Algorithm"])["Failure"].mean())
+    print(f"Failure rate {failure_level} stderr")
+    print(
+        df.groupby(["Algorithm", "Seed"])["Failure"].mean().groupby(["Algorithm"]).std()
+        / 2
+    )
 
     # Plot!
     plt.figure(figsize=(12, 8))
