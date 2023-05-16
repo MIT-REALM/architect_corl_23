@@ -371,7 +371,7 @@ def render_rgbd(
     intrinsics = CameraIntrinsics(
         focal_length=0.1,
         sensor_size=(0.1, 0.1),
-        resolution=(512, 512),
+        resolution=(64, 64),
     )
     R = look_at(camera_pos, jnp.zeros(3))
     extrinsics = CameraExtrinsics(
