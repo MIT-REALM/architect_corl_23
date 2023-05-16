@@ -29,7 +29,7 @@ from architect.systems.intersection.policy import DrivingPolicy
 N = 1000
 BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 # path to save summary data to
 SUMMARY_PATH = "results/intersection_lqr_patch/predict/coverage_summary.json"
 # path to load convergence data from
