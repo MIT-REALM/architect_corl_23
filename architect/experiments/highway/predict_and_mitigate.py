@@ -431,12 +431,15 @@ if __name__ == "__main__":
         initial_eps,
         dp_logprior_fn=dp_prior_logprob,
         ep_logprior_fn=lambda ep: non_ego_actions_prior_logprob(ep, env, noise_scale),
-        # potential_fn=lambda dp, ep: L
-        # * simulate(env, dp, initial_state, ep, static_policy, T).potential,
-        potential_fn=lambda dp, ep: -L
+        ep_potential_fn=lambda dp, ep: -L
         * jax.nn.elu(
             failure_level
             - simulate(env, dp, initial_state, ep, static_policy, T).potential
+        ),
+        dp_potential_fn=lambda dp, ep: -L
+        * jax.nn.elu(
+            simulate(env, dp, initial_state, ep, static_policy, T).potential
+            - failure_level
         ),
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,

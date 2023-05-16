@@ -299,10 +299,10 @@ if __name__ == "__main__":
         initial_eps,
         dp_logprior_fn=dp_prior_logprob,
         ep_logprior_fn=lambda ep: env.initial_state_logprior(ep),
-        potential_fn=lambda dp, ep: -L
+        ep_potential_fn=lambda dp, ep: -L
         * jax.nn.elu(failure_level - simulate(env, dp, ep, static_policy, T).potential),
-        # potential_fn=lambda dp, ep: L
-        # * simulate(env, dp, ep, static_policy, T).potential,
+        dp_potential_fn=lambda dp, ep: -L
+        * jax.nn.elu(simulate(env, dp, ep, static_policy, T).potential - failure_level),
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,
         num_rounds=num_rounds,

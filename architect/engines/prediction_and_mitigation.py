@@ -90,7 +90,8 @@ def predict_and_mitigate_failure_modes(
     exogenous_params: Params,
     dp_logprior_fn: LogLikelihood,
     ep_logprior_fn: LogLikelihood,
-    potential_fn: Callable[[Params, Params], Float[Array, ""]],
+    ep_potential_fn: Callable[[Params, Params], Float[Array, ""]],
+    dp_potential_fn: Callable[[Params, Params], Float[Array, ""]],
     init_sampler: Callable[[Params, LogLikelihood], PyTree],
     make_kernel: Callable[[LogLikelihood, float, bool], Sampler],
     num_rounds: int,
@@ -123,8 +124,12 @@ def predict_and_mitigate_failure_modes(
         ep_logprior_fn: function taking a single set of exogenous parameters,returning
             the non-normalized log probability of those parameters according to the
             prior distribution
-        potential_fn: function taking a single set of design and exogenous parameters,
-            returning the cost metric for the system's performance
+        ep_potential_fn: function taking a single set of design and exogenous parameters,
+            returning the cost metric for the system's performance. Used for EPs.
+            Higher potential -> higher likelihood.
+        dp_potential_fn: function taking a single set of design and exogenous parameters,
+            returning the cost metric for the system's performance. Used for DPs
+            Higher potential -> higher likelihood.
         init_sampler: function taking a single set of design parameters and a log
             likelihood function, returning the initial state for a sampler/optimization
             algorithm.
@@ -192,9 +197,8 @@ def predict_and_mitigate_failure_modes(
         ###############################################
         if repair:
             # Create a loglikelihood function to minimize the average potential across
-            # all currently predicted failure modes. Need to make this negative so that
-            # small potentials/costs -> higher likelihoods
-            dp_potential_fn = lambda dp: -jax.vmap(potential_fn, in_axes=(None, 0))(
+            # all currently predicted failure modes.
+            dp_potential_fn = lambda dp: jax.vmap(dp_potential_fn, in_axes=(None, 0))(
                 dp, current_eps
             ).mean()
             dp_logprob_fn = lambda dp: dp_logprior_fn(dp) + tempering * dp_potential_fn(
@@ -231,7 +235,7 @@ def predict_and_mitigate_failure_modes(
             # across all current design parameters. Need to make this positive so that
             # large potentials/costs -> higher likelihoods
             ep_potential_fn = lambda ep: softmin(
-                jax.vmap(potential_fn, in_axes=(0, None))(current_dps, ep),
+                jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
                 sharpness=0.05,
             )
             ep_logprob_fn = lambda ep: ep_logprior_fn(ep) + tempering * ep_potential_fn(

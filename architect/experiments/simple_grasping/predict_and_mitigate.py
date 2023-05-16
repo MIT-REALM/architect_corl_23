@@ -317,9 +317,13 @@ if __name__ == "__main__":
         initial_eps,
         dp_logprior_fn=dp_prior_logprob,
         ep_logprior_fn=ep_logprior,
-        potential_fn=lambda dp, ep: -L
+        ep_potential_fn=lambda dp, ep: -L
         * jax.nn.elu(
             failure_level - simulate(object_type, ep, dp, static_policy).potential
+        ),
+        dp_potential_fn=lambda dp, ep: -L
+        * jax.nn.elu(
+            simulate(object_type, ep, dp, static_policy).potential - failure_level
         ),
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,
