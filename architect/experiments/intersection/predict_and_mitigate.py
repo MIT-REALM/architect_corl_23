@@ -348,7 +348,7 @@ if __name__ == "__main__":
     )
 
     # Add exponential tempering if using
-    t = jnp.linspace(0, 1, num_rounds)
+    t = jnp.linspace(0, 1, num_rounds) + 0.1
     tempering_schedule = 1 - jnp.exp(-20 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
@@ -624,7 +624,7 @@ if __name__ == "__main__":
         f"dp_{dp_mcmc_step_size:0.1e}/"
         f"ep_{ep_mcmc_step_size:0.1e}/"
     )
-    filename = save_dir + f"{alg_type}{'_20tempered' if temper else ''}"
+    filename = save_dir + f"{alg_type}{'_20tempered+0.1' if temper else ''}"
     filename += f"{'_nogradnorm' if not normalize_gradients else ''}"
     filename += f"_{seed}"
     print(f"Saving results to: {filename}")
