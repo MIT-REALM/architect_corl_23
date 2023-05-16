@@ -230,7 +230,7 @@ def render_color(
     color_values = jax.vmap(sdf.color)(hit_pts)
 
     # Add fog
-    distance = jnp.linalg.norm(hit_pts, axis=-1)
+    distance = jnp.sqrt(jnp.sum(hit_pts**2, axis=-1) + 1e-3)
     fog_weight = 1 - jnp.exp(-fog_strength * distance)
     color_values = (
         fog_weight[:, None] * fog_color + (1 - fog_weight[:, None]) * color_values

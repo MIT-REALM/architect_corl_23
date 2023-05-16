@@ -23,28 +23,28 @@ from architect.systems.drone_landing.policy import DroneLandingPolicy
 N = 10
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to in predict_repair_1.0 folder
 SUMMARY_PATH = (
-    "results/drone_landing_smooth/predict_repair_1.0/stress_test_dp_1.0e-03.json"
+    "results/drone_landing_smooth/predict_repair_1.0/stress_test_dp_1.0e-04.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/5_quench/dp_1.0e-04/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "Ours (tempered)",
     },
     "rmh": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -160,17 +160,39 @@ if __name__ == "__main__":
                     result["costs"] = jnp.array(result["costs"])
 
     # Post-process into a dataframe
-    df = pd.DataFrame()
+    algs = []
+    costs = []
+    seeds = []
     for alg in DATA_SOURCES:
-        for result in summary_data[alg]:
-            df = df.append(
-                pd.DataFrame(
-                    {
-                        "Algorithm": result["display_name"],
-                        "Cost": result["costs"].flatten(),
-                    }
-                )
-            )
+        for seed, result in enumerate(summary_data[alg]):
+            algs += [result["display_name"]] * len(result["costs"])
+            costs += result["costs"].flatten().tolist()
+            seeds += [seed] * len(result["costs"])
+
+    df = pd.DataFrame({"Algorithm": algs, "Cost": costs, "Seed": seeds})
+
+    # Assign maximum cost to any nans
+    df["Cost"] = df["Cost"].fillna(df["Cost"].max())
+
+    # Count failures
+    failure_level = summary_data["mala_tempered"][0]["failure_level"]
+    df["Failure"] = df["Cost"] >= failure_level
+
+    # Print failure rates
+    print("Mean cost")
+    print(df.groupby(["Algorithm"])["Cost"].mean())
+    print("cost std err")
+    print(
+        df.groupby(["Algorithm", "Seed"])["Cost"].mean().groupby(["Algorithm"]).std()
+        / 2
+    )
+    print(f"Failure rate {failure_level}")
+    print(df.groupby(["Algorithm"])["Failure"].mean())
+    print(f"Failure rate {failure_level} stderr")
+    print(
+        df.groupby(["Algorithm", "Seed"])["Failure"].mean().groupby(["Algorithm"]).std()
+        / 2
+    )
 
     # Plot!
     plt.figure(figsize=(12, 8))

@@ -242,7 +242,12 @@ if __name__ == "__main__":
         summary_data["random_sample_costs"],
         bins,
         density=True,
-        weights=jnp.exp(-jax.nn.elu(0.0 - summary_data["random_sample_costs"])),
+        weights=jnp.exp(
+            -jax.nn.elu(
+                summary_data["mala_tempered"][0]["failure_level"]
+                - summary_data["random_sample_costs"]
+            )
+        ),
     )
     gt_bin_centers = (gt_bins[1:] + gt_bins[:-1]) / 2.0
     print(
@@ -251,7 +256,7 @@ if __name__ == "__main__":
     )
     for alg in DATA_SOURCES:
         costs = jnp.concatenate(
-            [x["ep_costs"][10:].reshape(-1) for x in summary_data[alg]]
+            [x["ep_costs"][25:].reshape(-1) for x in summary_data[alg]]
         )
         hist, hist_bins = jnp.histogram(costs, bins, density=True)
         hist_bin_centers = (hist_bins[1:] + hist_bins[:-1]) / 2.0
@@ -273,10 +278,10 @@ if __name__ == "__main__":
     print(f"JS divergence from ground truth (importance sampling w. {N * BATCHES}):")
     for alg in DATA_SOURCES:
         costs = jnp.concatenate(
-            [x["ep_costs"][50:].reshape(-1) for x in summary_data[alg]]
+            [x["ep_costs"][25:].reshape(-1) for x in summary_data[alg]]
         )
         # re-compute the histogram to use the same bins as the ground truth
-        hist, hist_bins = jnp.histogram(costs, bins, density=True)
+        hist, hist_bins = jnp.histogram(costs, gt_bins, density=True)
 
         # Convert to numpy
         gt = np.array(gt, dtype=np.float64)
