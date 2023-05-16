@@ -77,10 +77,12 @@ def simulate(
         next_state, next_observation, reward, done = env.step(state, action, key)
 
         # Compute the action for the next step
-        next_action = policy(next_observation)
+        # next_action = policy(next_observation)
+        next_action = jnp.zeros(2)  # TODO
 
         # If the environment has already terminated, set the reward to zero.
         reward = jax.lax.cond(already_done, lambda: 0.0, lambda: reward)
+        print(f"Step! Reward: {reward}")
         already_done = jnp.logical_or(already_done, done)
 
         # Don't step if the environment has terminated
@@ -93,7 +95,8 @@ def simulate(
 
     # Get the initial observation and action
     initial_obs = env.get_obs(initial_state)
-    initial_action = policy(initial_obs)
+    # initial_action = policy(initial_obs) # TODO
+    initial_action = jnp.zeros(2)
 
     # Transform and rollout!
     keys = jrandom.split(jrandom.PRNGKey(0), max_steps)
@@ -213,6 +216,7 @@ if __name__ == "__main__":
 
     # Make the environment to use
     image_shape = (32, 32)
+    image_shape = (4, 4)  # todo
     env = make_drone_landing_env(image_shape, num_trees, moving_obstacles)
     env._collision_penalty = 2e2
     # If it's repair time, substep for extra efficiency

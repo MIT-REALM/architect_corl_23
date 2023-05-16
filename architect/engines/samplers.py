@@ -42,19 +42,30 @@ def init_sampler(
     grad_fn = jax.value_and_grad(logdensity_fn)
     logdensity, logdensity_grad = grad_fn(position)
 
-    # Drop nans
-    logdensity_grad = jtu.tree_map(
-        lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), logdensity_grad
-    )
+    # # Drop nans
+    # logdensity_grad = jtu.tree_map(
+    #     lambda grad: jnp.where(jnp.isnan(grad), 0.0, grad), logdensity_grad
+    # )
 
     # Normalize the gradients if requested
-    overall_grad_norm = jnp.sqrt(
-        jtu.tree_reduce(
-            operator.add, jtu.tree_map(lambda x: jnp.sum(x * x), logdensity_grad)
-        )
+    # overall_grad_norm = jnp.sqrt(
+    #     jtu.tree_reduce(
+    #         operator.add, jtu.tree_map(lambda x: jnp.sum(x * x), logdensity_grad)
+    #     )
+    # )
+    block_norms = jtu.tree_map(
+        lambda x: jnp.sqrt(jnp.sum(x**2) + 1e-3), logdensity_grad
     )
     normalized_logdensity_grad = jtu.tree_map(
-        lambda grad: grad / overall_grad_norm, logdensity_grad
+        lambda grad, block_norm: jax.lax.cond(
+            block_norm >= 0.1,
+            lambda grad, block_norm: grad / block_norm,
+            lambda grad, _: grad,
+            grad,
+            block_norm,
+        ),
+        logdensity_grad,
+        block_norms,
     )
     logdensity_grad = jax.lax.cond(
         normalize_gradients,
