@@ -20,31 +20,31 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 # How many monte carlo trials to use to compute true failure rate
-N = 10
+N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
-# path to save summary data to in predict_repair_1.0 folder
+# path to save summary data to in predict_repair_0.1 folder
 SUMMARY_PATH = (
-    "results/drone_landing_smooth/predict_repair_1.0/stress_test_dp_1.0e-04.json"
+    "results/drone_landing_smooth/predict_repair_0.1/stress_test_dp_1.0e-02_+0.json"
 )
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/5_quench/dp_1.0e-04/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_0.1/L_1.0e+00/50_samples_10x5/10_chains/5_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "Ours (tempered)",
     },
     "rmh": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_0.1/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
-    "gd": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
-        "display_name": "ML",
-    },
+    # "gd": {
+    #     "path_prefix": "results/drone_landing_smooth/predict_repair_0.1/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
+    #     "display_name": "ML",
+    # },
     "reinforce": {
-        "path_prefix": "results/drone_landing_smooth/predict_repair_1.0/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/drone_landing_smooth/predict_repair_0.1/L_1.0e+00/50_samples_10x5/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -176,6 +176,7 @@ if __name__ == "__main__":
 
     # Count failures
     failure_level = summary_data["mala_tempered"][0]["failure_level"]
+    failure_level = 50.0
     df["Failure"] = df["Cost"] >= failure_level
 
     # Print failure rates
@@ -186,7 +187,7 @@ if __name__ == "__main__":
         df.groupby(["Algorithm", "Seed"])["Cost"].mean().groupby(["Algorithm"]).std()
         / 2
     )
-    print(f"Failure rate {failure_level}")
+    print(f"Failure rate level={failure_level}")
     print(df.groupby(["Algorithm"])["Failure"].mean())
     print(f"Failure rate {failure_level} stderr")
     print(
@@ -194,16 +195,16 @@ if __name__ == "__main__":
         / 2
     )
 
-    # Plot!
-    plt.figure(figsize=(12, 8))
-    sns.boxenplot(
-        x="Algorithm",
-        y="Cost",
-        showfliers=False,
-        outlier_prop=1e-7,
-        # flier_kws={"s": 20},
-        data=df,
-    )
-    plt.gca().set_xlabel("")
-    # plt.savefig('results/drone_landing_smooth/predict_repair_1.0/seed_0.png') #saving images to file for each seed
-    plt.show()
+    # # Plot!
+    # plt.figure(figsize=(12, 8))
+    # sns.swarmplot(
+    #     x="Algorithm",
+    #     y="Cost",
+    #     # showfliers=False,
+    #     # outlier_prop=1e-7,
+    #     # # flier_kws={"s": 20},
+    #     data=df,
+    # )
+    # plt.gca().set_xlabel("")
+    # # plt.savefig('results/drone_landing_smooth/predict_repair_0.1/seed_0.png') #saving images to file for each seed
+    # plt.show()
