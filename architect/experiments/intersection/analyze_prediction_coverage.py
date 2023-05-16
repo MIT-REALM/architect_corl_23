@@ -26,12 +26,16 @@ from architect.systems.highway.highway_env import HighwayState
 from architect.systems.intersection.policy import DrivingPolicy
 
 # How many monte carlo trials to use to compute true failure rate
-N = 1000
+N = 100
+# BATCHES = 2000
 BATCHES = 200
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
 # path to save summary data to
-SUMMARY_PATH = "results/intersection_lqr_patch/predict/coverage_summary.json"
+MC_SEED = 6
+SUMMARY_PATH = (
+    "results/intersection_lqr_patch/predict/coverage_summary_partial_{MC_SEED}.json"
+)
 # path to load convergence data from
 CONVERGENCE_SUMMARY_PATH = (
     "results/intersection_lqr_patch/predict/convergence_summary_4_50steps_1e-3_20.json"
@@ -140,7 +144,7 @@ def monte_carlo_test(N, batches, loaded_data):
     )
 
     # Sample N environmental parameters at random
-    key = jax.random.PRNGKey(0)
+    key = jax.random.PRNGKey(MC_SEED)
     costs = []
     print("Running stress test...")
     for _ in tqdm(range(batches)):
