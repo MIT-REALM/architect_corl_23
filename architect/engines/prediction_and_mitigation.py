@@ -201,11 +201,9 @@ def predict_and_mitigate_failure_modes(
             dp_mean_potential_fn = lambda dp: jax.vmap(
                 dp_potential_fn, in_axes=(None, 0)
             )(dp, current_eps).mean()
-            # dp_logprob_fn = lambda dp: dp_logprior_fn(
-            #     dp
-            # ) + tempering * dp_mean_potential_fn(dp)
-            # TODO temporary disabling of tempering for dps
-            dp_logprob_fn = lambda dp: dp_logprior_fn(dp) + dp_mean_potential_fn(dp)
+            dp_logprob_fn = lambda dp: dp_logprior_fn(
+                dp
+            ) + tempering * dp_mean_potential_fn(dp)
 
             # Initialize the chains for this kernel
             initial_dp_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
