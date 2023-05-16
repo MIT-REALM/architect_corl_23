@@ -164,10 +164,12 @@ class IntersectionEnv:
         ego_state, non_ego_states, _, _ = state
 
         # Compute the next state of the ego and other vehicles
-        next_ego_state = self.car_dynamics(ego_state, ego_action)
-        next_non_ego_states = jax.vmap(self.car_dynamics)(
-            non_ego_states, non_ego_actions
-        )
+        next_ego_state = ego_state
+        for _ in range(self._substeps):
+            next_ego_state = self.car_dynamics(next_ego_state, ego_action)
+            next_non_ego_states = jax.vmap(self.car_dynamics)(
+                non_ego_states, non_ego_actions
+            )
         next_state = HighwayState(
             next_ego_state,
             next_non_ego_states,
