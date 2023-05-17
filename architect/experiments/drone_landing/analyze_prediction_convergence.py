@@ -19,26 +19,31 @@ from architect.systems.drone_landing.policy import DroneLandingPolicy
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
 # path to save summary data to
-SUMMARY_PATH = (
-    "results/drone_landing_smooth/predict/convergence_summary_gradnorm_mcmc_1e-2.json"
-)
+dynamic = True
+lr = 1e-2
+lr = f"{lr:.1e}"
+savedir = "drone"
+if dynamic:
+    savedir += "_dynamic"
+
+SUMMARY_PATH = f"results/{savedir}/predict/convergence_summary_{lr}.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": f"results/{savedir}/predict/L_1.0e+01/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": f"results/{savedir}/predict/L_1.0e+01/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_3.0e-03/ep_3.0e-03/grad_norm/grad_clip_inf/gd",
+        "path_prefix": f"results/{savedir}/predict/L_1.0e+00/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/drone_landing_smooth/predict/L_1.0e+00/30_samples_30x1/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": f"results/{savedir}/predict/L_1.0e+00/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -190,31 +195,31 @@ if __name__ == "__main__":
             num_iters = result["ep_logprobs"].shape[0]
             num_chains = result["ep_logprobs"].shape[1]
 
-            # Add the number of failures discovered initially
-            iters = pd.concat(
-                [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
-            )
-            seeds = pd.concat(
-                [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
-                ignore_index=True,
-            )
-            num_failures = pd.concat(
-                [
-                    num_failures,
-                    pd.Series([float(result["num_failures"][0])] * num_chains),
-                ],
-                ignore_index=True,
-            )
-            logprobs = pd.concat(
-                [logprobs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
-            )
-            costs = pd.concat(
-                [costs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
-            )
-            algs = pd.concat(
-                [algs, pd.Series([result["display_name"]] * num_chains)],
-                ignore_index=True,
-            )
+            # # Add the number of failures discovered initially
+            # iters = pd.concat(
+            #     [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
+            # )
+            # seeds = pd.concat(
+            #     [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
+            #     ignore_index=True,
+            # )
+            # num_failures = pd.concat(
+            #     [
+            #         num_failures,
+            #         pd.Series([float(result["num_failures"][0])] * num_chains),
+            #     ],
+            #     ignore_index=True,
+            # )
+            # logprobs = pd.concat(
+            #     [logprobs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
+            # )
+            # costs = pd.concat(
+            #     [costs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
+            # )
+            # algs = pd.concat(
+            #     [algs, pd.Series([result["display_name"]] * num_chains)],
+            #     ignore_index=True,
+            # )
 
             # Add the data for the rest of the iterations
             for i in range(num_iters):
@@ -263,46 +268,46 @@ if __name__ == "__main__":
 
     print("Collision rate (mean)")
     print(
-        df[df["Diffusion steps"] >= 5]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .mean()
-        / 10
+        df.groupby(["Algorithm"])[  # [df["Diffusion steps"] >= 5]
+            "# failures discovered"
+        ].mean()
+        / 5
     )
-    print("Collision rate (std)")
-    print(
-        df[df["Diffusion steps"] >= 5]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .std()
-        / 10
-    )
+    # print("Collision rate (std)")
+    # print(
+    #     df.groupby(["Algorithm"])[  # [df["Diffusion steps"] >= 5]
+    #         "# failures discovered"
+    #     ].std()
+    #     / 5
+    # )
     print("Collision rate (75th)")
     print(
-        df[df["Diffusion steps"] >= 5]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .quantile(0.75)
-        / 10
+        df.groupby(["Algorithm"])[  # [df["Diffusion steps"] >= 5]
+            "# failures discovered"
+        ].quantile(0.75)
+        / 5
     )
     print("Collision rate (25th)")
     print(
-        df[df["Diffusion steps"] >= 5]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .quantile(0.25)
-        / 10
+        df.groupby(["Algorithm"])[  # [df["Diffusion steps"] >= 5]
+            "# failures discovered"
+        ].quantile(0.25)
+        / 5
     )
 
-    # Plot!
-    plt.figure(figsize=(12, 8))
-    # sns.barplot(
-    #     data=df[(df["Diffusion steps"] % 10 == 0)],
+    # # Plot!
+    # plt.figure(figsize=(12, 8))
+    # # sns.barplot(
+    # #     data=df[(df["Diffusion steps"] % 10 == 0)],
+    # #     x="Diffusion steps",
+    # #     y="# failures discovered",
+    # #     hue="Algorithm",
+    # # )
+    # sns.lineplot(
+    #     data=df,
     #     x="Diffusion steps",
     #     y="# failures discovered",
     #     hue="Algorithm",
     # )
-    sns.lineplot(
-        data=df,
-        x="Diffusion steps",
-        y="# failures discovered",
-        hue="Algorithm",
-    )
 
-    plt.show()
+    # plt.show()

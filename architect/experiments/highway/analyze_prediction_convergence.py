@@ -20,26 +20,28 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 # path to save summary data to
-SUMMARY_PATH = "results/highway_lqr/predict/convergence_summary_4_100steps_1e-3_20.json"
+lr = 1e-2
+lr = f"{lr:.1e}"
+SUMMARY_PATH = f"results/highway/predict/convergence_summary_{lr}.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered",
+        "path_prefix": f"results/highway/predict/noise_5.0e-01/L_1.0e+01/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/mala_20tempered+0.1",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
+        "path_prefix": f"results/highway/predict/noise_5.0e-01/L_1.0e+01/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
+        "path_prefix": f"results/highway/predict/noise_5.0e-01/L_1.0e+00/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/highway_lqr/predict/noise_5.0e-01/L_1.0e+00/100_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
+        "path_prefix": f"results/highway/predict/noise_5.0e-01/L_1.0e+00/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/reinforce_l2c",
         "display_name": "L2C",
     },
 }
@@ -64,7 +66,7 @@ def load_data_sources_from_json():
                         data["action_trajectory_trace"],
                         is_leaf=lambda x: isinstance(x, list),
                     ),
-                    "failure_level": data["failure_level"],
+                    "failure_level": 3.6,  # data["failure_level"],  # more accurate
                     "noise_scale": data["noise_scale"],
                     "initial_state": jax.tree_util.tree_map(
                         lambda x: jnp.array(x),
@@ -96,6 +98,7 @@ def get_costs(loaded_data):
     alg = "mala_tempered"
     image_shape = (32, 32)
     env = make_highway_env(image_shape)
+    env._collision_penalty = 10.0
     initial_state = HighwayState(
         ego_state=loaded_data[alg][0]["initial_state"]["ego_state"],
         non_ego_states=loaded_data[alg][0]["initial_state"]["non_ego_states"],
@@ -156,7 +159,7 @@ if __name__ == "__main__":
                         "ep_costs": result["ep_costs"],
                         "ep_logpriors": result["ep_logpriors"],
                         "ep_logprobs": result["ep_logprobs"],
-                        "failure_level": result["failure_level"],
+                        "failure_level": 3.6,  # result["failure_level"], # more accurate
                     }
                 )
 
@@ -179,6 +182,7 @@ if __name__ == "__main__":
                     result["ep_costs"] = jnp.array(result["ep_costs"])
                     result["ep_logpriors"] = jnp.array(result["ep_logpriors"])
                     result["ep_logprobs"] = jnp.array(result["ep_logprobs"])
+                    result["failure_level"] = 3.6  # measured from plots
 
     # Post-process
     for alg in DATA_SOURCES:
@@ -188,8 +192,8 @@ if __name__ == "__main__":
             num_failures = (costs >= failure_level).sum(axis=-1)
             # # Cumulative max = 'how many failures have we seen so far?'
             # num_failures = jax.lax.cummax(num_failures)
-            # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
-            num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
+            # # Add a 0 at the start (randomly sampling 10 failures gives 0 failures at step 0)
+            # num_failures = jnp.concatenate([jnp.zeros(1), num_failures])
             result["num_failures"] = num_failures
 
     # Make into pandas dataframe
@@ -204,31 +208,31 @@ if __name__ == "__main__":
             num_iters = result["ep_logprobs"].shape[0]
             num_chains = result["ep_logprobs"].shape[1]
 
-            # Add the number of failures discovered initially
-            iters = pd.concat(
-                [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
-            )
-            seeds = pd.concat(
-                [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
-                ignore_index=True,
-            )
-            num_failures = pd.concat(
-                [
-                    num_failures,
-                    pd.Series([float(result["num_failures"][0])] * num_chains),
-                ],
-                ignore_index=True,
-            )
-            logprobs = pd.concat(
-                [logprobs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
-            )
-            costs = pd.concat(
-                [costs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
-            )
-            algs = pd.concat(
-                [algs, pd.Series([result["display_name"]] * num_chains)],
-                ignore_index=True,
-            )
+            # # Add the number of failures discovered initially
+            # iters = pd.concat(
+            #     [iters, pd.Series(jnp.zeros(num_chains, dtype=int))], ignore_index=True
+            # )
+            # seeds = pd.concat(
+            #     [seeds, pd.Series(jnp.zeros(num_chains, dtype=int) + seed_i)],
+            #     ignore_index=True,
+            # )
+            # num_failures = pd.concat(
+            #     [
+            #         num_failures,
+            #         pd.Series([float(result["num_failures"][0])] * num_chains),
+            #     ],
+            #     ignore_index=True,
+            # )
+            # logprobs = pd.concat(
+            #     [logprobs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
+            # )
+            # costs = pd.concat(
+            #     [costs, pd.Series(jnp.zeros(num_chains))], ignore_index=True
+            # )
+            # algs = pd.concat(
+            #     [algs, pd.Series([result["display_name"]] * num_chains)],
+            #     ignore_index=True,
+            # )
 
             # Add the data for the rest of the iterations
             for i in range(num_iters):
@@ -277,31 +281,31 @@ if __name__ == "__main__":
 
     print("Collision rate (mean)")
     print(
-        df[df["Diffusion steps"] >= 50]
+        df[df["Diffusion steps"] >= 3]
         .groupby(["Algorithm"])["# failures discovered"]
         .mean()
-        / 10
+        / 5
     )
-    print("Collision rate (std)")
-    print(
-        df[df["Diffusion steps"] >= 50]
-        .groupby(["Algorithm"])["# failures discovered"]
-        .std()
-        / 10
-    )
+    # print("Collision rate (std)")
+    # print(
+    #     df[df["Diffusion steps"] >= 2]
+    #     .groupby(["Algorithm"])["# failures discovered"]
+    #     .std()
+    #     / 5
+    # )
     print("Collision rate (75th)")
     print(
-        df[df["Diffusion steps"] >= 25]
+        df[df["Diffusion steps"] >= 3]
         .groupby(["Algorithm"])["# failures discovered"]
         .quantile(0.75)
-        / 10
+        / 5
     )
     print("Collision rate (25)")
     print(
-        df[df["Diffusion steps"] >= 25]
+        df[df["Diffusion steps"] >= 3]
         .groupby(["Algorithm"])["# failures discovered"]
         .quantile(0.25)
-        / 10
+        / 5
     )
 
     # Plot!

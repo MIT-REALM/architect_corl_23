@@ -24,29 +24,31 @@ from architect.systems.highway.driving_policy import DrivingPolicy
 from architect.systems.highway.highway_env import HighwayState
 
 # How many monte carlo trials to use to compute true failure rate
-N = 10
+N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
+lr = 1e-2
+lr = f"{lr:.1e}"
 # path to save summary data to in predict_repair folder
-SUMMARY_PATH = "results/highway_lqr/predict_repair_1.0/stress_test_dp_1.0e-03+0.1.json"
+SUMMARY_PATH = f"results/highway/predict_repair_1.0/stress_test_{lr}.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/5_quench/dp_1.0e-03/ep_1.0e-03/mala_20tempered+0.1",
+        "path_prefix": f"results/highway/predict_repair_1.0/noise_5.0e-01/L_1.0e+01/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/mala_20tempered+0.1",
         "display_name": "Ours (tempered)",
     },
     "rmh": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/rmh",
+        "path_prefix": f"results/highway/predict_repair_1.0/noise_5.0e-01/L_1.0e+01/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/gd",
+        "path_prefix": f"results/highway/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/highway_lqr/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/50_samples/10_chains/0_quench/dp_1.0e-03/ep_1.0e-03/reinforce_l2c",
+        "path_prefix": f"results/highway/predict_repair_1.0/noise_5.0e-01/L_1.0e+00/25_samples/5_chains/0_quench/dp_{lr}/ep_{lr}/reinforce_l2c",
         "display_name": "L2C",
     },
 }
@@ -71,7 +73,7 @@ def load_data_sources_from_json():
                         data["action_trajectory_trace"],
                         is_leaf=lambda x: isinstance(x, list),
                     ),
-                    "failure_level": data["failure_level"],
+                    "failure_level": 3.6,  # data["failure_level"],
                     "noise_scale": data["noise_scale"],
                     "initial_state": jax.tree_util.tree_map(
                         lambda x: jnp.array(x),
@@ -100,6 +102,7 @@ def monte_carlo_test(N, batches, loaded_data, alg, seed):
     """Stress test the given policy using N samples in batches"""
     image_shape = (32, 32)
     env = make_highway_env(image_shape)
+    env._collision_penalty = 10.0
     initial_state = HighwayState(
         ego_state=loaded_data[alg][seed]["initial_state"]["ego_state"],
         non_ego_states=loaded_data[alg][seed]["initial_state"]["non_ego_states"],
@@ -163,7 +166,7 @@ if __name__ == "__main__":
                     {
                         "display_name": data[alg][seed]["display_name"],
                         "costs": data[alg][seed]["costs"],
-                        "failure_level": data[alg][seed]["failure_level"],
+                        "failure_level": 3.6,  # data[alg][seed]["failure_level"],
                     }
                 )
 
@@ -228,5 +231,5 @@ if __name__ == "__main__":
         data=df,
     )
     plt.gca().set_xlabel("")
-    # plt.savefig('results/highway_lqr/predict_repair_1.0/seed_0.png') #saving images to file for each seed
+    # plt.savefig('results/highway/predict_repair_1.0/seed_0.png') #saving images to file for each seed
     plt.show()
