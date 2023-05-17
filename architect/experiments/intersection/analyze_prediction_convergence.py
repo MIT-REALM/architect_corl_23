@@ -24,7 +24,7 @@ from architect.systems.intersection.policy import DrivingPolicy
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
 # path to save summary data to
-lr = 1e-2
+lr = 1e-3
 lr = f"{lr:.1e}"
 SUMMARY_PATH = f"results/intersection/predict/convergence_summary_{lr}.json"
 # Define data sources from individual experiments

@@ -25,7 +25,7 @@ N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
-object_type = "bowl"
+object_type = "mug"
 lr = 1e-3
 lr = f"{lr:.1e}"  # format as string
 # path to save summary data to
@@ -177,7 +177,7 @@ if __name__ == "__main__":
 
     # Count failures
     failure_level = summary_data["mala_tempered"][0]["failure_level"]
-    failure_level = 0.1
+    failure_level = 0.25
     df["Failure"] = df["Cost"] >= failure_level
 
     # Print failure rates
