@@ -23,7 +23,7 @@ from architect.systems.drone_landing.policy import DroneLandingPolicy
 N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 lr = 1e-3
 lr = f"{lr:.1e}"
 # path to save summary data to in predict_repair_1.0 folder

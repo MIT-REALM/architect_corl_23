@@ -24,7 +24,7 @@ from architect.systems.simple_grasping.policy import AffordancePredictor
 N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = False
+REANALYZE = True
 object_type = "bowl"
 lr = 1e-3
 lr = f"{lr:.1e}"  # format as string
