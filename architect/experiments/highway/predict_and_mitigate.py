@@ -127,7 +127,7 @@ def non_ego_actions_prior_logprob(
         actions,
         noise_cov,
     )
-    return logprob.sum()
+    return logprob.mean()
 
 
 class SimulationResults(NamedTuple):
@@ -191,12 +191,12 @@ def simulate(
         compute_lqr = lambda non_ego_state, initial_state: -K @ (
             non_ego_state - initial_state
         )
-        # target = initial_state.non_ego_states  # uncomment to patch
-        # target = target.at[:, 0].set(state.non_ego_states[:, 0])  # uncomment to patch
+        target = initial_state.non_ego_states  # uncomment to patch
+        target = target.at[:, 0].set(state.non_ego_states[:, 0])  # uncomment to patch
         non_ego_stable_action = jax.vmap(compute_lqr)(
             state.non_ego_states,
-            initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
-            # target,  # uncomment to patch
+            # initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
+            target,
         )
 
         # Take a step in the environment using the action carried over from the previous
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
-    parser.add_argument("--failure_level", type=int, nargs="?", default=0.0)
+    parser.add_argument("--failure_level", type=int, nargs="?", default=5.0)
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
@@ -337,6 +337,7 @@ if __name__ == "__main__":
     # Make the environment to use
     image_shape = (args.image_h, args.image_w)
     env = make_highway_env(image_shape)
+    env._collision_penalty = 10.0
 
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition
