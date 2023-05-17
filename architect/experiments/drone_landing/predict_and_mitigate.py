@@ -13,7 +13,7 @@ import jax.random as jrandom
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
 from beartype.typing import NamedTuple
-from jaxtyping import Array, Float, Shaped
+from jaxtyping import Array, Bool, Float, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes
 from architect.engines.reinforce import init_sampler as init_reinforce_sampler
@@ -37,6 +37,8 @@ class SimulationResults(NamedTuple):
     tree_locations: Float[Array, "num_trees 2"]
     tree_velocities: Float[Array, "num_trees 2"]
     wind_speed: Float[Array, " 2"]
+    reward: Float[Array, " T"]
+    dones: Bool[Array, " T"]
 
 
 def simulate(
@@ -77,12 +79,10 @@ def simulate(
         next_state, next_observation, reward, done = env.step(state, action, key)
 
         # Compute the action for the next step
-        # next_action = policy(next_observation)
-        next_action = jnp.zeros(2)  # TODO
+        next_action = policy(next_observation)
 
         # If the environment has already terminated, set the reward to zero.
         reward = jax.lax.cond(already_done, lambda: 0.0, lambda: reward)
-        print(f"Step! Reward: {reward}")
         already_done = jnp.logical_or(already_done, done)
 
         # Don't step if the environment has terminated
@@ -90,17 +90,16 @@ def simulate(
         next_state = jax.lax.cond(already_done, lambda: state, lambda: next_state)
 
         next_carry = (next_action, next_state, already_done)
-        output = (reward, state)
+        output = (reward, state, done)
         return next_carry, output
 
     # Get the initial observation and action
     initial_obs = env.get_obs(initial_state)
-    # initial_action = policy(initial_obs) # TODO
-    initial_action = jnp.zeros(2)
+    initial_action = policy(initial_obs)
 
     # Transform and rollout!
     keys = jrandom.split(jrandom.PRNGKey(0), max_steps)
-    (_, final_state, _), (reward, state_traj) = jax.lax.scan(
+    (_, final_state, _), (reward, state_traj, dones) = jax.lax.scan(
         step, (initial_action, initial_state, False), keys
     )
 
@@ -109,9 +108,8 @@ def simulate(
 
     # The potential is the negative of the (soft) minimum reward observed, plus a
     # penalty based on how far the drone is from the target.
-    potential = (
-        -softmin(reward, sharpness=1.0) + 5 * (final_state.drone_state[:2] ** 2).sum()
-    )
+    final_distance_to_goal = jnp.sqrt(jnp.sum(final_state.drone_state[:2] ** 2) + 1e-3)
+    potential = -softmin(reward, sharpness=1.0) + 0.5 * final_distance_to_goal
 
     return SimulationResults(
         potential,
@@ -121,6 +119,8 @@ def simulate(
         tree_locations=initial_state.tree_locations,
         tree_velocities=initial_state.tree_velocities,
         wind_speed=initial_state.wind_speed,
+        reward=reward,
+        dones=dones,
     )
 
 
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument("--T", type=int, nargs="?", default=80)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--num_trees", type=int, nargs="?", default=10)
-    parser.add_argument("--failure_level", type=float, nargs="?", default=25.0)
+    parser.add_argument("--failure_level", type=float, nargs="?", default=5.0)
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
@@ -216,9 +216,8 @@ if __name__ == "__main__":
 
     # Make the environment to use
     image_shape = (32, 32)
-    image_shape = (4, 4)  # todo
     env = make_drone_landing_env(image_shape, num_trees, moving_obstacles)
-    env._collision_penalty = 2e2
+    env._collision_penalty = 10.0
     # If it's repair time, substep for extra efficiency
     if repair:
         env._substeps = 2

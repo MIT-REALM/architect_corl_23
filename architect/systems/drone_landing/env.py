@@ -204,11 +204,12 @@ class DroneLandingEnv:
             tree_locations,
             self._render_sharpness,
         )
-        collision_reward = -self._collision_penalty * jax.nn.tanh(
+        collision_reward = -self._collision_penalty * jax.nn.sigmoid(
             -5 * min_distance_to_obstacle
         )
 
-        reward = distance_reward + collision_reward  #  / self._collision_penalty
+        # reward = distance_reward + collision_reward  #  / self._collision_penalty
+        reward = collision_reward
 
         # The episode ends when a collision occurs or we get close to the goal, at which
         # point we reset the environment
