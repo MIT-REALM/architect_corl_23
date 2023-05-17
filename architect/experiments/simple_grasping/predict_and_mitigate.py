@@ -44,6 +44,8 @@ class SimulationResults(NamedTuple):
     depth_image: Float[Array, "H W"]
     gt_affordance: Float[Array, "H W"]
     predicted_affordance: Float[Array, "H W"]
+    max_affordance_gt_xy: Float[Array, " 2"]
+    max_affordance_pred_xy: Float[Array, " 2"]
 
 
 class GraspExogenousParams(NamedTuple):
@@ -113,8 +115,28 @@ def simulate(
     depth_image, gt_affordance = render_rgbd(scene, camera_pos)
     gt_affordance = jnp.mean(gt_affordance, axis=-1)
 
-    # Predict a grasp pose
+    # Predict a grasp pose and affordances
     predicted_affordance, grasp_pose = affordance_predictor(depth_image)
+
+    # Extract the maximum affordance from the ground truth and prediction
+    max_affordance_gt = jnp.softmax(gt_affordance, axis=(0, 1))
+    max_affordance_pred = jnp.softmax(predicted_affordance, axis=(0, 1))
+    w, h = max_affordance_gt.shape
+    x = jnp.linspace(0, 1.0, w)
+    y = jnp.linspace(0, 1.0, h)
+    X, Y = jnp.meshgrid(x, y)
+    max_affordance_gt_x = jnp.sum(X * max_affordance_gt)
+    max_affordance_gt_y = jnp.sum(Y * max_affordance_gt)
+    max_affordance_pred_x = jnp.sum(X * max_affordance_pred)
+    max_affordance_pred_y = jnp.sum(Y * max_affordance_pred)
+
+    # Compute the grasp potential as the distance between the predicted and
+    # ground truth grasp affordances
+    potential = jnp.sqrt(
+        (max_affordance_gt_x - max_affordance_pred_x) ** 2
+        + (max_affordance_gt_y - max_affordance_pred_y) ** 2
+        + 1e-3
+    )
 
     # Get the grasp forces at that point
     clamp_strength = 1.0
@@ -133,12 +155,12 @@ def simulate(
         clamp_force=grasp2_clamp_force, normal=grasp2_normal, mu=1.0, sharpness=10.0
     )
 
-    # # The potential is the squared distance from the true grasp point
+    # # The potential is the distance from the true grasp point in centimeters
     # potential = 10 * jnp.sqrt(jnp.sum((grasp_pose - grasp_gt) ** 2) + 1e-3)
-    # The potential is the total tangential force (slipping)
-    potential = jnp.sum(grasp1_tangential_force**2) + jnp.sum(
-        grasp2_tangential_force**2
-    )
+    # # The potential is the total tangential force (slipping)
+    # potential = jnp.sum(grasp1_tangential_force**2) + jnp.sum(
+    #     grasp2_tangential_force**2
+    # )
 
     return SimulationResults(
         potential=potential,
@@ -152,6 +174,10 @@ def simulate(
         depth_image=depth_image,
         gt_affordance=gt_affordance,
         predicted_affordance=predicted_affordance,
+        max_affordance_gt_xy=jnp.array([max_affordance_gt_x, max_affordance_gt_y]),
+        max_affordance_pred_xy=jnp.array(
+            [max_affordance_pred_x, max_affordance_pred_y]
+        ),
     )
 
 
@@ -163,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument("--object_type", type=str, default="box")
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
-    parser.add_argument("--failure_level", type=float, nargs="?", default=0.25)
+    parser.add_argument("--failure_level", type=float, nargs="?", default=0.2)
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
@@ -437,6 +463,26 @@ if __name__ == "__main__":
     axs["predicted"].imshow(
         jnp.concatenate(result.predicted_affordance.transpose(0, 2, 1), axis=1)
     )
+
+    # Overlay the max affordance on these images
+    w, h = result.depth_image.shape[1:]
+    for i in range(num_chains):
+        max_gt = result.max_affordance_gt_xy[i]
+        max_pred = result.max_affordance_pred_xy[i]
+        axs["gt"].scatter(
+            max_gt[1] * h + h * i,
+            max_gt[0] * w + w * i,
+            marker="x",
+            color="red",
+            s=30,
+        )
+        axs["predicted"].scatter(
+            max_pred[1] * h + h * i,
+            max_pred[0] * w + w * i,
+            marker="x",
+            color="red",
+            s=30,
+        )
 
     save_dir = (
         f"results/{args.savename}_{object_type}/{'predict' if predict else ''}"
