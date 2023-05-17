@@ -29,19 +29,19 @@ SUMMARY_PATH = "results/grasping_{object_type}/predict/convergence_summary_{lr}.
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+01/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+01/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+00/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+00/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+00/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+00/25_samples_25x1/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
