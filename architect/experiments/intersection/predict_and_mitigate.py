@@ -254,7 +254,10 @@ def simulate(
     final_obs = env.get_obs(final_state)
 
     # The potential is the negative of the (soft) minimum reward observed
-    potential = -softmin(reward, sharpness=5.0)
+    # and penalize the agent for not crossing the road
+    target_x = 20.0
+    distance_to_target_x = jax.nn.elu(target_x - final_state.ego_state[0])
+    potential = -softmin(reward, sharpness=5.0) - 0.1 * distance_to_target_x
 
     return SimulationResults(
         potential,
@@ -357,6 +360,7 @@ if __name__ == "__main__":
     # Make the environment to use
     image_shape = (args.image_h, args.image_w)
     env = make_intersection_env(image_shape)
+    env._collision_penalty = 10.0
     # if repair:
     #     T = T // 2
     #     env._substeps = 2  # speed up sim for repair
