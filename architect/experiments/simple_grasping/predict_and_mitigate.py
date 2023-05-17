@@ -134,13 +134,13 @@ def simulate(
     max_affordance_pred_x = jnp.sum(X * max_affordance_pred)
     max_affordance_pred_y = jnp.sum(Y * max_affordance_pred)
 
-    # Compute the grasp potential as the distance between the predicted and
-    # ground truth grasp affordances
-    potential = jnp.sqrt(
-        (max_affordance_gt_x - max_affordance_pred_x) ** 2
-        + (max_affordance_gt_y - max_affordance_pred_y) ** 2
-        + 1e-3
-    )
+    # # Compute the grasp potential as the distance between the predicted and
+    # # ground truth grasp affordances
+    # potential = jnp.sqrt(
+    #     (max_affordance_gt_x - max_affordance_pred_x) ** 2
+    #     + (max_affordance_gt_y - max_affordance_pred_y) ** 2
+    #     + 1e-3
+    # )
 
     # Get the grasp forces at that point
     clamp_strength = 1.0
@@ -159,8 +159,8 @@ def simulate(
         clamp_force=grasp2_clamp_force, normal=grasp2_normal, mu=1.0, sharpness=10.0
     )
 
-    # # The potential is the distance from the true grasp point in centimeters
-    # potential = 10 * jnp.sqrt(jnp.sum((grasp_pose - grasp_gt) ** 2) + 1e-3)
+    # The potential is the distance from the true grasp point in centimeters
+    potential = jnp.sqrt(jnp.sum((grasp_pose - grasp_gt) ** 2) + 1e-3)
     # # The potential is the total tangential force (slipping)
     # potential = jnp.sum(grasp1_tangential_force**2) + jnp.sum(
     #     grasp2_tangential_force**2
