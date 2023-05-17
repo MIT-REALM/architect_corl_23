@@ -20,27 +20,28 @@ from architect.systems.simple_grasping.policy import AffordancePredictor
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
+object_type = "mug"
+lr = 1e-2
+lr = f"{lr:.1e}"  # format as string
 # path to save summary data to
-SUMMARY_PATH = (
-    "results/grasping_mug/predict/convergence_summary_gradnorm_mcmc_1.0e-02.json"
-)
+SUMMARY_PATH = "results/grasping_{object_type}/predict/convergence_summary_{lr}.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/mala_tempered_40",
         "display_name": "RADIUM (ours)",
     },
     "rmh": {
-        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/gd",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+00/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/grasping_mug/predict/L_1.0e+01/10_samples_10x1/10_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": "results/grasping_{object_type}/predict/L_1.0e+00/10_samples_10x1/10_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
