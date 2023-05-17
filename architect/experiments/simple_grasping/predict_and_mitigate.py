@@ -133,8 +133,12 @@ def simulate(
         clamp_force=grasp2_clamp_force, normal=grasp2_normal, mu=1.0, sharpness=10.0
     )
 
-    # The potential is the squared distance from the true grasp point
-    potential = 10 * jnp.sqrt(jnp.sum((grasp_pose - grasp_gt) ** 2) + 1e-3)
+    # # The potential is the squared distance from the true grasp point
+    # potential = 10 * jnp.sqrt(jnp.sum((grasp_pose - grasp_gt) ** 2) + 1e-3)
+    # The potential is the total tangential force (slipping)
+    potential = jnp.sum(grasp1_tangential_force**2) + jnp.sum(
+        grasp2_tangential_force**2
+    )
 
     return SimulationResults(
         potential=potential,
