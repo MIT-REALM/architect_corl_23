@@ -163,7 +163,7 @@ if __name__ == "__main__":
     parser.add_argument("--object_type", type=str, default="box")
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
-    parser.add_argument("--failure_level", type=float, nargs="?", default=0.4)
+    parser.add_argument("--failure_level", type=float, nargs="?", default=0.25)
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-5)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-5)
