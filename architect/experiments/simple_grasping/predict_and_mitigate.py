@@ -470,15 +470,15 @@ if __name__ == "__main__":
         max_gt = result.max_affordance_gt_xy[i]
         max_pred = result.max_affordance_pred_xy[i]
         axs["gt"].scatter(
-            max_gt[1] * h,
             max_gt[0] * w + w * i,
+            max_gt[1] * h,
             marker="x",
             color="red",
             s=20,
         )
         axs["predicted"].scatter(
-            max_pred[1] * h,
             max_pred[0] * w + w * i,
+            max_pred[1] * h,
             marker="x",
             color="red",
             s=20,
