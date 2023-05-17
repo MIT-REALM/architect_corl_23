@@ -119,8 +119,8 @@ def simulate(
     predicted_affordance, grasp_pose = affordance_predictor(depth_image)
 
     # Extract the maximum affordance from the ground truth and prediction
-    max_affordance_gt = jnp.softmax(gt_affordance, axis=(0, 1))
-    max_affordance_pred = jnp.softmax(predicted_affordance, axis=(0, 1))
+    max_affordance_gt = jax.nn.softmax(gt_affordance, axis=(0, 1))
+    max_affordance_pred = jax.nn.softmax(predicted_affordance, axis=(0, 1))
     w, h = max_affordance_gt.shape
     x = jnp.linspace(0, 1.0, w)
     y = jnp.linspace(0, 1.0, h)
