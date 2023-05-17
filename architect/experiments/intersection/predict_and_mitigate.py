@@ -134,7 +134,7 @@ def non_ego_actions_prior_logprob(
         actions,
         noise_cov,
     )
-    return logprob.sum()
+    return logprob.mean()
 
 
 class SimulationResults(NamedTuple):
