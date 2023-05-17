@@ -257,7 +257,7 @@ def simulate(
     # and penalize the agent for not crossing the road
     target_x = 20.0
     distance_to_target_x = jax.nn.elu(target_x - final_state.ego_state[0])
-    potential = -softmin(reward, sharpness=5.0) - 0.1 * distance_to_target_x
+    potential = -softmin(reward, sharpness=5.0) + 0.1 * distance_to_target_x
 
     return SimulationResults(
         potential,
