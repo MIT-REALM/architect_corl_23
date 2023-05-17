@@ -27,7 +27,7 @@ from architect.systems.highway.highway_env import HighwayState
 N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
-REANALYZE = True
+REANALYZE = False
 lr = 1e-2
 lr = f"{lr:.1e}"
 # path to save summary data to in predict_repair folder
@@ -73,7 +73,7 @@ def load_data_sources_from_json():
                         data["action_trajectory_trace"],
                         is_leaf=lambda x: isinstance(x, list),
                     ),
-                    "failure_level": 3.6,  # data["failure_level"],
+                    "failure_level": 3.9,  # data["failure_level"],
                     "noise_scale": data["noise_scale"],
                     "initial_state": jax.tree_util.tree_map(
                         lambda x: jnp.array(x),
@@ -166,7 +166,7 @@ if __name__ == "__main__":
                     {
                         "display_name": data[alg][seed]["display_name"],
                         "costs": data[alg][seed]["costs"],
-                        "failure_level": 3.6,  # data[alg][seed]["failure_level"],
+                        "failure_level": 3.9,  # data[alg][seed]["failure_level"],
                     }
                 )
 
@@ -187,6 +187,7 @@ if __name__ == "__main__":
             for alg in DATA_SOURCES:
                 for result in summary_data[alg]:
                     result["costs"] = jnp.array(result["costs"])
+                    result["failure_level"] = 3.9
 
     # Post-process into a dataframe
     algs = []

@@ -24,25 +24,27 @@ N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = True
+lr = 1e-3
+lr = f"{lr:.1e}"
 # path to save summary data to in predict_repair_1.0 folder
-SUMMARY_PATH = "results/drone/predict_repair_1.0/stress_test_1.0e-02.json"
+SUMMARY_PATH = f"results/drone/predict_repair_1.0/stress_test_{lr}.json"
 # Define data sources from individual experiments
 SEEDS = [0, 1, 2, 3]
 DATA_SOURCES = {
     "mala_tempered": {
-        "path_prefix": "results/drone/predict_repair_1.0/L_1.0e+01/25_samples_5x5/5_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
+        "path_prefix": f"results/drone/predict_repair_1.0/L_1.0e+01/25_samples_5x5/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
         "display_name": "Ours (tempered)",
     },
     "rmh": {
-        "path_prefix": "results/drone/predict_repair_1.0/L_1.0e+01/25_samples_5x5/5_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/rmh",
+        "path_prefix": f"results/drone/predict_repair_1.0/L_1.0e+01/25_samples_5x5/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/rmh",
         "display_name": "ROCUS",
     },
     "gd": {
-        "path_prefix": "results/drone/predict_repair_1.0/L_1.0e+00/25_samples_5x5/5_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/gd",
+        "path_prefix": f"results/drone/predict_repair_1.0/L_1.0e+00/25_samples_5x5/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/gd",
         "display_name": "ML",
     },
     "reinforce": {
-        "path_prefix": "results/drone/predict_repair_1.0/L_1.0e+00/25_samples_5x5/5_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
+        "path_prefix": f"results/drone/predict_repair_1.0/L_1.0e+00/25_samples_5x5/5_chains/0_quench/dp_{lr}/ep_{lr}/grad_norm/grad_clip_inf/reinforce_l2c_0.05_step",
         "display_name": "L2C",
     },
 }
@@ -68,7 +70,7 @@ def load_data_sources_from_json():
                     ),
                     "T": data["T"],
                     "num_trees": data["num_trees"],
-                    "failure_level": data["failure_level"],
+                    "failure_level": 7.5,  # data["failure_level"],
                 }
 
             # Also load in the design parameters
@@ -135,7 +137,7 @@ if __name__ == "__main__":
                     {
                         "display_name": data[alg][seed]["display_name"],
                         "costs": data[alg][seed]["costs"],
-                        "failure_level": data[alg][seed]["failure_level"],
+                        "failure_level": 7.5,  # data[alg][seed]["failure_level"],
                     }
                 )
 
@@ -156,6 +158,7 @@ if __name__ == "__main__":
             for alg in DATA_SOURCES:
                 for result in summary_data[alg]:
                     result["costs"] = jnp.array(result["costs"])
+                    result["failure_level"] = 7.5
 
     # Post-process into a dataframe
     algs = []
@@ -174,7 +177,7 @@ if __name__ == "__main__":
 
     # Count failures
     failure_level = summary_data["mala_tempered"][0]["failure_level"]
-    failure_level = 25.0
+    failure_level = 7.5
     df["Failure"] = df["Cost"] >= failure_level
 
     # Print failure rates
@@ -198,16 +201,16 @@ if __name__ == "__main__":
         / 2
     )
 
-    # # Plot!
-    # plt.figure(figsize=(12, 8))
-    # sns.swarmplot(
-    #     x="Algorithm",
-    #     y="Cost",
-    #     # showfliers=False,
-    #     # outlier_prop=1e-7,
-    #     # # flier_kws={"s": 20},
-    #     data=df,
-    # )
-    # plt.gca().set_xlabel("")
-    # # plt.savefig('results/drone/predict_repair_1.0/seed_0.png') #saving images to file for each seed
-    # plt.show()
+    # Plot!
+    plt.figure(figsize=(12, 8))
+    sns.violinplot(
+        x="Algorithm",
+        y="Cost",
+        # showfliers=False,
+        # outlier_prop=1e-7,
+        # # flier_kws={"s": 20},
+        data=df,
+    )
+    plt.gca().set_xlabel("")
+    # plt.savefig('results/drone/predict_repair_1.0/seed_0.png') #saving images to file for each seed
+    plt.show()
