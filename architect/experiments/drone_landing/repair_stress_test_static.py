@@ -5,12 +5,7 @@ import os
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import pyemd
-import scipy
-import seaborn as sns
 from jaxtyping import Array, Shaped
 from tqdm import tqdm
 
@@ -24,7 +19,7 @@ N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
-lr = 1e-3
+lr = 1e-2
 lr = f"{lr:.1e}"
 # path to save summary data to in predict_repair_1.0 folder
 SUMMARY_PATH = f"results/drone/predict_repair_1.0/stress_test_{lr}.json"
@@ -115,9 +110,6 @@ def monte_carlo_test(N, batches, loaded_data, alg, seed):
 
 
 if __name__ == "__main__":
-    # Activate seaborn styling
-    sns.set_theme(context="paper", style="whitegrid")
-
     if REANALYZE or not os.path.exists(SUMMARY_PATH):
         # Load the data
         data = load_data_sources_from_json()
@@ -200,17 +192,3 @@ if __name__ == "__main__":
         df.groupby(["Algorithm", "Seed"])["Failure"].mean().groupby(["Algorithm"]).std()
         / 2
     )
-
-    # Plot!
-    plt.figure(figsize=(12, 8))
-    sns.violinplot(
-        x="Algorithm",
-        y="Cost",
-        # showfliers=False,
-        # outlier_prop=1e-7,
-        # # flier_kws={"s": 20},
-        data=df,
-    )
-    plt.gca().set_xlabel("")
-    # plt.savefig('results/drone/predict_repair_1.0/seed_0.png') #saving images to file for each seed
-    plt.show()
