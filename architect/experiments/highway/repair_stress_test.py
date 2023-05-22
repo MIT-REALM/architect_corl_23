@@ -144,9 +144,6 @@ def monte_carlo_test(N, batches, loaded_data, alg, seed):
 
 
 if __name__ == "__main__":
-    # Activate seaborn styling
-    sns.set_theme(context="paper", style="whitegrid")
-
     if REANALYZE or not os.path.exists(SUMMARY_PATH):
         # Load the data
         data = load_data_sources_from_json()
@@ -223,14 +220,3 @@ if __name__ == "__main__":
         df.groupby(["Algorithm", "Seed"])["Failure"].mean().groupby(["Algorithm"]).std()
         / 2
     )
-
-    # Plot!
-    plt.figure(figsize=(12, 8))
-    sns.violinplot(
-        x="Algorithm",
-        y="Cost",
-        data=df,
-    )
-    plt.gca().set_xlabel("")
-    # plt.savefig('results/highway/predict_repair_1.0/seed_0.png') #saving images to file for each seed
-    plt.show()

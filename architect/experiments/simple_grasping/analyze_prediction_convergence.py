@@ -20,8 +20,13 @@ from architect.systems.simple_grasping.policy import AffordancePredictor
 
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
+
 object_type = "mug"
 lr = 1e-2
+
+# object_type = "box"
+# lr = 1e-2
+
 lr = f"{lr:.1e}"  # format as string
 # path to save summary data to
 SUMMARY_PATH = f"results/grasping_{object_type}/predict/convergence_summary_{lr}.json"

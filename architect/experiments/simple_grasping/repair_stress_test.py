@@ -25,8 +25,14 @@ N = 100
 BATCHES = 10
 # should we re-run the analysis (True) or just load the previously-saved summary (False)
 REANALYZE = False
-object_type = "mug"
+# object_type = "mug"
+# failure_level = 0.25
+# lr = 1e-3
+
+object_type = "box"
+failure_level = 0.1
 lr = 1e-3
+
 lr = f"{lr:.1e}"  # format as string
 # path to save summary data to
 SUMMARY_PATH = (
@@ -138,7 +144,7 @@ if __name__ == "__main__":
                     {
                         "display_name": data[alg][seed]["display_name"],
                         "costs": data[alg][seed]["costs"],
-                        "failure_level": 0.1,  # data[alg][seed]["failure_level"],
+                        "failure_level": data[alg][seed]["failure_level"],
                     }
                 )
 
@@ -176,8 +182,6 @@ if __name__ == "__main__":
     df["Cost"] = df["Cost"].fillna(df["Cost"].max())
 
     # Count failures
-    failure_level = summary_data["mala_tempered"][0]["failure_level"]
-    failure_level = 0.25
     df["Failure"] = df["Cost"] >= failure_level
 
     # Print failure rates

@@ -5,10 +5,7 @@ import os
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import seaborn as sns
 from jaxtyping import Array, Shaped
 
 from architect.experiments.intersection.predict_and_mitigate import (
@@ -140,9 +137,6 @@ def get_costs(loaded_data):
 
 
 if __name__ == "__main__":
-    # Activate seaborn styling
-    sns.set_theme(context="paper", style="whitegrid", font_scale=1.5)
-
     if REANALYZE or not os.path.exists(SUMMARY_PATH):
         # Load the data
         data = load_data_sources_from_json()
@@ -309,21 +303,3 @@ if __name__ == "__main__":
         .quantile(0.25)
         / 5
     )
-
-    # Plot!
-    plt.figure(figsize=(12, 8))
-    # sns.barplot(
-    #     data=df[(df["Diffusion steps"] % 10 == 0)],
-    #     x="Diffusion steps",
-    #     y="# failures discovered",
-    #     hue="Algorithm",
-    # )
-    sns.lineplot(
-        data=df,
-        x="Diffusion steps",
-        y="# failures discovered",
-        hue="Algorithm",
-        linewidth=3,
-    )
-
-    plt.show()
