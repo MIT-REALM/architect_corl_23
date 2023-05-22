@@ -108,6 +108,7 @@ class DroneLandingScene:
         sharpness: float = 100.0,
         tree_radius=0.5,
         tree_height=2.0,
+        drone_state: Optional[Float[Array, " 4"]] = None,
     ) -> SDFShape:
         """Return an SDF representation this scene.
 
@@ -117,6 +118,7 @@ class DroneLandingScene:
             sharpness: the sharpness of the SDF shapes
             tree_radius: the radius of the trees
             tree_height: the height of the trees
+            drone_state: the state of the drone (if None, don't render the drone)
         """
         # Rotate the wind sock to point in the wind direction
         wind_angle = jnp.arctan2(wind_direction_xy[1], wind_direction_xy[0])
@@ -148,7 +150,45 @@ class DroneLandingScene:
             )
             trees.append(tree)
 
+        # Add the drone to the scene
+        drone_shapes = []
+        if drone_state is not None:
+            R = jnp.array(
+                [
+                    [jnp.cos(drone_state[3]), -jnp.sin(drone_state[3]), 0.0],
+                    [jnp.sin(drone_state[3]), jnp.cos(drone_state[3]), 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
+            drone_shapes.append(
+                Box(
+                    center=drone_state[:3],
+                    extent=jnp.array([0.1, 0.1, 0.1]),
+                    rotation=R,
+                    c=jnp.array([52.0, 152, 219]) / 255.0,
+                )
+            )
+            rotor_offsets = jnp.array(
+                [
+                    [0.15, 0.15, 0.0],
+                    [0.15, -0.15, 0.0],
+                    [-0.15, 0.15, 0.0],
+                    [-0.15, -0.15, 0.0],
+                ]
+            )
+            for rotor_offset in rotor_offsets:
+                drone_shapes.append(
+                    Cylinder(
+                        center=drone_state[:3] + R @ rotor_offset,
+                        radius=jnp.array(0.15),
+                        height=jnp.array(0.05),
+                        c=jnp.array([52.0, 152, 219]) / 255.0,
+                        rotation=R,
+                    )
+                )
+
         shapes = [self.ground] + self.landing_pad + [wind_sock] + trees + self.walls
+        shapes += drone_shapes
         return Scene(shapes=shapes, sharpness=sharpness)
 
     @jaxtyped
@@ -188,6 +228,7 @@ class DroneLandingScene:
         shading_light_direction: Optional[Float[Array, "3"]] = None,
         sharpness: float = 50.0,
         max_dist: float = 50.0,
+        drone_state: Optional[Float[Array, " 4"]] = None,
     ) -> Tuple[Float[Array, "H W"], Float[Array, "H W 3"]]:
         """Render the color and depth image of this scene from the given camera pose.
 
@@ -199,12 +240,18 @@ class DroneLandingScene:
             shading_light_direction: the direction of the light source for shading.
                 If None, no shading is applied.
             sharpness: the sharpness of the scene
+            drone_state: if not None, render the drone at this location
 
         Returns:
             The depth and color images of the scene
         """
         # Make the scene (a composite of SDF shapes)
-        scene = self._get_shapes(wind_direction_xy, tree_locations, sharpness=sharpness)
+        scene = self._get_shapes(
+            wind_direction_xy,
+            tree_locations,
+            sharpness=sharpness,
+            drone_state=drone_state,
+        )
 
         # Render the scene
         rays = pinhole_camera_rays(intrinsics, extrinsics)
