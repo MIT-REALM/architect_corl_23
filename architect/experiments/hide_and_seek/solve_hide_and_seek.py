@@ -33,9 +33,9 @@ if __name__ == "__main__":
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
-    parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
+    parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=100)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
-    parser.add_argument("--quench_rounds", type=int, nargs="?", default=10)
+    parser.add_argument("--quench_rounds", type=int, nargs="?", default=50)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
