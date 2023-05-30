@@ -17,11 +17,12 @@ from architect.systems.drone_landing.env import DroneState
 from architect.systems.drone_landing.policy import DroneLandingPolicy
 
 SEEDS = [0, 1, 2, 3]
-SAVE_DIR = "tmp/0vids/drone_static"
+moving_obstacles = True
+SAVE_DIR = "tmp/0vids/drone_dynamic"
 DATA_SOURCES = {
-    "prediction": {
-        "path_prefix": f"results/drone_dynamic/predict/L_1.0e+01/25_samples_25x1/5_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
-    },
+    # "prediction": {
+    #     "path_prefix": f"results/drone_dynamic/predict/L_1.0e+01/25_samples_25x1/5_chains/0_quench/dp_1.0e-02/ep_1.0e-02/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
+    # },
     "repair": {
         "path_prefix": f"results/drone_dynamic/predict_repair_1.0/L_1.0e+01/25_samples_5x5/5_chains/0_quench/dp_1.0e-03/ep_1.0e-03/grad_norm/grad_clip_inf/mala_tempered_40+0.1",
     },
@@ -73,7 +74,9 @@ def load_data_sources_from_json():
 def get_trajectories(loaded_data, alg, seed):
     """Get the trajectories from running the given policy on all eps."""
     image_shape = (32, 32)
-    env = make_drone_landing_env(image_shape, loaded_data[alg][seed]["num_trees"])
+    env = make_drone_landing_env(
+        image_shape, loaded_data[alg][seed]["num_trees"], moving_obstacles
+    )
     simulate_fn = lambda ep: simulate(
         env,
         loaded_data[alg][seed]["dp"],
@@ -141,7 +144,9 @@ if __name__ == "__main__":
             # Render the trajectories
             print("Rendering...")
             image_shape = (256, 256)  # Higher res for videos
-            env = make_drone_landing_env(image_shape, result["num_trees"])
+            env = make_drone_landing_env(
+                image_shape, result["num_trees"], moving_obstacles
+            )
             render_fn = lambda drone_state, tree_locs, wind_speed: render_frame(
                 env, drone_state, tree_locs, wind_speed
             )
