@@ -2,6 +2,7 @@
 *.gif
 tmp/*
 *trace.eqx
+*line_states.npz
 
 # Editor stuff
 .vscode
