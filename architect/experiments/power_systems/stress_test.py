@@ -4,6 +4,7 @@ import json
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+from tqdm import tqdm
 
 from architect.systems.power_systems.acopf_types import (
     Dispatch,
@@ -79,14 +80,15 @@ if __name__ == "__main__":
     stress_test_worst_case = []
     n_gt_predicted = []
     num_opf_failues = []
+    line_states = []
+    voltage_violations = []
+    sim_fn = jax.jit(jax.vmap(sys, in_axes=(None, 0)))
     print("Running stress test")
-    for i in range(batches):
+    for i in tqdm(range(batches)):
         prng_key, stress_test_key = jrandom.split(prng_key)
         stress_test_keys = jrandom.split(stress_test_key, N)
         stress_test_eps = jax.vmap(sys.sample_random_network_state)(stress_test_keys)
-        stress_test_result = jax.jit(jax.vmap(sys, in_axes=(None, 0)))(
-            final_dps, stress_test_eps
-        )
+        stress_test_result = sim_fn(final_dps, stress_test_eps)
         stress_test_violation = (
             stress_test_result.P_gen_violation.sum(axis=-1)
             + stress_test_result.Q_gen_violation.sum(axis=-1)
@@ -98,8 +100,9 @@ if __name__ == "__main__":
         n_gt_predicted.append((stress_test_violation > predicted_worst_case).sum())
         num_opf_failues.append((stress_test_result.acopf_residual > 1e-3).sum())
         stress_test_potentials.append(stress_test_result.potential)
+        line_states.append(stress_test_eps.line_states)
+        voltage_violations.append(stress_test_result.V_violation.sum(axis=-1))
 
-        print(f"Iteration {i}")
     print("")
     print(f"Worst case identified by stress test: {max(stress_test_worst_case)}")
     print(f"\t{100 * sum(n_gt_predicted) / (N * batches)}% are worse than predicted")
@@ -110,3 +113,11 @@ if __name__ == "__main__":
     save_filename = filename[:-5] + "_stress_test.npz"
     with open(save_filename, "wb") as f:
         jnp.save(f, jnp.array(stress_test_potentials).reshape(-1))
+
+    save_filename = filename[:-5] + "_stress_test_line_states.npz"
+    with open(save_filename, "wb") as f:
+        jnp.save(f, jnp.array(line_states))
+
+    save_filename = filename[:-5] + "_stress_test_voltage_violations.npz"
+    with open(save_filename, "wb") as f:
+        jnp.save(f, jnp.array(voltage_violations).reshape(-1))
