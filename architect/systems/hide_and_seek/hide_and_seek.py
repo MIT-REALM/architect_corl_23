@@ -132,7 +132,7 @@ class Game(eqx.Module):
         hider_to_closest_seeker_distance = jax.vmap(self.softmin)(
             hider_to_closest_seeker_distance.T
         )
-        cost = (hider_to_closest_seeker_distance - self.sensing_range).sum()
+        cost = jax.nn.elu(hider_to_closest_seeker_distance - self.sensing_range).sum()
 
         return HideAndSeekResult(
             seeker_trajectory=seeker_trajectory,

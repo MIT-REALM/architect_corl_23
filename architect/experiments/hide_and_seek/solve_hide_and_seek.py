@@ -23,19 +23,20 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_seekers", type=int, nargs="?", default=2)
-    parser.add_argument("--n_hiders", type=int, nargs="?", default=2)
+    parser.add_argument("--n_seekers", type=int, nargs="?", default=12)
+    parser.add_argument("--n_hiders", type=int, nargs="?", default=20)
+    parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--T", type=int, nargs="?", default=5)
-    parser.add_argument("--width", type=float, nargs="?", default=3.2)
-    parser.add_argument("--height", type=float, nargs="?", default=2.0)
+    parser.add_argument("--width", type=float, nargs="?", default=2 * 3.2)
+    parser.add_argument("--height", type=float, nargs="?", default=4 * 2.0)
     parser.add_argument("--buffer", type=float, nargs="?", default=0.2)
     parser.add_argument("--duration", type=float, nargs="?", default=50.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
-    parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=100)
+    parser.add_argument("--num_mcmc_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
-    parser.add_argument("--quench_rounds", type=int, nargs="?", default=50)
+    parser.add_argument("--quench_rounds", type=int, nargs="?", default=25)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
@@ -49,6 +50,7 @@ if __name__ == "__main__":
     n_seekers = args.n_seekers
     n_hiders = args.n_hiders
     T = args.T
+    L = args.L
     width = args.width
     height = args.height
     buffer = args.buffer
@@ -70,6 +72,7 @@ if __name__ == "__main__":
     print(f"\tn_seekers = {n_seekers}")
     print(f"\tn_hiders = {n_hiders}")
     print(f"\tT = {T}")
+    print(f"\tL = {L}")
     print(f"\twidth = {width}")
     print(f"\theight = {height}")
     print(f"\tbuffer = {buffer}")
@@ -124,7 +127,7 @@ if __name__ == "__main__":
     seeker_keys = jrandom.split(seeker_key, num_chains)
     init_seeker_trajectories = jax.vmap(
         lambda key: arena.sample_random_multi_trajectory(
-            key, initial_seeker_positions, T=T, fixed=True
+            key, initial_seeker_positions, T=T, fixed=False
         )
     )(seeker_keys)
 
@@ -150,6 +153,7 @@ if __name__ == "__main__":
         use_gradients,
         stochasticity,
         grad_clip,
+        False,  # don't normalize gradients
         True,  # use metroplis-hastings
     )
 
@@ -161,8 +165,8 @@ if __name__ == "__main__":
         init_hider_trajectories,
         dp_logprior_fn=arena.multi_trajectory_prior_logprob,
         ep_logprior_fn=arena.multi_trajectory_prior_logprob,
-        ep_potential_fn=lambda dp, ep: game(dp, ep).potential,
-        dp_potential_fn=lambda dp, ep: -game(dp, ep).potential,
+        ep_potential_fn=lambda dp, ep: L * game(dp, ep).potential,
+        dp_potential_fn=lambda dp, ep: -L * game(dp, ep).potential,
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
@@ -173,6 +177,7 @@ if __name__ == "__main__":
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
+        quench_dps=False,  # quench both dps and eps
         tempering_schedule=tempering_schedule,
     )
     t_end = time.perf_counter()
@@ -284,13 +289,13 @@ if __name__ == "__main__":
         alg_type = "static"
     case_name = f"{n_seekers}_seekers_{n_hiders}_hiders"
     filename = (
-        f"results/{experiment_type}/{case_name}/{T}_T_"
+        f"results/{experiment_type}/{case_name}/L_{L:0.1e}_{T}_T_"
         f"{num_rounds * num_mcmc_steps_per_round}_samples_"
         f"{quench_rounds}_quench_{'tempered_' if temper else ''}"
         f"{num_chains}_chains_step_dp_{dp_mcmc_step_size:0.1e}_"
         f"ep_{ep_mcmc_step_size:0.1e}_{alg_type}"
         f"{'_repair' if repair else ''}"
-        f"{'_predict' if predict else ''}_fixed_init"
+        f"{'_predict' if predict else ''}"
     )
     print(f"Saving results to: {filename}")
     os.makedirs(f"results/{experiment_type}/{case_name}", exist_ok=True)
