@@ -3,18 +3,15 @@
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import jax.random as jrandom
-import numpy as np
 from beartype import beartype
-from beartype.typing import List, NamedTuple
+from beartype.typing import NamedTuple
 from jaxtyping import Array, Float, jaxtyped
 
 from architect.systems.hide_and_seek.hide_and_seek_types import (
-    Arena,
     MultiAgentTrajectory,
     Trajectory2D,
 )
-from architect.utils import softmin
+from architect.utils import softmax
 
 
 class FormationResult(NamedTuple):
@@ -76,7 +73,7 @@ def pd_controller(q: Float[Array, " 4"], target_position: Float[Array, " 2"]):
     """
     A PD controller for a double integrator.
     """
-    kp, kd = 1.0, 1.0
+    kp, kd = 10.0, 5.0
     u = -kp * (q[:2] - target_position) - kd * q[2:]
     return u
 
@@ -97,7 +94,7 @@ def closed_loop_dynamics(
 
 
 def algebraic_connectivity(
-    positions: Float[Array, "n 2"], communication_range: float
+    positions: Float[Array, "n 2"], communication_range: float, sharpness: float = 20.0
 ) -> Float[Array, ""]:
     """Compute the connectivity of a formation of drones"""
     # Get the pairwise distance between drones
@@ -106,10 +103,8 @@ def algebraic_connectivity(
     )
 
     # Compute adjacency and degree matrices (following Cavorsi RSS 2023)
-    adjacency_matrix = jnp.where(
-        squared_distance_matrix < communication_range**2,
-        jnp.exp((communication_range**2 - squared_distance_matrix) ** 2) - 1,
-        0.0,
+    adjacency_matrix = jax.nn.sigmoid(
+        sharpness * (communication_range**2 - squared_distance_matrix)
     )
     degree_matrix = jnp.diag(jnp.sum(adjacency_matrix, axis=1))
 
@@ -128,6 +123,7 @@ def simulate(
     target_trajectories: MultiAgentTrajectory,
     initial_states: Float[Array, "n 4"],
     wind: WindField,
+    goal_com_position: Float[Array, " 2"],
     duration: float = 10.0,
     dt: float = 0.01,
     max_wind_thrust: float = 0.5,
@@ -142,6 +138,7 @@ def simulate(
         target_positions: the target positions of the drones over time
         initial_states: the initial states of the drones
         wind: the wind vector over time
+        goal_com_position: the goal center of mass position for the formation
         duration: the length of the simulation (seconds)
         dt: the timestep of the simulation (seconds)
         max_wind_thrust: the maximum thrust of the wind (N)
@@ -186,7 +183,13 @@ def simulate(
     connectivity = jax.vmap(algebraic_connectivity, in_axes=(0, None))(
         qs[:, :, :2], communication_range
     )
-    potential = 1 / (softmin(connectivity, b) + 1e-1)
+    inverse_connectivity = 1 / (connectivity + 1e-2)
+    potential = softmax(inverse_connectivity, b)
+    # Add a term that encourages getting the formation COM to the desired position
+    formation_final_com = jnp.mean(qs[-1, :, :2], axis=0)
+    potential += 10 * jnp.sqrt(
+        jnp.sum((formation_final_com - goal_com_position) ** 2) + 1e-2
+    )
 
     # Return the result
     return FormationResult(positions=qs, potential=potential, connectivity=connectivity)
@@ -210,7 +213,11 @@ if __name__ == "__main__":
             [0.0, -0.1, -1.0, 0.0],
         ]
     )
-    result = simulate(target_positions, initial_states, wind, max_wind_thrust=1.0)
+    goal_com_position = jnp.array([2.0 / 3.0, 2.0 / 3.0])
+    result = simulate(
+        target_positions, initial_states, wind, goal_com_position, max_wind_thrust=1.0
+    )
+    print(result.potential)
 
     # plot the results, with a 2D plot of the positions and a time trace of the
     # connectivity on different subplots
