@@ -38,7 +38,7 @@ if __name__ == "__main__":
         saved_data = json.load(f)
 
     ep_filename = file_prefix + "_final_eps.eqx"
-    n_chains = jnp.array(saved_data["trajs"]["trajectories"]).shape[0]
+    n_chains = 5
     dummy = jax.vmap(lambda _: WindField(prng_key))(jnp.arange(n_chains))
     wind = eqx.tree_deserialise_leaves(ep_filename, dummy)
 

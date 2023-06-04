@@ -181,7 +181,7 @@ if __name__ == "__main__":
         init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
             params,
             logprob_fn,
-            False,  # don't normalize gradients
+            True,  # TODO don't normalize gradients
         )
         make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
             logprob_fn,
@@ -189,7 +189,7 @@ if __name__ == "__main__":
             use_gradients,
             stochasticity,
             grad_clip,
-            False,  # don't normalize gradients
+            True,  # TODO don't normalize gradients
             True,  # use metroplis-hastings
         )
 
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     axs["connectivity"].set_ylabel("Connectivity")
     axs["connectivity"].set_title("Connectivity")
 
-    experiment_type = "formation2d"
+    experiment_type = "formation2d_grad_norm"
     if reinforce:
         alg_type = "reinforce"
     elif use_gradients and use_stochasticity:
