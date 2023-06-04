@@ -26,11 +26,11 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n", type=int, nargs="?", default=15)
+    parser.add_argument("--n", type=int, nargs="?", default=10)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--T", type=int, nargs="?", default=3)
     parser.add_argument("--width", type=float, nargs="?", default=3.2)
-    parser.add_argument("--height", type=float, nargs="?", default=6.0)
+    parser.add_argument("--height", type=float, nargs="?", default=3.0)
     parser.add_argument("--R", type=float, nargs="?", default=0.5)
     parser.add_argument("--max_wind_thrust", type=float, nargs="?", default=0.5)
     parser.add_argument("--duration", type=float, nargs="?", default=30.0)
