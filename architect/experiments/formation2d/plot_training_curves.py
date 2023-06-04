@@ -6,11 +6,11 @@ import seaborn as sns
 data = [
     {
         "Algorithm": "RMH",
-        "training_curve_file": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_dp_trace_training_progress.npz",  # noqa
+        "training_curve_file": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_training_progress.npz",  # noqa
     },
     {
         "Algorithm": "Ours",
-        "training_curve_file": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_dp_trace_training_progress.npz",  # noqa
+        "training_curve_file": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_training_progress.npz",  # noqa
     },
 ]
 

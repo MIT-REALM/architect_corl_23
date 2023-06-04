@@ -6,23 +6,23 @@ import seaborn as sns
 data = [
     {
         "Algorithm": "GD",
-        "predicted_failures": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/gd_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/gd_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "GD-NoAdv",
-        "predicted_failures": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_stress_test.npz",  # noqa
+        "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "RMH",
-        "predicted_failures": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "Ours",
-        "predicted_failures": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_stress_test.npz",  # noqa
     },
 ]
 

@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
+from tqdm import tqdm
 
 from architect.systems.formation2d.simulator import WindField, simulate
 from architect.systems.hide_and_seek.hide_and_seek_types import (
@@ -18,7 +19,7 @@ if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--file_prefix", type=str)
-    parser.add_argument("--N", type=int, nargs="?", default=10_000)
+    parser.add_argument("--N", type=int, nargs="?", default=100)
     args = parser.parse_args()
 
     # Hyperparameters
@@ -94,10 +95,9 @@ if __name__ == "__main__":
     T = dp_trace.trajectories[0].p.shape[1]
     test_set_performances = []
     test_set_performances.append(test_set_performance_fn_batched(init_dps))
-    for t in range(T):
+    for t in tqdm(range(T)):
         dp_t = jtu.tree_map(lambda leaf: leaf[0, t], dp_trace)
         test_set_performances.append(test_set_performance_fn_batched(dp_t))
-        print(f"Step {t}")
 
     # Save the results to a file
     save_filename = file_prefix + "_training_progress.npz"

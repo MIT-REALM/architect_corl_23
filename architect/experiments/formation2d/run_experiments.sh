@@ -1,3 +1,5 @@
+wait
+
 CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --disable_stochasticity --no-predict &
 CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --disable_stochasticity &
 CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --disable_gradients --quench_rounds 0 &
@@ -5,15 +7,19 @@ CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py &
 
 wait
 
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/predict/mala &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/predict/gd &
+wait
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/no_predict/gd &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/stress_test.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/predict/rmh &
 
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_dp_trace.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_dp_trace.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_dp_trace.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --filename results/formation2d/TODO/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_dp_trace.json &
+wait
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/predict/mala &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/predict/gd &
+wait
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/no_predict/gd &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/training_curves.py --file_prefix results/formation2d/15/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-02/repair/predict/rmh &
 
 wait
 
