@@ -13,6 +13,8 @@ from jax.config import config
 from jaxtyping import Array, Shaped
 
 from architect.engines import predict_and_mitigate_failure_modes
+from architect.engines.reinforce import init_sampler as init_reinforce_sampler
+from architect.engines.reinforce import make_kernel as make_reinforce_kernel
 from architect.engines.samplers import init_sampler as init_mcmc_sampler
 from architect.engines.samplers import make_kernel as make_mcmc_kernel
 from architect.systems.formation2d.simulator import WindField, simulate
@@ -40,6 +42,7 @@ if __name__ == "__main__":
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=5)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
+    parser.add_argument("--reinforce", action="store_true")
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
@@ -68,6 +71,7 @@ if __name__ == "__main__":
     temper = args.temper
     quench_rounds = args.quench_rounds
     grad_clip = args.grad_clip
+    reinforce = args.reinforce
 
     print("Running HideAndSeek with hyperparameters:")
     print(f"\tn = {n}")
@@ -85,6 +89,7 @@ if __name__ == "__main__":
     print(f"\tnum_chains = {num_chains}")
     print(f"\tuse_gradients = {use_gradients}")
     print(f"\tuse_stochasticity = {use_stochasticity}")
+    print(f"\treinforce = {reinforce}")
     print(f"\trepair = {repair}")
     print(f"\tpredict = {predict}")
     print(f"\ttemper = {temper}")
@@ -161,22 +166,32 @@ if __name__ == "__main__":
         communication_range=R,
     )
 
-    # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
-    # stochasticity are enabled
-    init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
-        params,
-        logprob_fn,
-        False,  # don't normalize gradients
-    )
-    make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
-        logprob_fn,
-        step_size,
-        use_gradients,
-        stochasticity,
-        grad_clip,
-        False,  # don't normalize gradients
-        True,  # use metroplis-hastings
-    )
+    if reinforce:
+        init_sampler_fn = init_reinforce_sampler
+        noise_scale = 0.1
+        make_kernel_fn = lambda logprob_fn, step_size, _: make_reinforce_kernel(
+            logprob_fn,
+            step_size,
+            perturbation_stddev=noise_scale,
+            baseline_update_rate=0.5,
+        )
+    else:
+        # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
+        # stochasticity are enabled
+        init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
+            params,
+            logprob_fn,
+            False,  # don't normalize gradients
+        )
+        make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
+            logprob_fn,
+            step_size,
+            use_gradients,
+            stochasticity,
+            grad_clip,
+            False,  # don't normalize gradients
+            True,  # use metroplis-hastings
+        )
 
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
@@ -312,7 +327,9 @@ if __name__ == "__main__":
     axs["connectivity"].set_title("Connectivity")
 
     experiment_type = "formation2d"
-    if use_gradients and use_stochasticity:
+    if reinforce:
+        alg_type = "reinforce"
+    elif use_gradients and use_stochasticity:
         alg_type = "mala"
     elif use_gradients and not use_stochasticity:
         alg_type = "gd"
