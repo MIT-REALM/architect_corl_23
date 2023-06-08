@@ -70,10 +70,17 @@ if __name__ == "__main__":
     seeker_traj = jnp.array(saved_data["seeker_traj"]["trajectories"])
     final_dps = MultiAgentTrajectory([Trajectory2D(traj) for traj in seeker_traj])
     hider_trajs = jnp.array(saved_data["hider_trajs"]["trajectories"])
-    predicted_eps = MultiAgentTrajectory([Trajectory2D(traj) for traj in hider_trajs])
+    hider_trajs = MultiAgentTrajectory([Trajectory2D(traj) for traj in hider_trajs])
+    disturbance_trajs = jnp.array(saved_data["disturbance_trajs"]["trajectories"])
+    disturbance_trajs = MultiAgentTrajectory(
+        [Trajectory2D(traj) for traj in disturbance_trajs]
+    )
+    predicted_eps = (hider_trajs, disturbance_trajs)
 
     # See how the design performs on the identified failure modes
-    result = jax.vmap(game, in_axes=(None, 0))(final_dps, predicted_eps)
+    result = jax.vmap(game, in_axes=(None, 0, 0))(
+        final_dps, hider_trajs, disturbance_trajs
+    )
     predicted_worst_case = result.potential.max()
 
     # Save the results to a file
@@ -88,14 +95,22 @@ if __name__ == "__main__":
     sim_fn = jax.jit(jax.vmap(game, in_axes=(None, 0)))
     print("Running stress test")
     for i in tqdm(range(batches)):
-        prng_key, stress_test_key = jrandom.split(prng_key)
-        stress_test_keys = jrandom.split(stress_test_key, N)
-        stress_test_eps = jax.vmap(
+        prng_key, hider_key = jrandom.split(prng_key)
+        hider_keys = jrandom.split(hider_key, N)
+        hider_trajs = jax.vmap(
             lambda key: arena.sample_random_multi_trajectory(
                 key, initial_hider_positions, T=T
             )
-        )(stress_test_keys)
-        stress_test_result = sim_fn(final_dps, stress_test_eps)
+        )(hider_keys)
+        prng_key, dist_key = jrandom.split(prng_key)
+        dist_keys = jrandom.split(dist_key, N)
+        disturbance_trajs = jax.vmap(
+            lambda key: arena.sample_random_multi_trajectory(
+                key, jnp.zeros_like(initial_seeker_positions), T=T
+            )
+        )(dist_keys)
+
+        stress_test_result = sim_fn(final_dps, hider_trajs, disturbance_trajs)
         stress_test_worst_case.append(stress_test_result.potential.max())
         n_gt_predicted.append(
             (stress_test_result.potential > predicted_worst_case).sum()

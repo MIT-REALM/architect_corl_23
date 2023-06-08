@@ -9,11 +9,11 @@ data = [
     #     "training_curve_file": "results/scacopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_gd_dp_trace_training_progress.npz",  # noqa
     # },
     {
-        "Algorithm": "RMH",
+        "Algorithm": "RMH (gradient-free)",
         "training_curve_file": "results/scacopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_rmh_dp_trace_training_progress.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
+        "Algorithm": "Ours (gradient-based)",
         "training_curve_file": "results/scacopf/case57/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_mala_dp_trace_training_progress.npz",  # noqa
     },
 ]

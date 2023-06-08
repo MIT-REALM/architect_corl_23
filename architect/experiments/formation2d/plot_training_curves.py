@@ -5,12 +5,12 @@ import seaborn as sns
 
 data = [
     {
-        "Algorithm": "RMH",
-        "training_curve_file": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_training_progress.npz",  # noqa
+        "Algorithm": "RMH (gradient-free)",
+        "training_curve_file": "results/formation2d_grad_norm_netconn/10/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_training_progress.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
-        "training_curve_file": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_training_progress.npz",  # noqa
+        "Algorithm": "MALA (gradient-based)",
+        "training_curve_file": "results/formation2d_grad_norm_netconn/10/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_training_progress.npz",  # noqa
     },
 ]
 

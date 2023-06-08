@@ -73,16 +73,24 @@ if __name__ == "__main__":
     )(dp_keys)
 
     # Create a test set
-    prng_key, test_set_key = jrandom.split(prng_key)
-    test_set_keys = jrandom.split(test_set_key, N)
-    test_set_eps = jax.vmap(
+    prng_key, hider_key = jrandom.split(prng_key)
+    hider_keys = jrandom.split(hider_key, N)
+    hider_traj = jax.vmap(
         lambda key: arena.sample_random_multi_trajectory(
             key, initial_hider_positions, T=5
         )
-    )(test_set_keys)
+    )(hider_keys)
+    prng_key, dist_key = jrandom.split(prng_key)
+    dist_keys = jrandom.split(dist_key, N)
+    dist_traj = jax.vmap(
+        lambda key: arena.sample_random_multi_trajectory(
+            key, jnp.zeros_like(initial_seeker_positions), T=5
+        )
+    )(dist_keys)
+    test_set_eps = (hider_traj, dist_traj)
 
     # Define the test set performance as the mean cost over all test examples
-    performance_fn = lambda dp, ep: game(dp, ep).potential
+    performance_fn = lambda dp, ep: game(dp, ep[0], ep[1]).potential
     test_set_performance_fn = lambda dp: jax.vmap(performance_fn, in_axes=(None, 0))(
         dp, test_set_eps
     ).mean()
