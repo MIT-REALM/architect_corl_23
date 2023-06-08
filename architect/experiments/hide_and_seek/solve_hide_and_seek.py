@@ -145,7 +145,7 @@ if __name__ == "__main__":
     disturbance_keys = jrandom.split(disturbance_key, num_chains)
     init_disturbance_trajectory = jax.vmap(
         lambda key: arena.sample_random_multi_trajectory(
-            key, jax.zeros_like(initial_seeker_positions), T=T
+            key, jnp.zeros_like(initial_seeker_positions), T=T
         )
     )(disturbance_keys)
 
