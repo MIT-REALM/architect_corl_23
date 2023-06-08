@@ -7,7 +7,11 @@ import jax.numpy as jnp
 import jax.random as jrandom
 from tqdm import tqdm
 
-from architect.systems.formation2d.simulator import WindField, simulate
+from architect.systems.formation2d.simulator import (
+    WindField,
+    sample_random_connection_strengths,
+    simulate,
+)
 from architect.systems.hide_and_seek.hide_and_seek_types import (
     Arena,
     MultiAgentTrajectory,
@@ -37,11 +41,6 @@ if __name__ == "__main__":
     with open(dp_filename, "r") as f:
         saved_data = json.load(f)
 
-    ep_filename = file_prefix + "_final_eps.eqx"
-    n_chains = 5
-    dummy = jax.vmap(lambda _: WindField(prng_key))(jnp.arange(n_chains))
-    wind = eqx.tree_deserialise_leaves(ep_filename, dummy)
-
     # Create the game
     width = saved_data["width"]
     height = saved_data["height"]
@@ -61,11 +60,19 @@ if __name__ == "__main__":
     ).T
     goal_com_position = jnp.array([width / 2.0 - R, 0.0])
 
+    ep_filename = file_prefix + "_final_eps.eqx"
+    n_chains = 5
+    dummy_wind = jax.vmap(lambda _: WindField(prng_key))(jnp.arange(n_chains))
+    connection_strengths = jnp.ones((n_chains, n, n))
+    eps = eqx.tree_deserialise_leaves(ep_filename, (dummy_wind, connection_strengths))
+    wind, connection_strengths = eps
+
     # Wrap the simulator function
     simulate_fn = lambda dp, ep: simulate(
         dp,
         initial_states,
-        ep,
+        ep[0],
+        ep[1],
         goal_com_position,
         max_wind_thrust=max_wind_thrust,
         duration=duration,
@@ -77,7 +84,7 @@ if __name__ == "__main__":
     final_dps = MultiAgentTrajectory([Trajectory2D(traj) for traj in traj_data])
 
     # See how the design performs on the identified failure modes
-    result = jax.vmap(simulate_fn, in_axes=(None, 0))(final_dps, wind)
+    result = jax.vmap(simulate_fn, in_axes=(None, 0))(final_dps, eps)
     predicted_worst_case = result.potential.max()
 
     # Save the results to a file
@@ -94,7 +101,16 @@ if __name__ == "__main__":
     for i in tqdm(range(batches)):
         prng_key, stress_test_key = jrandom.split(prng_key)
         stress_test_keys = jrandom.split(stress_test_key, N)
-        stress_test_eps = jax.vmap(WindField)(stress_test_keys)
+        wind = jax.vmap(WindField)(stress_test_keys)
+
+        prng_key, conn_key = jrandom.split(prng_key)
+        conn_keys = jrandom.split(conn_key, N)
+        conn = jax.vmap(sample_random_connection_strengths, in_axes=(0, None))(
+            conn_keys, n
+        )
+
+        stress_test_eps = (wind, conn)
+
         stress_test_result = sim_fn(final_dps, stress_test_eps)
         stress_test_worst_case.append(stress_test_result.potential.max())
         n_gt_predicted.append(
