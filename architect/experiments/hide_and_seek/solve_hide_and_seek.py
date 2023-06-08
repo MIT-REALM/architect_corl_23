@@ -23,8 +23,8 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_seekers", type=int, nargs="?", default=2)
-    parser.add_argument("--n_hiders", type=int, nargs="?", default=3)
+    parser.add_argument("--n_seekers", type=int, nargs="?", default=3)
+    parser.add_argument("--n_hiders", type=int, nargs="?", default=5)
     parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--T", type=int, nargs="?", default=5)
     parser.add_argument("--width", type=float, nargs="?", default=3.2)
