@@ -62,7 +62,7 @@ class Game(eqx.Module):
         seeker_trajectory: MultiAgentTrajectory,
         hider_trajectory: MultiAgentTrajectory,
         seeker_disturbance_trace: MultiAgentTrajectory,
-        max_disturbance: float = 0.02,
+        max_disturbance: float = 0.01,
     ) -> HideAndSeekResult:
         """
         Play out a game of hide and seek.
@@ -87,12 +87,19 @@ class Game(eqx.Module):
 
             # Steer towards these targets (clip with max speeds)
             v_seeker = seeker_target - current_seeker_positions
+
+            # Add the disturbance to the seekers
+            v_seeker += seeker_disturbance
+
+            # Cap max speed
             seeker_speed = softnorm(v_seeker)
             v_seeker = jnp.where(
                 seeker_speed >= self.seeker_max_speed,
                 v_seeker * self.seeker_max_speed / (1e-3 + seeker_speed),  # avoid nans
                 v_seeker,
             )
+
+            # Same for hiders
             v_hider = hider_target - current_hider_positions
             hider_speed = softnorm(v_hider)
             v_hider = jnp.where(
@@ -100,9 +107,6 @@ class Game(eqx.Module):
                 v_hider * self.hider_max_speed / (1e-3 + hider_speed),  # avoid nans
                 v_hider,
             )
-
-            # Add the disturbance to the seekers
-            v_seeker = v_seeker + seeker_disturbance
 
             seeker_positions = current_seeker_positions + self.dt * v_seeker
             hider_positions = current_hider_positions + self.dt * v_hider
