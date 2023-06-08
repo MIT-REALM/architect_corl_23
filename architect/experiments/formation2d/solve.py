@@ -17,7 +17,12 @@ from architect.engines.reinforce import init_sampler as init_reinforce_sampler
 from architect.engines.reinforce import make_kernel as make_reinforce_kernel
 from architect.engines.samplers import init_sampler as init_mcmc_sampler
 from architect.engines.samplers import make_kernel as make_mcmc_kernel
-from architect.systems.formation2d.simulator import WindField, simulate
+from architect.systems.formation2d.simulator import (
+    WindField,
+    connection_strength_prior_logprob,
+    sample_random_connection_strengths,
+    simulate,
+)
 from architect.systems.hide_and_seek.hide_and_seek_types import Arena
 
 config.update("jax_debug_nans", True)
@@ -26,7 +31,7 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n", type=int, nargs="?", default=10)
+    parser.add_argument("--n", type=int, nargs="?", default=5)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--T", type=int, nargs="?", default=3)
     parser.add_argument("--width", type=float, nargs="?", default=3.2)
@@ -141,6 +146,11 @@ if __name__ == "__main__":
     wind_keys = jrandom.split(wind_key, num_chains)
     wind = jax.vmap(WindField)(wind_keys)
 
+    # Initialize the connection strengths
+    prng_key, conn_key = jrandom.split(prng_key)
+    conn_keys = jrandom.split(conn_key, num_chains)
+    conn = jax.vmap(sample_random_connection_strengths, in_axes=(0, None))(conn_keys, n)
+
     # Define a prior over wind fields that says that the average wind thrust
     # should follow a gaussian distribution (maybe not super physical but just a start)
     N_test_points = 25
@@ -154,11 +164,19 @@ if __name__ == "__main__":
         mean_wind_speed = jnp.mean(wind_speeds)
         return jax.scipy.stats.norm.logpdf(mean_wind_speed, 0.0, 1.0)
 
+    def overall_logprior(ep):
+        wind = ep[0]
+        connection_strength = ep[1]
+        return wind_logprior(wind) + connection_strength_prior_logprob(
+            connection_strength
+        )
+
     # Wrap the simulator function
     simulate_fn = lambda dp, ep: simulate(
         dp,
         initial_states,
-        ep,
+        ep[0],
+        ep[1],
         goal_com_position,
         max_wind_thrust=max_wind_thrust,
         duration=duration,
@@ -198,9 +216,9 @@ if __name__ == "__main__":
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
         prng_key,
         init_robot_trajectories,
-        wind,
+        (wind, conn),
         dp_logprior_fn=arena.multi_trajectory_prior_logprob,
-        ep_logprior_fn=wind_logprior,
+        ep_logprior_fn=overall_logprior,
         ep_potential_fn=lambda dp, ep: L * simulate_fn(dp, ep).potential,
         dp_potential_fn=lambda dp, ep: -L * simulate_fn(dp, ep).potential,
         init_sampler=init_sampler_fn,
@@ -296,7 +314,7 @@ if __name__ == "__main__":
     #         )
 
     # Plot the worst wind speeds
-    worst_wind = jax.tree_util.tree_map(lambda leaf: leaf[worst_eps_idx], wind)
+    worst_wind = jax.tree_util.tree_map(lambda leaf: leaf[worst_eps_idx], final_eps[0])
     wind_speeds = jax.vmap(jax.vmap(worst_wind))(jnp.stack([test_X, test_Y], axis=-1))
     axs["arena"].quiver(
         test_X,
@@ -326,7 +344,7 @@ if __name__ == "__main__":
     axs["connectivity"].set_ylabel("Connectivity")
     axs["connectivity"].set_title("Connectivity")
 
-    experiment_type = "formation2d_grad_norm"
+    experiment_type = "formation2d_grad_norm_netconn"
     if reinforce:
         alg_type = "reinforce"
     elif use_gradients and use_stochasticity:
@@ -385,7 +403,7 @@ if __name__ == "__main__":
         )
 
     # Save the final exogenous parameters
-    eqx.tree_serialise_leaves(filename + "_final_eps.eqx", wind)
+    eqx.tree_serialise_leaves(filename + "_final_eps.eqx", final_eps)
 
     # Save the trace of design parameters
     with open(filename + "_dp_trace.json", "w") as f:

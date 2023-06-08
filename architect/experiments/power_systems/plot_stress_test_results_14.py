@@ -5,7 +5,7 @@ import seaborn as sns
 
 data = [
     {
-        "Algorithm": "GD-NoAdv",
+        "Algorithm": "DR",
         "Worst case (predicted)": 0.0,
         "Worst case (observed)": 2.689948,
         "Likelihood of underestimate": 0.33210,
@@ -23,7 +23,7 @@ data = [
         "stress_test_results": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_gd_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "RMH",
+        "Algorithm": "Ours (RMH)",
         "Worst case (predicted)": 3.318828105,
         "Worst case (observed)": 5.32660293,
         "Likelihood of underestimate": 0.0002,
@@ -32,7 +32,7 @@ data = [
         "stress_test_results": "results/scacopf/case14/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-02_rmh_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
+        "Algorithm": "Ours (MALA)",
         "Worst case (predicted)": 0.35271,
         "Worst case (observed)": 0.2735613,
         "Likelihood of underestimate": 0.00,

@@ -5,7 +5,7 @@ import seaborn as sns
 
 data = [
     {
-        "Algorithm": "GD-NoAdv",
+        "Algorithm": "DR",
         "predicted_failures": "results/acopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_gd_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/acopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_gd_stress_test.npz",  # noqa
     },
@@ -15,12 +15,12 @@ data = [
         "stress_test_results": "results/scacopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_gd_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "RMH",
+        "Algorithm": "Ours (RMH)",
         "predicted_failures": "results/scacopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_rmh_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/scacopf/case57/L_1.0e+02_1000_samples_0_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_rmh_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
+        "Algorithm": "Ours (MALA)",
         "predicted_failures": "results/scacopf/case57/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_mala_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/scacopf/case57/L_1.0e+02_1000_samples_10_quench_10_chains_step_dp_1.0e-06_ep_1.0e-03_mala_stress_test.npz",  # noqa
     },

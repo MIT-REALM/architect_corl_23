@@ -5,22 +5,22 @@ import seaborn as sns
 
 data = [
     {
+        "Algorithm": "DR",
+        "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_stress_test.npz",  # noqa
+    },
+    {
         "Algorithm": "GD",
         "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/gd_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/gd_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "GD-NoAdv",
-        "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_stress_test.npz",  # noqa
-    },
-    {
-        "Algorithm": "RMH",
+        "Algorithm": "Ours (RMH)",
         "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
+        "Algorithm": "Ours (MALA)",
         "predicted_failures": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_predicted_failures.npz",  # noqa"
         "stress_test_results": "results/formation2d_grad_norm/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_stress_test.npz",  # noqa
     },

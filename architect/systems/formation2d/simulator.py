@@ -11,6 +11,7 @@ from architect.systems.hide_and_seek.hide_and_seek_types import (
     MultiAgentTrajectory,
     Trajectory2D,
 )
+from architect.types import PRNGKeyArray
 from architect.utils import softmax
 
 
@@ -94,7 +95,10 @@ def closed_loop_dynamics(
 
 
 def algebraic_connectivity(
-    positions: Float[Array, "n 2"], communication_range: float, sharpness: float = 20.0
+    positions: Float[Array, "n 2"],
+    communication_range: float,
+    communication_strengths: Float[Array, "n n"],
+    sharpness: float = 20.0,
 ) -> Float[Array, ""]:
     """Compute the connectivity of a formation of drones"""
     # Get the pairwise distance between drones
@@ -102,10 +106,12 @@ def algebraic_connectivity(
         (positions[:, None, :] - positions[None, :, :]) ** 2, axis=-1
     )
 
-    # Compute adjacency and degree matrices (following Cavorsi RSS 2023)
+    # Compute adjacency and degree matrices (following Cavorsi RSS 2023 with
+    # modification for reduced connection strengths)
     adjacency_matrix = jax.nn.sigmoid(
         sharpness * (communication_range**2 - squared_distance_matrix)
     )
+    adjacency_matrix = adjacency_matrix * jax.nn.sigmoid(4 * communication_strengths)
     degree_matrix = jnp.diag(jnp.sum(adjacency_matrix, axis=1))
 
     # Compute the laplacian
@@ -117,12 +123,68 @@ def algebraic_connectivity(
     return connectivity
 
 
+def sample_random_connection_strengths(
+    key: PRNGKeyArray, n: int
+) -> Float[Array, "n n"]:
+    """
+    Sample a random set of connections strengths.
+
+    Connection strength is positive in the absence of failure and negative when failure
+    occurs. We can represent this as a Gaussian distribution with the mean shifted
+    so that there is 2% probability mass for negative values.
+
+    Failures are assumed to be indepedendent.
+
+    args:
+        key: PRNG key to use for sampling
+        n: number of drones
+    """
+    # Figure out how much to shift a standard Gaussian so that there is the right
+    # probability of negative values
+    shift = -jax.scipy.stats.norm.ppf(0.02)
+
+    # Sample line states (positive = no failure, negative = failure)
+    connection_strengths = jax.random.normal(key, shape=(n, n)) + shift
+
+    # Return a new network state
+    return connection_strengths
+
+
+@jaxtyped
+@beartype
+def connection_strength_prior_logprob(
+    connection_strengths: Float[Array, "n n"]
+) -> Float[Array, ""]:
+    """
+    Compute the prior log probability of the given connection strengths.
+
+    Connection strength is positive in the absence of failure and negative when failure
+    occurs. We can represent this as a Gaussian distribution with the mean shifted
+    so that there is 2% probability mass for negative values.
+
+    Failures are assumed to be indepedendent. Probability density is not necessarily
+    normalized.
+
+    args:
+        connection_strengths: the connection strengths to evaluate
+    """
+    # Figure out how much to shift a standard Gaussian so that there is the right
+    # probability of negative values
+    shift = -jax.scipy.stats.norm.ppf(0.02)
+
+    # Get the log likelihood for this shifted Gaussian
+    logprob = jax.scipy.stats.norm.logpdf(connection_strengths, loc=shift).sum()
+
+    return logprob
+
+
 @jaxtyped
 @beartype
 def simulate(
     target_trajectories: MultiAgentTrajectory,
     initial_states: Float[Array, "n 4"],
     wind: WindField,
+    connection_strengths: Float[Array, "n n"],
     goal_com_position: Float[Array, " 2"],
     duration: float = 10.0,
     dt: float = 0.01,
@@ -138,6 +200,7 @@ def simulate(
         target_positions: the target positions of the drones over time
         initial_states: the initial states of the drones
         wind: the wind vector over time
+        connection_strengths: the connection strengths between drones
         goal_com_position: the goal center of mass position for the formation
         duration: the length of the simulation (seconds)
         dt: the timestep of the simulation (seconds)
@@ -178,10 +241,15 @@ def simulate(
     # Run the loop
     _, qs = jax.lax.scan(step, carry, jnp.arange(0.0, duration, dt))
 
+    # Symmetrize connection strengths
+    connection_strengths = 0.5 * (connection_strengths + connection_strengths.T)
+
     # Compute the potential based on the minimum connectivity of the formation over
     # time. The potential penalizes connectivities that approach zero
-    connectivity = jax.vmap(algebraic_connectivity, in_axes=(0, None))(
-        qs[:, :, :2], communication_range
+    connectivity = jax.vmap(algebraic_connectivity, in_axes=(0, None, None))(
+        qs[:, :, :2],
+        communication_range,
+        connection_strengths,
     )
     inverse_connectivity = 1 / (connectivity + 1e-2)
     potential = softmax(inverse_connectivity, b)
