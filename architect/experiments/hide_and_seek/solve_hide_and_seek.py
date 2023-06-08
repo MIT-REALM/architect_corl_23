@@ -212,7 +212,7 @@ if __name__ == "__main__":
         final_dps = jtu.tree_map(lambda leaf: leaf[-1, 0], dps)
     # Evaluate this against all contingencies
     final_eps = jtu.tree_map(lambda leaf: leaf[-1], eps)
-    result = jax.vmap(game, in_axes=(None, 0))(final_dps, final_eps)
+    result = jax.vmap(game, in_axes=(None, 0, 0))(final_dps, final_eps[0], final_eps[1])
     # For later, save the index of the worst contingency
     worst_eps_idx = jnp.argmax(result.potential)
 
