@@ -62,7 +62,7 @@ class Game(eqx.Module):
         seeker_trajectory: MultiAgentTrajectory,
         hider_trajectory: MultiAgentTrajectory,
         seeker_disturbance_trace: MultiAgentTrajectory,
-        max_disturbance: float = 0.1,
+        max_disturbance: float = 0.02,
     ) -> HideAndSeekResult:
         """
         Play out a game of hide and seek.

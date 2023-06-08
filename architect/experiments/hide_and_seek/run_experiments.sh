@@ -5,15 +5,17 @@ CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/solve_hide_and
 
 wait
 
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/stress_test.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict.json &
 
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_dp_trace.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_dp_trace.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_dp_trace.json &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_dp_trace.json &
+wait
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_dp_trace.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_dp_trace.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_dp_trace.json &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/hide_and_seek/training_curves.py --filename results/hide_and_seek_disturbance/6_seekers_10_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_dp_trace.json &
 
 wait
 

@@ -127,5 +127,7 @@ if __name__ == "__main__":
     plt.yscale("log")
     plt.ylim([1.0, 500.0])
     plt.legend(markerscale=1.5, loc="lower right")
+    plt.xlabel("")
+    plt.gca().legend().remove()
 
     plt.show()

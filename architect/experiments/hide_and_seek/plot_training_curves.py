@@ -5,11 +5,11 @@ import seaborn as sns
 
 data = [
     {
-        "Algorithm": "RMH",
+        "Algorithm": "RMH (gradient-free)",
         "training_curve_file": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_dp_trace_training_progress.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
+        "Algorithm": "MALA (gradient-based)",
         "training_curve_file": "results/hide_and_seek/12_seekers_20_hiders/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_dp_trace_training_progress.npz",  # noqa
     },
 ]

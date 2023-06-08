@@ -160,5 +160,7 @@ if __name__ == "__main__":
     plt.ylabel("Cost")
     plt.yscale("log")
     plt.legend(markerscale=1.5)
+    plt.xlabel("")
+    plt.gca().legend().remove()
 
     plt.show()

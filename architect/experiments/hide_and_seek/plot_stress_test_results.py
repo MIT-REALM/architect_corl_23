@@ -8,23 +8,23 @@ scenario = "6_seekers_10_hiders"
 data = [
     {
         "Algorithm": "DR",
-        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_stress_test.npz",  # noqa
+        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "GD",
-        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "RMH",
-        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_stress_test.npz",  # noqa
+        "Algorithm": "Ours (RMH)",
+        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_stress_test.npz",  # noqa
     },
     {
-        "Algorithm": "Ours",
-        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_stress_test.npz",  # noqa
+        "Algorithm": "Ours (MALA)",
+        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_stress_test.npz",  # noqa
     },
 ]
 
@@ -127,5 +127,7 @@ if __name__ == "__main__":
     plt.ylabel("Cost")
     # plt.yscale("log")
     plt.legend(markerscale=1.5)
+    plt.gca().get_legend().remove()
+    plt.xlabel("")
 
     plt.show()
