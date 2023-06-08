@@ -1,9 +1,9 @@
 wait
 
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --disable_stochasticity --no-predict &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --disable_stochasticity &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --disable_gradients --quench_rounds 0 &
-CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --n 10 --disable_stochasticity --no-predict &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --n 10 --disable_stochasticity &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --n 10 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --n 10 &
 
 wait
 

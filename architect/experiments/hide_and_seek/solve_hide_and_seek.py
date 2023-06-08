@@ -140,6 +140,23 @@ if __name__ == "__main__":
         )
     )(hider_keys)
 
+    # Initialize the disturbance trajectories randomly
+    prng_key, disturbance_key = jrandom.split(prng_key)
+    disturbance_keys = jrandom.split(disturbance_key, num_chains)
+    init_disturbance_trajectory = jax.vmap(
+        lambda key: arena.sample_random_multi_trajectory(
+            key, jax.zeros_like(initial_seeker_positions), T=T
+        )
+    )(disturbance_keys)
+
+    # Define a joint logprob for the hider trajectories and disturbances
+    def joint_ep_prior_logprob(ep):
+        hider_trajs = ep[0]
+        disturbance_traj = ep[1]
+        return arena.multi_trajectory_prior_logprob(
+            hider_trajs
+        ) + arena.multi_trajectory_prior_logprob(disturbance_traj)
+
     # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
     # stochasticity are enabled
     init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
@@ -162,11 +179,11 @@ if __name__ == "__main__":
     dps, eps, dp_logprobs, ep_logprobs = predict_and_mitigate_failure_modes(
         prng_key,
         init_seeker_trajectories,
-        init_hider_trajectories,
+        (init_hider_trajectories, init_disturbance_trajectory),
         dp_logprior_fn=arena.multi_trajectory_prior_logprob,
-        ep_logprior_fn=arena.multi_trajectory_prior_logprob,
-        ep_potential_fn=lambda dp, ep: L * game(dp, ep).potential,
-        dp_potential_fn=lambda dp, ep: -L * game(dp, ep).potential,
+        ep_logprior_fn=joint_ep_prior_logprob,
+        ep_potential_fn=lambda dp, ep: L * game(dp, ep[0], ep[1]).potential,
+        dp_potential_fn=lambda dp, ep: -L * game(dp, ep[0], ep[1]).potential,
         init_sampler=init_sampler_fn,
         make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
@@ -278,7 +295,7 @@ if __name__ == "__main__":
 
     axs["trace"].set_xlabel("# Samples")
 
-    experiment_type = "hide_and_seek"
+    experiment_type = "hide_and_seek_disturbance"
     if use_gradients and use_stochasticity:
         alg_type = "mala"
     elif use_gradients and not use_stochasticity:
@@ -309,7 +326,14 @@ if __name__ == "__main__":
                     "trajectories": [traj.p.tolist() for traj in final_dps.trajectories]
                 },
                 "hider_trajs": {
-                    "trajectories": [traj.p.tolist() for traj in final_eps.trajectories]
+                    "trajectories": [
+                        traj.p.tolist() for traj in final_eps[0].trajectories
+                    ]
+                },
+                "disturbance_trajs": {
+                    "trajectories": [
+                        traj.p.tolist() for traj in final_eps[1].trajectories
+                    ]
                 },
                 "best_hider_traj_idx": worst_eps_idx,
                 "time": t_end - t_start,

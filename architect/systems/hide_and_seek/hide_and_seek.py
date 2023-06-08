@@ -61,6 +61,8 @@ class Game(eqx.Module):
         self,
         seeker_trajectory: MultiAgentTrajectory,
         hider_trajectory: MultiAgentTrajectory,
+        seeker_disturbance_trace: MultiAgentTrajectory,
+        max_disturbance: float = 0.1,
     ) -> HideAndSeekResult:
         """
         Play out a game of hide and seek.
@@ -68,6 +70,8 @@ class Game(eqx.Module):
         args:
             seeker_trajectory: trajectories for the seekers to follow
             hider_trajectory: trajectories for the hiders to follow
+            seeker_disturbance: disturbance to add to the seekers
+            max_disturbance: maximum disturbance to add to the seekers
         """
 
         # Define a function to execute one step in the game
@@ -78,6 +82,8 @@ class Game(eqx.Module):
             # Get current target positions for hiders and seekers
             seeker_target = seeker_trajectory(t / self.duration)
             hider_target = hider_trajectory(t / self.duration)
+            seeker_disturbance = seeker_disturbance_trace(t / self.duration)
+            seeker_disturbance = jax.nn.tanh(seeker_disturbance) * max_disturbance
 
             # Steer towards these targets (clip with max speeds)
             v_seeker = seeker_target - current_seeker_positions
@@ -94,6 +100,9 @@ class Game(eqx.Module):
                 v_hider * self.hider_max_speed / (1e-3 + hider_speed),  # avoid nans
                 v_hider,
             )
+
+            # Add the disturbance to the seekers
+            v_seeker = v_seeker + seeker_disturbance
 
             seeker_positions = current_seeker_positions + self.dt * v_seeker
             hider_positions = current_hider_positions + self.dt * v_hider
