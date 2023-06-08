@@ -92,7 +92,7 @@ if __name__ == "__main__":
     stress_test_potentials = []
     stress_test_worst_case = []
     n_gt_predicted = []
-    sim_fn = jax.jit(jax.vmap(game, in_axes=(None, 0)))
+    sim_fn = jax.jit(jax.vmap(game, in_axes=(None, 0, 0)))
     print("Running stress test")
     for i in tqdm(range(batches)):
         prng_key, hider_key = jrandom.split(prng_key)
