@@ -8,7 +8,11 @@ import jax.random as jrandom
 import jax.tree_util as jtu
 from tqdm import tqdm
 
-from architect.systems.formation2d.simulator import WindField, simulate
+from architect.systems.formation2d.simulator import (
+    WindField,
+    sample_random_connection_strengths,
+    simulate,
+)
 from architect.systems.hide_and_seek.hide_and_seek_types import (
     Arena,
     MultiAgentTrajectory,
@@ -56,7 +60,8 @@ if __name__ == "__main__":
     simulate_fn = lambda dp, ep: simulate(
         dp,
         initial_states,
-        ep,
+        ep[0],
+        ep[1],
         goal_com_position,
         max_wind_thrust=max_wind_thrust,
         duration=duration,
@@ -82,7 +87,13 @@ if __name__ == "__main__":
     # Create a test set
     prng_key, test_set_key = jrandom.split(prng_key)
     test_set_keys = jrandom.split(test_set_key, N)
-    test_set_eps = jax.vmap(WindField)(test_set_keys)
+    test_set_wind = jax.vmap(WindField)(test_set_keys)
+
+    prng_key, conn_key = jrandom.split(prng_key)
+    conn_keys = jrandom.split(conn_key, N)
+    conn = jax.vmap(sample_random_connection_strengths, in_axes=(0, None))(conn_keys, n)
+
+    test_set_eps = (test_set_wind, conn)
 
     # Define the test set performance as the mean cost over all test examples
     performance_fn = lambda dp, ep: simulate_fn(dp, ep).potential
