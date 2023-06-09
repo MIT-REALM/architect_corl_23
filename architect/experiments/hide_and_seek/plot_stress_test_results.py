@@ -3,28 +3,28 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-scenario = "6_seekers_10_hiders"
+scenario = "12_seekers_20_hiders"
 
 data = [
     {
         "Algorithm": "DR",
-        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_stress_test.npz",  # noqa
+        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "GD",
-        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_gd_repair_predict_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "Ours (RMH)",
-        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_0_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_rmh_repair_predict_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "Ours (MALA)",
-        "predicted_failures": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_predicted_failures.npz",  # noqa"
-        "stress_test_results": f"results/hide_and_seek_disturbance/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_stress_test.npz",  # noqa
+        "predicted_failures": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_predicted_failures.npz",  # noqa"
+        "stress_test_results": f"results/hide_and_seek/{scenario}/L_1.0e+01_5_T_1000_samples_25_quench_10_chains_step_dp_1.0e-02_ep_1.0e-02_mala_repair_predict_stress_test.npz",  # noqa
     },
 ]
 

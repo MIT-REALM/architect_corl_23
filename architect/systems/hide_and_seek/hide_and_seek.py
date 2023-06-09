@@ -88,8 +88,8 @@ class Game(eqx.Module):
             # Steer towards these targets (clip with max speeds)
             v_seeker = seeker_target - current_seeker_positions
 
-            # Add the disturbance to the seekers
-            v_seeker += seeker_disturbance
+            # # Add the disturbance to the seekers
+            # v_seeker += seeker_disturbance
 
             # Cap max speed
             seeker_speed = softnorm(v_seeker)
