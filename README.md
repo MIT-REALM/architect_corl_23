@@ -29,8 +29,8 @@ This approach simplifies the design process to reduce the burden on the designer
 To install Architect, run the following commands:
 
 ```bash
-git clone https://github.com/dawsonc/architect
-cd architect
+git clone https://github.com/dawsonc/architect_private
+cd architect_private
 conda create -n architect_env python=3.9
 conda activate architect_env
 pip install -e .
