@@ -16,3 +16,8 @@ def softmax(x: Float[Array, "..."], sharpness: float = 0.05):
 def softmin(x: Float[Array, "..."], sharpness: float = 0.05):
     """Return the soft minimum of the given vector"""
     return -softmax(-x, sharpness)
+
+
+def log_smooth_uniform(x, x_min, x_max):
+    """Return the smooth approximation of uniform distribution for log probabilities"""
+    return log_sigmoid(self.smoothing * (x - x_min)) + log_sigmoid(self.smoothing * (x_max - x))
