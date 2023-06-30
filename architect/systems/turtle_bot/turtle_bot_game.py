@@ -16,7 +16,7 @@ from architect.systems.components.dynamics.dubins import dubins_next_state
 from architect.systems.turtle_bot.turtle_bot_types import (
     Arena,
     Policy,
-    Environment_state,# get_sigma, get_concentration, get_target_pos,
+    Environment_state, get_sigma, get_concentration, get_target_pos,
     TurtleBotResult
 )
 
@@ -52,7 +52,9 @@ class Game(eqx.Module):
         policy: Policy,
         x_init: Float[Array, " n "],
         x_hist: Float[Array, " n "],
-        conc_hist: Float[Array, " n "], #jaxtyping syntax
+        conc_hist: Float[Array, " n "], 
+        exogenous_env: Environment_state,
+        arena: Arena
     ) -> TurtleBotResult:
         """
         Play out a game of turtle bots.
@@ -73,7 +75,7 @@ class Game(eqx.Module):
             # insert the next state into the beginning of the list of position history
             jnp.insert(x_hist, 0, x_next, axis=0)
             # insert the newest concentration found at x_next
-            jnp.insert(conc_hist, 0, Environment_state.get_concentration(x_next[0], x_next[1]), axis = 0)
+            jnp.insert(conc_hist, 0, exogenous_env.get_concentration(x_next[0], x_next[1]), axis = 0)
             return (x_hist, conc_hist, x_next), (x_next, control_inputs) 
         
         
@@ -119,7 +121,7 @@ class Game(eqx.Module):
         
         # find a way to find distances without knowing how many targets there are  
         loss = lambda sigma, distance: -1/sigma*jax.lax.exp(-distance/sigma).mean()
-        cost = [loss(get_sigma()[n], get_squared_distance(trajectory, (jnp.zeros_like(trajectory)+ get_target_pos()[n]))) for n in range(Arena.get_n_targets())]
+        cost = [loss(exogenous_env.get_sigma()[n], get_squared_distance(trajectory, (jnp.zeros_like(trajectory)+ exogenous_env.get_target_pos()[n]))) for n in range(arena.get_n_targets())]
         cost = sum(cost) + control.mean()
 
         
