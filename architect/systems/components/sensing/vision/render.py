@@ -110,13 +110,19 @@ def raycast(
         # Raymarch
         return jax.lax.fori_loop(0, max_steps, step_ray, initial_guess)
 
-    # We need to treat this as a root-finding problem so we can use implicit
-    # differentiation rather than unrolling the whole shebang.
-    distance_along_ray = jax.lax.custom_root(
-        lambda d: sdf(origin + d * ray),
-        initial_guess=jnp.array(1e-2),
-        solve=solve_for_collision_distance,
-        tangent_solve=lambda g, y: y / g(1.0),
+    # # We need to treat this as a root-finding problem so we can use implicit
+    # # differentiation rather than unrolling the whole shebang.
+    # distance_along_ray = jax.lax.custom_root(
+    #     lambda d: sdf(origin + d * ray),
+    #     initial_guess=jnp.array(1e-2),
+    #     solve=solve_for_collision_distance,
+    #     tangent_solve=lambda g, y: y / g(1.0),
+    # )
+
+    # Empirically, implicit autodiff doesn't work as well as just differentiating
+    # through the for loop in solve
+    distance_along_ray = solve_for_collision_distance(
+        lambda d: sdf(origin + d * ray), jnp.array(1e-2)
     )
 
     return origin + distance_along_ray * ray
