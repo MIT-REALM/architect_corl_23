@@ -2,6 +2,7 @@
 import jax
 import jax.numpy as jnp
 import pytest
+
 from architect.systems.components.sensing.vision.render import (
     CameraExtrinsics,
     CameraIntrinsics,
@@ -256,15 +257,15 @@ def test_render_depth_image_grad():
     depth_image = render_depth_image_with_shape(0.0)
     grad = jax.jacfwd(render_depth_image_with_shape)(0.0)
 
-    # Uncomment to render
-    import matplotlib.colors as mcolors
-    import matplotlib.pyplot as plt
+    # # Uncomment to render
+    # import matplotlib.colors as mcolors
+    # import matplotlib.pyplot as plt
 
-    # Display the depth image in one subplot, and the colorized gradient in another
-    _, (ax1, ax2) = plt.subplots(1, 2)
-    ax1.imshow(depth_image.T)
-    ax2.imshow(grad.T, cmap="bwr", norm=mcolors.CenteredNorm())
-    plt.show()
+    # # Display the depth image in one subplot, and the colorized gradient in another
+    # _, (ax1, ax2) = plt.subplots(1, 2)
+    # ax1.imshow(depth_image.T)
+    # ax2.imshow(grad.T, cmap="bwr", norm=mcolors.CenteredNorm())
+    # plt.show()
 
     assert grad.shape == depth_image.shape  # since we're differentiating wrt a scalar
 
