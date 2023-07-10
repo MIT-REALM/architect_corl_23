@@ -82,24 +82,6 @@ def test_highway_env_step(highway_env):
     assert reward is not None
     assert done is not None
 
-    # Visualize the gradient of the depth image
-    get_obs = lambda steering: highway_env.step(
-        state, jnp.array([steering, 0.0]), non_ego_actions, jrandom.PRNGKey(0)
-    )[1]
-    obs, grad = jax.value_and_grad(get_obs)(jnp.array(0.0))
-
-    import matplotlib.pyplot as plt
-
-    # Plot the depth image and gradient together
-    _, ax = plt.subplots(1, 2)
-    ax[0].imshow(obs.depth)
-    ax[1].imshow(grad.depth)
-    plt.show()
-
-    import pdb
-
-    pdb.set_trace()
-
 
 def test_highway_env_reset(highway_env):
     """Test the highway environment reset."""
