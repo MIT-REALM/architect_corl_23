@@ -16,8 +16,10 @@ from jax.nn import log_sigmoid
 from jaxtyping import Array, Float, jaxtyped
 from scipy.special import binom
 import jax.tree_util as jtu
-from architect.systems import utils
+from architect import utils
 from architect.types import PRNGKeyArray
+from jax.nn import log_sigmoid
+
 
 # TODO: add beartype and jaxtyping into this file so that I don't have to test the shapes individually
 
@@ -48,8 +50,8 @@ class Policy(eqx.Module):
                        eqx.nn.Linear(64, 2, key=key4)] 
 
     def __call__(self, x_hist: jnp.ndarray, conc_hist: jnp.ndarray): 
-        x_hist: jnp.ndarray # jnp arrays of jnp arrays
-        conc_hist: jnp.ndarray# conc_hist is a 1D jnp array
+        #x_hist: jnp.ndarray # jnp arrays of jnp arrays
+        #conc_hist: jnp.ndarray# conc_hist is a 1D jnp array
         new_x_hist = [change_sincos(x) for x in x_hist] #uses dubins dynamics
         new_x_hist = jnp.array(new_x_hist)
         new_x_hist = jnp.ravel(new_x_hist)
@@ -164,9 +166,8 @@ class Arena(eqx.Module):
         sigma_max = 1.0
         logprob_sigma = utils.log_smooth_uniform(sigma, sigma_min, sigma_max)
         return logprob_sigma
-    
 
-    def sample_random_sigma(self, key):
+    def sample_random_sigma(self, key: PRNGKeyArray):
         """
         Sample a random jnp array of sigma value(s). Returns a 1D array of shape (n_targets).
         
@@ -175,9 +176,38 @@ class Arena(eqx.Module):
         """
         random_sigma = jrandom.uniform(key, shape = (self.n_targets,), minval=0.1, maxval=1.0)
         return random_sigma
+    
+    def x_inits_prior_logprob(self, x_inits, x_init_spread):
+        """
+        Compute the prior log probability of a given array of x_init value(s). Assumes a uniform prior distribution.
+        
+        Probability is not necessarily normalized.
+        
+        args:
+            x_inits: the given jnp array of inital position value(s)
+        """
+        x_min = y_min = theta_min = -1*x_init_spread
+        x_max = y_max = theta_max = 1*x_init_spread
+        
+        logprob_x = utils.log_smooth_uniform(x_inits[:, 0], x_min, x_max).sum()
+        logprob_y = utils.log_smooth_uniform(x_inits[:, 1], y_min, y_max).sum()
+        logprob_theta = utils.log_smooth_uniform(x_inits[:, 2], theta_min, theta_max).sum()
+        
+        return logprob_x + logprob_y + logprob_theta
+    
+    def sample_random_x_inits(self, key: PRNGKeyArray, N, x_init_spread):
+        """
+        Sample a random jnp array of x_init value(s). 
+        
+        args:
+            key: PRNG key to use for sampling
+            N: number of initial conditions
+            x_init_spread: range of initial positions
+        """
+        x_inits = x_init_spread * jax.random.uniform(key, shape=(N, 3), minval=-1, maxval=1)
+        return x_inits
 
-@jaxtyped
-@beartype    
+  
 class Environment_state(NamedTuple):
     """
     The collection of exogenous parameters.
@@ -197,7 +227,7 @@ class Environment_state(NamedTuple):
     target_pos: Float[Array, "n 2"]
     sigma: Float[Array, " n"]
     x_inits: jnp.ndarray
-    arena: Arena
+    #arena: Arena
 
     def get_x_inits(self):
         return self.x_inits
@@ -208,10 +238,14 @@ class Environment_state(NamedTuple):
     def get_sigma(self):
         return self.sigma
     
-    def get_concentration(self, x: float, y: float, arena: Arena):
+    def get_concentration(self, x: float, y: float, num_targets: int):
         concentration: float = 0
-        make_gaussian = lambda target: 1/self.sigma*jax.lax.exp(-1/self.sigma* ((target[0]-x)**2 + (target[1]-y)**2))
-        concs = [make_gaussian(self.target_pos[n]) for n in range(arena.get_n_targets())]
+        targets = jnp.array([self.target_pos])
+        sigmas = jnp.array([self.sigma])
+        #make_gaussian = lambda target: 1/self.sigma*jax.lax.exp(-1/self.sigma* ((target[0]-x)**2 + (target[1]-y)**2))
+        #concs = [make_gaussian(self.target_pos[n]) for n in range(num_targets)]
+        make_gaussian = lambda target, sig: 1/sig*jax.lax.exp(-1/sig* ((target[0]-x)**2 + (target[1]-y)**2))
+        concs = [make_gaussian(targets[n], sigmas[n]) for n in range(num_targets)]
         concentration = sum(concs)                         
         return concentration
   
