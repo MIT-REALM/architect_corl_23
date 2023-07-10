@@ -292,6 +292,9 @@ class HighwayEnv:
             shading_light_direction=state.shading_light_direction,
             car_colors=state.non_ego_colors,
         )
+
+        # TODO increase resolution and then anti-alias
+
         obs = HighwayObs(
             speed=ego_v,
             depth_image=depth_image,

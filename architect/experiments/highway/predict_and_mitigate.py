@@ -311,7 +311,7 @@ def plotting_cb(dp, eps):
     )
 
     # log the figure to wandb
-    wandb.log({"plot": fig})
+    wandb.log({"plot": fig}, commit=False)
 
 
 if __name__ == "__main__":
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
-    parser.add_argument("--failure_level", type=int, nargs="?", default=5.0)
+    parser.add_argument("--failure_level", type=int, nargs="?", default=4.0)
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
@@ -422,6 +422,7 @@ if __name__ == "__main__":
             args.savename
             + ("-predict" if predict else "")
             + ("-repair" if repair else "")
+            + "nonorm"
         ),
         group=alg_type,
         config={
@@ -571,6 +572,11 @@ if __name__ == "__main__":
         tempering_schedule=tempering_schedule,
         logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
         stress_test_cases=stress_test_eps,
+        potential_fn=lambda dp, ep: simulate(
+            env, dp, initial_state, ep, static_policy, T
+        ).potential,
+        failure_level=failure_level,
+        plotting_cb=plotting_cb,
     )
     t_end = time.perf_counter()
     print(

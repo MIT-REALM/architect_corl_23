@@ -95,20 +95,20 @@ def raycast(
         The point at which the ray intersects the SDF, in world coordinates.
     """
 
-    # At each iteration, we can step the ray a distance equal to the current value
-    # of the SDF without intersecting the surface. The first argument passed by
-    # fori_loop is the iteration number, which we don't need.
-    def solve_for_collision_distance(dist_fn, initial_guess):
-        """Solve for the distance along the ray where the SDF is 0."""
+    # # At each iteration, we can step the ray a distance equal to the current value
+    # # of the SDF without intersecting the surface. The first argument passed by
+    # # fori_loop is the iteration number, which we don't need.
+    # def solve_for_collision_distance(dist_fn, initial_guess):
+    #     """Solve for the distance along the ray where the SDF is 0."""
 
-        # Define a function for executing one step of ray marching
-        def step_ray(_, dist_along_ray: Float[Array, ""]) -> Float[Array, ""]:
-            h = dist_fn(dist_along_ray)
-            new_dist_along_ray = dist_along_ray + h
-            return jnp.clip(new_dist_along_ray, 0.0, max_dist)
+    #     # Define a function for executing one step of ray marching
+    #     def step_ray(_, dist_along_ray: Float[Array, ""]) -> Float[Array, ""]:
+    #         h = dist_fn(dist_along_ray)
+    #         new_dist_along_ray = dist_along_ray + h
+    #         return jnp.clip(new_dist_along_ray, 0.0, max_dist)
 
-        # Raymarch
-        return jax.lax.fori_loop(0, max_steps, step_ray, initial_guess)
+    #     # Raymarch
+    #     return jax.lax.fori_loop(0, max_steps, step_ray, initial_guess)
 
     # # We need to treat this as a root-finding problem so we can use implicit
     # # differentiation rather than unrolling the whole shebang.
@@ -121,9 +121,18 @@ def raycast(
 
     # Empirically, implicit autodiff doesn't work as well as just differentiating
     # through the for loop in solve
-    distance_along_ray = solve_for_collision_distance(
-        lambda d: sdf(origin + d * ray), jnp.array(1e-2)
-    )
+    dist_fn = lambda d: sdf(origin + d * ray)
+    initial_guess = jnp.array(1e-2)
+
+    # Define a function for executing one step of ray marching
+    @jax.checkpoint
+    def step_ray(_, dist_along_ray: Float[Array, ""]) -> Float[Array, ""]:
+        h = dist_fn(dist_along_ray)
+        new_dist_along_ray = dist_along_ray + h
+        return jnp.clip(new_dist_along_ray, 0.0, max_dist)
+
+    # Raymarch
+    distance_along_ray = jax.lax.fori_loop(0, max_steps, step_ray, initial_guess)
 
     return origin + distance_along_ray * ray
 
