@@ -422,7 +422,7 @@ if __name__ == "__main__":
             args.savename
             + ("-predict" if predict else "")
             + ("-repair" if repair else "")
-            + "nonorm"
+            + f"-{num_rounds}x{num_steps_per_round}"
         ),
         group=alg_type,
         config={

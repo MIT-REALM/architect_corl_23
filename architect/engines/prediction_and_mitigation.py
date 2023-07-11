@@ -62,7 +62,7 @@ def run_chain(
         # convert to float
         accept_rate = final_state.num_accepts.astype(jnp.float32) / num_samples
     else:
-        accept_rate = jnp.array(-1.0)
+        accept_rate = jnp.array(1.0)
 
     # Add debug information
     debug = {}
