@@ -107,7 +107,7 @@ class HighwayEnv:
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
-        anti_alias_samples: int = 2,
+        anti_alias_samples: int = 1,
     ):
         """Initialize the environment."""
         self._highway_scene = highway_scene

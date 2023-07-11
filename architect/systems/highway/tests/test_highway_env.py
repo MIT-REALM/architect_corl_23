@@ -44,7 +44,7 @@ def highway_env(highway_scene, intrinsics):
         initial_ego_state,
         initial_non_ego_states,
         0.1 * jnp.eye(4),
-        anti_alias_samples=2,
+        anti_alias_samples=1,
     )
 
 
@@ -89,7 +89,7 @@ def test_highway_env_step_grad(highway_env):
 
     def step_and_get_depth(x):
         # Create actions for the ego and non-ego agents (driving straight at fixed speed)
-        ego_action = jnp.array([0.0, 0.0])
+        ego_action = jnp.array([0.0, 0.0 + x])
         non_ego_actions = jnp.array([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
 
         # Initialize a state
