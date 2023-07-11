@@ -75,6 +75,7 @@ class HighwayEnv:
             any obstacle in the scene.
         max_render_dist: the maximum distance to render in the depth image.
         render_sharpness: the sharpness of the scene.
+        anti_alias_samples: the number of samples to use for anti-aliasing.
     """
 
     _highway_scene: HighwayScene
@@ -106,10 +107,10 @@ class HighwayEnv:
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
+        anti_alias_samples: int = 2,
     ):
         """Initialize the environment."""
         self._highway_scene = highway_scene
-        self._camera_intrinsics = camera_intrinsics
         self._dt = dt
         self._initial_ego_state = initial_ego_state
         self._initial_non_ego_states = initial_non_ego_states
@@ -119,6 +120,17 @@ class HighwayEnv:
         self._collision_penalty = collision_penalty
         self._max_render_dist = max_render_dist
         self._render_sharpness = render_sharpness
+
+        # Increase the resolution so we can down-sample later to anti-alias
+        self._camera_intrinsics = CameraIntrinsics(
+            resolution=(
+                camera_intrinsics.resolution[0] * anti_alias_samples,
+                camera_intrinsics.resolution[1] * anti_alias_samples,
+            ),
+            focal_length=camera_intrinsics.focal_length,
+            sensor_size=camera_intrinsics.sensor_size,
+        )
+        self._anti_alias_samples = anti_alias_samples
 
     @jaxtyped
     @beartype
@@ -293,7 +305,24 @@ class HighwayEnv:
             car_colors=state.non_ego_colors,
         )
 
-        # TODO increase resolution and then anti-alias
+        # Down-sample the image to anti-alias
+        depth_image = jax.image.resize(
+            depth_image,
+            (
+                self._camera_intrinsics.resolution[0] // self._anti_alias_samples,
+                self._camera_intrinsics.resolution[1] // self._anti_alias_samples,
+            ),
+            method=jax.image.ResizeMethod.LINEAR,
+        )
+        color_image = jax.image.resize(
+            color_image,
+            (
+                self._camera_intrinsics.resolution[0] // self._anti_alias_samples,
+                self._camera_intrinsics.resolution[1] // self._anti_alias_samples,
+                3,
+            ),
+            method=jax.image.ResizeMethod.LINEAR,
+        )
 
         obs = HighwayObs(
             speed=ego_v,

@@ -44,7 +44,7 @@ def test_highway_scene_depth_grad():
     def render_depth(x):
         car_states = jnp.array(
             [
-                [7.0, 0.0, 0.0],
+                [7.0, 0.0, 0.0 + x],
                 [0.0, highway.lane_width, 0.0],
                 [-5.0, -highway.lane_width, 0.0],
             ]
@@ -54,10 +54,10 @@ def test_highway_scene_depth_grad():
         intrinsics = CameraIntrinsics(
             focal_length=0.1,
             sensor_size=(0.1, 0.1),
-            resolution=(512, 512),
+            resolution=(64, 64),
         )
         extrinsics = CameraExtrinsics(
-            camera_origin=jnp.array([-10.0 + x, 0.0, 10.0]),
+            camera_origin=jnp.array([-10.0, 0.0, 10.0]),
             camera_R_to_world=look_at(jnp.array([-10.0, 0.0, 10.0]), jnp.zeros(3)),
         )
 
@@ -72,9 +72,12 @@ def test_highway_scene_depth_grad():
     assert depth_grad is not None
     assert depth_grad.shape == depth_image.shape
 
-    import matplotlib.pyplot as plt
+    # import matplotlib.colors as mcolors
+    # import matplotlib.pyplot as plt
 
-    _, axs = plt.subplots(1, 2)
-    axs[0].imshow(depth_image.T)
-    axs[1].imshow(depth_grad.T)
-    plt.show()
+    # fig, axs = plt.subplots(1, 2)
+    # axs[0].imshow(depth_image.T)
+    # grad_img = axs[1].imshow(depth_grad.T, cmap="bwr", norm=mcolors.CenteredNorm())
+    # # Add a color bar for the gradient
+    # fig.colorbar(grad_img)
+    # plt.show()
