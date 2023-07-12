@@ -52,9 +52,16 @@ class Policy(eqx.Module):
     def __call__(self, x_hist: jnp.ndarray, conc_hist: jnp.ndarray): 
         #x_hist: jnp.ndarray # jnp arrays of jnp arrays
         #conc_hist: jnp.ndarray# conc_hist is a 1D jnp array
+        print (jnp.shape(x_hist), "shape of x_hist in _call_")
+        for x in x_hist:
+            print (x, x.shape, "loop")
         new_x_hist = [change_sincos(x) for x in x_hist] #uses dubins dynamics
+        print (new_x_hist, "new_x_hist list comped")
         new_x_hist = jnp.array(new_x_hist)
+        print (new_x_hist, "new_x_hist arrayed")
         new_x_hist = jnp.ravel(new_x_hist)
+        print (new_x_hist, "new_x_hist raveled")
+
         combined_x_conc = jnp.concatenate((new_x_hist, conc_hist))
         for layer in self.layers[:-1]:
             combined_x_conc = jax.nn.relu(layer(combined_x_conc))   
@@ -83,7 +90,7 @@ class Arena(eqx.Module):
         """Return n_targets"""
         return self.n_targets
     
-    def policy_prior_logprob_gaussian(dp: Policy):
+    def policy_prior_logprob_gaussian(self, dp: Policy):
         """
         Compute the prior log probability of the given policy. Assumes a gaussian prior distribution.
 
@@ -102,7 +109,7 @@ class Arena(eqx.Module):
         overall_logprob = jax.flatten_util.ravel_pytree(block_logprobs)[0].mean()
         return overall_logprob
     
-    def policy_prior_logprob_uniform(dp: Policy):
+    def policy_prior_logprob_uniform(self, dp: Policy):
         """
         Return log probability of 0 given a policy. This indicates unifrom distribution and no knowledge
         of the prior distribution.
@@ -128,11 +135,12 @@ class Arena(eqx.Module):
         args:
             target_pos: the given jnp array of target position(s)
         """
+        smoothing = self.smoothing
         x_min, x_max = -self.width / 2.0, self.width / 2.0
         y_min, y_max = -self.height / 2.0, self.height / 2.0
         
-        logprob_x = utils.log_smooth_uniform(target_pos[:, 0], x_min, x_max).sum()
-        logprob_y = utils.log_smooth_uniform(target_pos[:, 1], y_min, y_max).sum()
+        logprob_x = utils.log_smooth_uniform(target_pos[:, 0], x_min, x_max, smoothing).sum()
+        logprob_y = utils.log_smooth_uniform(target_pos[:, 1], y_min, y_max, smoothing).sum()
         return logprob_x + logprob_y    
     
     # TODO: should I be using separate x_keys and y_keys for each of the n targets?
@@ -151,7 +159,7 @@ class Arena(eqx.Module):
         pos = jnp.hstack((x, y))
         return pos
     
-    def sigma_prior_logpob(self, sigma):
+    def sigma_prior_logprob(self, sigma):
         """
         Compute the prior log probability of a given array of sigma value(s). Assumes a uniform prior distribution.
         
@@ -164,7 +172,15 @@ class Arena(eqx.Module):
         """
         sigma_min = 0.1
         sigma_max = 1.0
-        logprob_sigma = utils.log_smooth_uniform(sigma, sigma_min, sigma_max)
+        smoothing = self.smoothing
+        ##adding
+        log_probs = []
+        for i in range (self.n_targets):
+            logprob_sigma = utils.log_smooth_uniform(sigma[i], sigma_min, sigma_max, smoothing)
+            log_probs.append(logprob_sigma)
+        logprob_sigma = sum(log_probs)
+        #done adding
+        #logprob_sigma = utils.log_smooth_uniform(sigma, sigma_min, sigma_max, smoothing)
         return logprob_sigma
 
     def sample_random_sigma(self, key: PRNGKeyArray):
@@ -186,12 +202,17 @@ class Arena(eqx.Module):
         args:
             x_inits: the given jnp array of inital position value(s)
         """
+        smoothing = self.smoothing
         x_min = y_min = theta_min = -1*x_init_spread
         x_max = y_max = theta_max = 1*x_init_spread
-        
-        logprob_x = utils.log_smooth_uniform(x_inits[:, 0], x_min, x_max).sum()
-        logprob_y = utils.log_smooth_uniform(x_inits[:, 1], y_min, y_max).sum()
-        logprob_theta = utils.log_smooth_uniform(x_inits[:, 2], theta_min, theta_max).sum()
+        if x_inits.shape[0] == 1:
+            logprob_x = utils.log_smooth_uniform(x_inits[0], x_min, x_max, smoothing).sum()
+            logprob_y = utils.log_smooth_uniform(x_inits[1], y_min, y_max, smoothing).sum()
+            logprob_theta = utils.log_smooth_uniform(x_inits[2], theta_min, theta_max, smoothing).sum()
+        else:
+            logprob_x = utils.log_smooth_uniform(x_inits[:, 0], x_min, x_max, smoothing).sum()
+            logprob_y = utils.log_smooth_uniform(x_inits[:, 1], y_min, y_max, smoothing).sum()
+            logprob_theta = utils.log_smooth_uniform(x_inits[:, 2], theta_min, theta_max, smoothing).sum()
         
         return logprob_x + logprob_y + logprob_theta
     
