@@ -245,7 +245,7 @@ class IntersectionScene:
         # Render the scene
         rays = pinhole_camera_rays(intrinsics, extrinsics)
         hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None, None))(
-            scene, extrinsics.camera_origin, rays, 100, 200.0
+            scene, extrinsics.camera_origin, rays, 200, 200.0
         )
         depth_image = render_depth(
             hit_pts, intrinsics, extrinsics, max_dist=max_dist
