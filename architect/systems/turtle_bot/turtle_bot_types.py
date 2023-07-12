@@ -263,11 +263,10 @@ class Environment_state(NamedTuple):
         concentration: float = 0
         targets = jnp.array([self.target_pos])
         sigmas = jnp.array([self.sigma])
-        #make_gaussian = lambda target: 1/self.sigma*jax.lax.exp(-1/self.sigma* ((target[0]-x)**2 + (target[1]-y)**2))
-        #concs = [make_gaussian(self.target_pos[n]) for n in range(num_targets)]
         make_gaussian = lambda target, sig: 1/sig*jax.lax.exp(-1/sig* ((target[0]-x)**2 + (target[1]-y)**2))
         concs = [make_gaussian(targets[n], sigmas[n]) for n in range(num_targets)]
-        concentration = sum(concs)                         
+        concentration = sum(concs)  
+        concentration = jnp.take(concentration, 0)
         return concentration
   
     
