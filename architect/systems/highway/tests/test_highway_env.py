@@ -124,15 +124,15 @@ def test_highway_env_step_grad(highway_env):
     assert depth_grad is not None
     assert depth_grad.shape == depth_image.shape
 
-    # import matplotlib.colors as mcolors
-    # import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
 
-    # fig, axs = plt.subplots(1, 2)
-    # axs[0].imshow(depth_image.T)
-    # grad_img = axs[1].imshow(depth_grad.T, cmap="bwr", norm=mcolors.CenteredNorm())
-    # # Add a color bar for the gradient
-    # fig.colorbar(grad_img)
-    # plt.show()
+    fig, axs = plt.subplots(1, 2)
+    axs[0].imshow(depth_image.T)
+    grad_img = axs[1].imshow(depth_grad.T, cmap="bwr", norm=mcolors.CenteredNorm())
+    # Add a color bar for the gradient
+    fig.colorbar(grad_img)
+    plt.show()
 
 
 def test_highway_env_reset(highway_env):

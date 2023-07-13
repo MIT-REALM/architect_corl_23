@@ -237,7 +237,9 @@ def test_render_depth_image_grad():
 
         # Raycast the scene, which returns the world coordinates of the first intersection
         # of each ray with objects in the scene.
-        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0))(scene, camera_origin, rays)
+        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None))(
+            scene, camera_origin, rays, 40
+        )
 
         # Render to depth
         depth_image = render_depth(
@@ -385,7 +387,7 @@ def test_render_color_image_grad():
         # Define higher-resolution intrinsics
         intrinsics = CameraIntrinsics(
             sensor_size=(0.1, 0.1),
-            resolution=(1024, 1024),
+            resolution=(256, 256),
             focal_length=0.1,
         )
 
@@ -394,7 +396,9 @@ def test_render_color_image_grad():
 
         # Raycast the scene, which returns the world coordinates of the first intersection
         # of each ray with objects in the scene.
-        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0))(scene, camera_origin, rays)
+        hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None))(
+            scene, camera_origin, rays, 20
+        )
 
         # Render to color
         color_image = render_color(hit_pts, scene).reshape(*intrinsics.resolution, 3)
@@ -409,7 +413,7 @@ def test_render_color_image_grad():
         # Downsize to anti-alias
         color_image = jax.image.resize(
             color_image,
-            (intrinsics.resolution[0] // 16, intrinsics.resolution[1] // 16, 3),
+            (intrinsics.resolution[0] // 4, intrinsics.resolution[1] // 4, 3),
             method=jax.image.ResizeMethod.LINEAR,
         )
 
