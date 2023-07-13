@@ -280,7 +280,7 @@ def plotting_cb(dp, eps):
     result = eqx.filter_vmap(
         lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
         in_axes=(None, 0),
-    )(final_dps, final_eps)
+    )(dp, final_eps)
 
     # Plot the results
     fig = plt.figure(figsize=(32, 16), constrained_layout=True)
