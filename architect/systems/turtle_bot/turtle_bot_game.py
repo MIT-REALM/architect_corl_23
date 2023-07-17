@@ -16,7 +16,7 @@ from architect.systems.components.dynamics.dubins import dubins_next_state
 from architect.systems.turtle_bot.turtle_bot_types import (
     Arena,
     Policy,
-    Environment_state, #get_sigma, get_concentration, get_target_pos,
+    Environment_state, 
     TurtleBotResult
 )
 
@@ -29,26 +29,21 @@ class Game(eqx.Module):
     The turtle bot game engine
 
     args:
-        
-        x_init: 
-        x_hist:
-        conc_hist:
-        memory_length:
-        duration:
-        dt:
-        x_init_spread: 
+        x_inits: turtle-bot's starting positions
+        x_hists: array of turtle-bot's past positions
+        conc_hists: array of turtle-bot's past concentration values
+        memory_length: number of past states remembered
+        duration: length of game (seconds)
+        dt: timestep of the game's simulation (seconds)
     """
-    #TODO: added self before every "policy" & "exogenous_env"
-    #exogenous_env: Environment_state #TODO: this was added only to test the issue with predict_and_mitigate
-    #policy: Policy #TODO: this was added only to test the issue with predict_and_mitigate
-    x_inits: jnp.ndarray#Float[Array, " n "]
-    x_hists: jnp.ndarray#Float[Array, " n "]
-    conc_hists: jnp.ndarray#Float[Array, "memory_length"]
+
+    x_inits: jnp.ndarray
+    x_hists: jnp.ndarray
+    conc_hists: jnp.ndarray
     memory_length: int
     n_targets: int
     duration: float = 100.0
     dt: float = 0.1
-    #x_init_spread = 1 # static variable for x_init spread
 
     @jaxtyped
     @beartype
@@ -58,14 +53,17 @@ class Game(eqx.Module):
         target_pos: jnp.ndarray,
         sigma: jnp.ndarray,
         x_inits: jnp.ndarray,
-        policy: Policy, #TODO: this was removed only to test the issue with predict_and_mitigate
-        #exogenous_env: Environment_state, #TODO: this was removed only to test the issue with predict_and_mitigate
+        policy: Policy, 
         
     ) -> TurtleBotResult:
         """
         Play out a game of turtle bots.
 
         args:
+            target_pos: the source(s) of the leak(s)
+            sigma: array of values representing the concentration "strength" of a leak
+            x_inits: turtle-bot's starting positions
+            policy: neural network policy used to for control input
 
         """
         T = self.duration
@@ -73,11 +71,7 @@ class Game(eqx.Module):
         # Define a function to execute one step in the game
 
         def step_policy(carry, dummy_input): 
-            #print (carry, "carry")
-            #print (len(carry), "shape of carry")
-            #print (jnp.shape(carry[0]), "shape in carry")
             x_hist, conc_hist, x_current = carry
-            #print (x_hist.shape, "SHAPE in step_policy")
             control_inputs = jax.nn.tanh(policy(x_hist, conc_hist)) 
             # finding the next state (x, y, theta)
             x_next = dubins_next_state(x_current, control_inputs, actuation_noise = jnp.array([0.0,0.0,0.0]), dt=0.1) 
@@ -90,59 +84,20 @@ class Game(eqx.Module):
             return (x_hist, conc_hist, x_next), (x_next, control_inputs) 
         
         
-# =============================================================================
-# 
-#         prng_key = jax.random.PRNGKey(0)
-#         x_inits = self.x_init_spread * jax.random.uniform(prng_key, shape=(self.N, 3)) 
-#         
-#         def make_x_hist(x_init):
-#             x_hist = jnp.array([x_init for i in range(self.memory_length)])
-#             return x_hist
-#         make_x_hists = jax.vmap(make_x_hist)
-#         x_hists = make_x_hists(x_inits)
-# 
-#         def make_conc_hist(x_init):
-#             conc = get_concentration(x_init[0], x_init[1])
-#             conc_hist = jnp.array([conc for i in range(self.memory_length)])
-#             return conc_hist
-#         make_conc_hists = jax.vmap(make_conc_hist)
-#         conc_hists = make_conc_hists(x_inits)
-# 
-#         # Execute the game (attempted batched version)
-#         def get_squared_distance(trajectory, target: Float[Array, "n 2"]):
-#             distance = ((trajectory[:,:,0]-target[:,:,0])**2 + (trajectory[:,:,1]-target[:,:,1])**2+(trajectory[:,:,2]-target[:,:,2])**2)
-#             return distance
-#         #batched_squared_distance = jax.vmap(get_squared_distance)
-#         simulate_scan = lambda x_init, x_hist, conc_hist: jax.lax.scan(step_policy, (x_hist, conc_hist, x_init), xs=None, length=T)[1]
-#         simulate_scan = jax.vmap(simulate_scan)
-#         loss = lambda sigma, distance: -1/sigma*jax.lax.exp(-distance/sigma).mean()
-#         trajectories, controls = simulate_scan(x_inits, x_hists, conc_hists)
-#         cost = [loss(get_sigma()[n], get_squared_distance(trajectories, jnp.zeros_like(trajectories)+get_target_pos()[n])) for n in range(get_n_targets())]
-#         cost = sum(cost) + controls.mean() # TODO: THIS MIGHT NOT WORK WITH CONTROLS.MEAN()
-#         
-# =============================================================================
-        #print (self.x_hists.shape, "SHAPE")
-        test_carry = (self.x_hists, self.conc_hists, self.x_inits)
-        #print (jnp.shape(test_carry[0]), "TEST CARRY")
         simulate_scan = lambda x_init, x_hist, conc_hist: jax.lax.scan(step_policy, (x_hist, conc_hist, x_init), xs=None, length=T)[1]
         simulate_batched = jax.vmap(simulate_scan)
         trajectory, control = simulate_batched(self.x_inits, self.x_hists, self.conc_hists)
         control = control**2
         
         
-        
-                
         def get_squared_distance(trajectory, target: Float[Array, "n 2"]):
             distance = ((trajectory[:,:,0]-target[:,:,0])**2 + (trajectory[:,:,1]-target[:,:,1])**2)
             return distance
-        # find a way to find distances without knowing how many targets there are  
+        # find distances without knowing how many targets there are  
         loss = lambda sigma, distance: -1/sigma*jax.lax.exp(-distance/sigma).mean()
-
         cost = [loss(exogenous_env.get_sigma()[n], get_squared_distance(trajectory, (jnp.zeros_like(trajectory[:,:,:2])+ target_pos[n]))) for n in range(self.n_targets)]
         cost = sum(cost) + control.mean()
         
-        
-
 
         return TurtleBotResult(
             n_targets=self.n_targets,
