@@ -9,19 +9,15 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-import numpy as np
 from beartype import beartype
 from beartype.typing import List, NamedTuple
-from jax.nn import log_sigmoid
 from jaxtyping import Array, Float, jaxtyped
 from scipy.special import binom
 import jax.tree_util as jtu
 from architect import utils
 from architect.types import PRNGKeyArray
-from jax.nn import log_sigmoid
 
 
-# TODO: add beartype and jaxtyping into this file so that I don't have to test the shapes individually
 
 def change_sincos(state_3):
     """ Return the turtle bot's state converted from [x, y, theta] to [x, y, sintheta, costheta] """
@@ -50,18 +46,9 @@ class Policy(eqx.Module):
                        eqx.nn.Linear(64, 2, key=key4)] 
 
     def __call__(self, x_hist: jnp.ndarray, conc_hist: jnp.ndarray): 
-        #x_hist: jnp.ndarray # jnp arrays of jnp arrays
-        #conc_hist: jnp.ndarray# conc_hist is a 1D jnp array
-        print (jnp.shape(x_hist), "shape of x_hist in _call_")
-        for x in x_hist:
-            print (x, x.shape, "loop")
         new_x_hist = [change_sincos(x) for x in x_hist] #uses dubins dynamics
-        print (new_x_hist, "new_x_hist list comped")
         new_x_hist = jnp.array(new_x_hist)
-        print (new_x_hist, "new_x_hist arrayed")
         new_x_hist = jnp.ravel(new_x_hist)
-        print (new_x_hist, "new_x_hist raveled")
-
         combined_x_conc = jnp.concatenate((new_x_hist, conc_hist))
         for layer in self.layers[:-1]:
             combined_x_conc = jax.nn.relu(layer(combined_x_conc))   
@@ -90,6 +77,8 @@ class Arena(eqx.Module):
         """Return n_targets"""
         return self.n_targets
     
+    @jaxtyped
+    @beartype
     def policy_prior_logprob_gaussian(self, dp: Policy):
         """
         Compute the prior log probability of the given policy. Assumes a gaussian prior distribution.
@@ -109,6 +98,8 @@ class Arena(eqx.Module):
         overall_logprob = jax.flatten_util.ravel_pytree(block_logprobs)[0].mean()
         return overall_logprob
     
+    @jaxtyped
+    @beartype
     def policy_prior_logprob_uniform(self, dp: Policy):
         """
         Return log probability of 0 given a policy. This indicates unifrom distribution and no knowledge
@@ -120,11 +111,15 @@ class Arena(eqx.Module):
         log_prob = 0
         return log_prob
       
+    @jaxtyped
+    @beartype
     def sample_random_policy(self, key: PRNGKeyArray, memory_length: int) -> Policy:
         """Return random policy"""
         policy = Policy(key, memory_length)
         return policy
 
+    @jaxtyped
+    @beartype
     def target_pos_prior_logprob(self, target_pos):
         # TODO: complete the bear typing in utils file for log_smooth_uniform
         """
@@ -143,6 +138,8 @@ class Arena(eqx.Module):
         logprob_y = utils.log_smooth_uniform(target_pos[:, 1], y_min, y_max, smoothing).sum()
         return logprob_x + logprob_y    
     
+    @jaxtyped
+    @beartype
     # TODO: should I be using separate x_keys and y_keys for each of the n targets?
     def sample_random_target_pos(self, key: PRNGKeyArray):
         """
@@ -159,6 +156,8 @@ class Arena(eqx.Module):
         pos = jnp.hstack((x, y))
         return pos
     
+    @jaxtyped
+    @beartype
     def sigma_prior_logprob(self, sigma):
         """
         Compute the prior log probability of a given array of sigma value(s). Assumes a uniform prior distribution.
@@ -183,6 +182,8 @@ class Arena(eqx.Module):
         #logprob_sigma = utils.log_smooth_uniform(sigma, sigma_min, sigma_max, smoothing)
         return logprob_sigma
 
+    @jaxtyped
+    @beartype
     def sample_random_sigma(self, key: PRNGKeyArray):
         """
         Sample a random jnp array of sigma value(s). Returns a 1D array of shape (n_targets).
@@ -193,6 +194,8 @@ class Arena(eqx.Module):
         random_sigma = jrandom.uniform(key, shape = (self.n_targets,), minval=0.1, maxval=1.0)
         return random_sigma
     
+    @jaxtyped
+    @beartype
     def x_inits_prior_logprob(self, x_inits, x_init_spread):
         """
         Compute the prior log probability of a given array of x_init value(s). Assumes a uniform prior distribution.
@@ -202,20 +205,20 @@ class Arena(eqx.Module):
         args:
             x_inits: the given jnp array of inital position value(s)
         """
+        
+        
         smoothing = self.smoothing
         x_min = y_min = theta_min = -1*x_init_spread
         x_max = y_max = theta_max = 1*x_init_spread
-        if x_inits.shape[0] == 1:
-            logprob_x = utils.log_smooth_uniform(x_inits[0], x_min, x_max, smoothing).sum()
-            logprob_y = utils.log_smooth_uniform(x_inits[1], y_min, y_max, smoothing).sum()
-            logprob_theta = utils.log_smooth_uniform(x_inits[2], theta_min, theta_max, smoothing).sum()
-        else:
-            logprob_x = utils.log_smooth_uniform(x_inits[:, 0], x_min, x_max, smoothing).sum()
-            logprob_y = utils.log_smooth_uniform(x_inits[:, 1], y_min, y_max, smoothing).sum()
-            logprob_theta = utils.log_smooth_uniform(x_inits[:, 2], theta_min, theta_max, smoothing).sum()
         
+        logprob_x = utils.log_smooth_uniform(x_inits[:, 0], x_min, x_max, smoothing).sum()
+        logprob_y = utils.log_smooth_uniform(x_inits[:, 1], y_min, y_max, smoothing).sum()
+        logprob_theta = utils.log_smooth_uniform(x_inits[:, 2], theta_min, theta_max, smoothing).sum()
+
         return logprob_x + logprob_y + logprob_theta
     
+    @jaxtyped
+    @beartype
     def sample_random_x_inits(self, key: PRNGKeyArray, N, x_init_spread):
         """
         Sample a random jnp array of x_init value(s). 
@@ -228,7 +231,7 @@ class Arena(eqx.Module):
         x_inits = x_init_spread * jax.random.uniform(key, shape=(N, 3), minval=-1, maxval=1)
         return x_inits
 
-  
+
 class Environment_state(NamedTuple):
     """
     The collection of exogenous parameters.
@@ -246,9 +249,8 @@ class Environment_state(NamedTuple):
     """
     
     target_pos: Float[Array, "n 2"]
-    sigma: Float[Array, " n"]
+    sigma: Float[Array, " n"] 
     x_inits: jnp.ndarray
-    #arena: Arena
 
     def get_x_inits(self):
         return self.x_inits
@@ -261,8 +263,8 @@ class Environment_state(NamedTuple):
     
     def get_concentration(self, x: float, y: float, num_targets: int):
         concentration: float = 0
-        targets = jnp.array([self.target_pos])
-        sigmas = jnp.array([self.sigma])
+        targets = self.target_pos
+        sigmas = self.sigma
         make_gaussian = lambda target, sig: 1/sig*jax.lax.exp(-1/sig* ((target[0]-x)**2 + (target[1]-y)**2))
         concs = [make_gaussian(targets[n], sigmas[n]) for n in range(num_targets)]
         concentration = sum(concs)  
@@ -294,7 +296,7 @@ class TurtleBotResult(NamedTuple):
     #exogenous:
     n_targets: int
     target_pos: Float[Array, "n 2"]
-    sigma: Float[Array, " n "]
+    sigma: Float[Array, " n"]
     
     #design:
     game_duration: float
