@@ -146,9 +146,6 @@ def test_sigma_prior_logprob():
     sigma2 = jnp.array([0.6])
     logprob_sigma1 = arena1.sigma_prior_logprob(sigma1)
     logprob_sigma2 = arena1.sigma_prior_logprob(sigma2)
-    # print(logprob_sigma1)
-    # print(type(logprob_sigma1), "TYPE")
-    # print(logprob_sigma2)
     # assert that the logprobs are equal (uniform)
     assert (abs(logprob_sigma1-logprob_sigma2))< 1e-3
 
@@ -204,7 +201,6 @@ def test_sample_random_policy():
     samples_policy1 = [make1(key1), make1(key2), make1(key3), make1(key4), make1(key5)]
     empty_list = []
     for i in range (len(keys)):
-        #print (samples_policy1[i])
         assert type(samples_policy1[i])== Policy
         if samples_policy1[i] not in empty_list:
             empty_list.append(samples_policy1[i])
@@ -227,7 +223,6 @@ def test_sample_random_target_pos():
     make2 = lambda key: arena2.sample_random_target_pos(key) # anonymous function to get samples for 2 targets
     
     # create arrays of samples
-    
     # shape (5,1,2)
     samples_target_pos1 = jnp.array([make1(key1), make1(key2), make1(key3), make1(key4), make1(key5)])
     # shape (5,2,2)
@@ -261,14 +256,11 @@ def test_sample_random_sigma():
     make2 = lambda key: arena2.sample_random_sigma(key) # anonymous function to get samples for 2 targets
     
     # create arrays of samples
-    # each array is shape (TODO)
     samples_sigma1 = jnp.array([make1(key1), make1(key2), make1(key3), make1(key4), make1(key5)])
     samples_sigma2 = jnp.array([make2(key1), make2(key2), make2(key3), make2(key4), make2(key5)])
-    print(jnp.shape(samples_sigma1))
-    print(jnp.shape(samples_sigma2))
+    
     
     for i in range(len(keys)):
-        #print(samples_sigma2[i,:].shape)
         assert (samples_sigma1[i,:].shape) == (1,) # check the shape of target position if 1 target
         assert (samples_sigma2[i,:].shape) == (2,) # check the shape of target positions if 2 targets
     # for each of the sample arrays, find the unique target arrays and their indeces
@@ -299,8 +291,6 @@ def test_sample_random_x_inits():
     samples_x_inits1 = jnp.array([make1(key1), make1(key2), make1(key3), make1(key4), make1(key5)]) # shape (5,1,3)
     samples_x_inits2 = jnp.array([make2(key1), make2(key2), make2(key3), make2(key4), make2(key5)]) # shape (5,4,3)
     
-    #print (jnp.shape(samples_x_inits1[1,:,:]))
-    #print (jnp.shape(samples_x_inits2))
     for i in range(len(keys)):
         assert (samples_x_inits1[i,:,:].shape == (N1, 3)) # assert that returned initial position array is of correct shape
         assert (samples_x_inits2[i,:,:].shape == (N2, 3)) # assert that returned initial positions array is of correct shape
@@ -310,24 +300,14 @@ def test_sample_random_x_inits():
     assert (len(indeces2)==len(keys))
     
 
-    
-    
-
-def test_TurtleBotResult():
-    # ?
-    pass
-
 if __name__ == "__main__":
-    #test_Policy()
-    #test_get_concentration()
-    #test_policy_prior_logprob_uniform()
-    
-    #test_target_pos_prior_logprob()
-    #test_sigma_prior_logprob()
+    test_Policy()
+    test_get_concentration()
+    test_policy_prior_logprob_uniform()
+    test_target_pos_prior_logprob()
+    test_sigma_prior_logprob()
     test_x_inits_prior_logpob()
-    
-    # test_sample_random_policy()
-    # test_sample_random_target_pos()
-    # test_sample_random_sigma()
-    # test_sample_random_x_inits()
-    # test_TurtleBotResult()
+    test_sample_random_policy()
+    test_sample_random_target_pos()
+    test_sample_random_sigma()
+    test_sample_random_x_inits()
