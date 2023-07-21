@@ -48,16 +48,10 @@ def init_sampler(
     )
 
     # Normalize the gradients if requested
-    block_grad_norms = jtu.tree_map(
-        lambda x: jnp.sqrt(jnp.sum(x**2) + 1e-3), logdensity_grad
-    )
-    block_grad_norms = jtu.tree_map(
-        lambda x: jnp.where(x >= 1.0, x, 1.0), block_grad_norms
-    )
+    block_grad_norms_sq = jtu.tree_map(lambda x: jnp.sum(x**2), logdensity_grad)
+    grad_norm = jnp.sqrt(jtu.tree_reduce(operator.add, block_grad_norms_sq))
     normalized_logdensity_grad = jtu.tree_map(
-        lambda grad, block_norm: grad / block_norm,
-        logdensity_grad,
-        block_grad_norms,
+        lambda grad: grad / grad_norm, logdensity_grad
     )
     logdensity_grad = jax.lax.cond(
         normalize_gradients,
@@ -194,22 +188,11 @@ def make_kernel(
         # Normalize the gradients if requested.
         # We do this by re-scaling gradients to match the rough order of the
         # Gaussian noise
-        block_grad_norms = jtu.tree_map(
-            lambda x: jnp.sqrt(jnp.sum(x**2) + 1e-3), new_grad
-        )
-        block_grad_norms = jtu.tree_map(
-            lambda x: jnp.where(x >= 1.0, x, 1.0), block_grad_norms
-        )
-        block_noise_norms = jtu.tree_map(
-            lambda x: jnp.sqrt(jnp.sum(x**2) + 1e-3), noise
-        )
+        block_grad_norms_sq = jtu.tree_map(lambda x: jnp.sum(x**2), new_grad)
+        grad_norm = jnp.sqrt(jtu.tree_reduce(operator.add, block_grad_norms_sq))
         normalized_new_grad = jtu.tree_map(
-            lambda grad, block_grad_norm, block_noise_norm: grad
-            * block_noise_norm
-            / block_grad_norm,
+            lambda grad: grad * jnp.linalg.norm(sample) / grad_norm,
             new_grad,
-            block_grad_norms,
-            block_noise_norms,
         )
         new_grad = jax.lax.cond(
             normalize_gradients,

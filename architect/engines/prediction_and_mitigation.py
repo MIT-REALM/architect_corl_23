@@ -54,7 +54,6 @@ def run_chain(
         return carry
 
     initial_carry = (initial_state, prng_key)
-    one_step(0, initial_carry)  # todo
     final_state, _ = jax.lax.fori_loop(0, num_samples, one_step, initial_carry)
 
     # Compute acceptance rate if the sampler supports it
@@ -74,6 +73,7 @@ def run_chain(
                 jtu.tree_map(lambda x: jnp.sum(x * x), final_state.logdensity_grad),
             )
         )
+        debug["final_grad"] = final_state.logdensity_grad
 
     return (
         final_state.position,
@@ -254,6 +254,19 @@ def predict_and_mitigate_failure_modes(
                 ep
             ) + tempering * ep_mean_potential_fn(ep)
 
+            # Get the grad for debugging
+            ep_logprob_grads = jax.vmap(jax.grad(ep_logprob_fn))(current_eps)
+            ep_mean_potential_grads = jax.vmap(jax.grad(ep_mean_potential_fn))(
+                current_eps
+            )
+            jax.debug.print(
+                "ep logprob grad norm: {}", jax.vmap(jnp.linalg.norm)(ep_logprob_grads)
+            )
+            jax.debug.print(
+                "ep mean potential grads: {}",
+                jax.vmap(jnp.linalg.norm)(ep_mean_potential_grads),
+            )
+
             # Initialize the chains for this kernel
             initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
                 current_eps, ep_logprob_fn
@@ -309,7 +322,7 @@ def predict_and_mitigate_failure_modes(
             "Mean Cost": stress_test_costs.mean(),
             "Max Cost": stress_test_costs.max(),
             "Failure rate (test)": (stress_test_costs > failure_level).mean(),
-        }
+        }  # TODO uncomment
 
     if plotting_cb is not None:
         plotting_cb(current_best_dps, exogenous_params)

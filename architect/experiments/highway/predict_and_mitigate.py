@@ -231,7 +231,7 @@ def simulate(
     final_obs = env.get_obs(final_state)
 
     # The potential is the negative of the (soft) minimum reward observed
-    potential = -softmin(reward, sharpness=1.0)
+    potential = -softmin(reward, sharpness=0.5)
 
     return SimulationResults(
         potential,
@@ -242,7 +242,7 @@ def simulate(
     )
 
 
-def plotting_cb(dp, eps):
+def plotting_cb(dp, eps, T=60):
     """Plot the results of the simulation with the given DP and all given EPs.
 
     Args:
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
-    parser.add_argument("--failure_level", type=int, nargs="?", default=4.0)
+    parser.add_argument("--failure_level", type=int, nargs="?", default=7.4)
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
@@ -403,7 +403,7 @@ if __name__ == "__main__":
     if reinforce:
         alg_type = "reinforce_l2c_0.05_step"
     elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala"
+        alg_type = "mala_nonorm"
         quench_dps_only = True
     elif use_gradients and use_stochasticity and not use_mh:
         alg_type = "ula"
