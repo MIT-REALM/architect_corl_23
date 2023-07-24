@@ -6,7 +6,6 @@ Created on Thu Jun 29 14:24:04 2023
 @author: rchanna
 """
 
-
 import jax
 import jax.numpy as jnp
 from architect.systems.turtle_bot import turtle_bot_types
