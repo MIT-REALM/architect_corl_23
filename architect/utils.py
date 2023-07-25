@@ -21,6 +21,6 @@ def softmin(x: Float[Array, "..."], sharpness: float = 0.05):
 
 @jaxtyped
 @beartype
-def log_smooth_uniform(x, x_min, x_max, smoothing):
+def log_smooth_uniform(x: Float[Array, "..."], x_min: float, x_max: float, smoothing: float = 20.0):
     """Return the smooth approximation of uniform distribution for log probabilities"""
     return log_sigmoid(smoothing * (x - x_min)) + log_sigmoid(smoothing * (x_max - x))
