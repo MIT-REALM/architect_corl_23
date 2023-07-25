@@ -209,10 +209,10 @@ class Arena(eqx.Module):
         args:
             key: PRNG key to use for sampling
         """
-        random_sigma = jrandom.uniform(
-            key, shape=(self.n_targets,), minval=0.1, maxval=1.0
+        random_logsigma = jrandom.uniform(
+            key, shape=(self.n_targets,), minval=jnp.log(0.1), maxval=jnp.log(1.0)
         )
-        return random_sigma
+        return random_logsigma
 
     @jaxtyped
     @beartype
