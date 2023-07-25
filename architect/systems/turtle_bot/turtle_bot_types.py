@@ -190,12 +190,12 @@ class Arena(eqx.Module):
         args:
             sigma: the given jnp array of sigma value(s)
         """
-        sigma_min = 0.1
-        sigma_max = 1.0
+        logsigma_min = (0.1)
+        logsigma_max = (1.0)
         smoothing = self.smoothing
         logprob_sigma = jnp.sum(
             jax.vmap(utils.log_smooth_uniform, in_axes=(0, None, None, None))(
-                sigma, sigma_min, sigma_max, smoothing
+                sigma, logsigma_min, logsigma_max, smoothing
             )
         )
         return logprob_sigma
@@ -204,15 +204,15 @@ class Arena(eqx.Module):
     @beartype
     def sample_random_sigma(self, key: PRNGKeyArray) -> Float[Array, "n_targets"]:
         """
-        Sample a random jnp array of sigma value(s). Returns a 1D array of shape (n_targets).
+        Sample a random jnp array of logsigma value(s). Returns a 1D array of shape (n_targets).
 
         args:
             key: PRNG key to use for sampling
         """
-        random_sigma = jrandom.uniform(
-            key, shape=(self.n_targets,), minval=0.1, maxval=1.0
+        random_logsigma = jrandom.uniform(
+            key, shape=(self.n_targets,), minval=jnp.log(0.1), maxval=jnp.log(1.0)
         )
-        return random_sigma
+        return random_logsigma
 
     @jaxtyped
     @beartype
