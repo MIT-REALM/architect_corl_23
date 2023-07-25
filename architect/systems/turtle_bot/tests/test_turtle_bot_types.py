@@ -9,7 +9,7 @@ Created on Thu Jun 29 14:24:04 2023
 import jax
 import jax.numpy as jnp
 from architect.systems.turtle_bot.turtle_bot_types import (
-    Environment_state,
+    EnvironmentState,
     Policy,
     Arena,
 )
@@ -42,10 +42,9 @@ def test_Policy():
 
 
 def test_get_concentration():
-    """Test get_concentration method in Environment_state class.
+    """Test get_concentration method in EnvironmentState class.
 
-    This test assumes the leak forms a Gaussian distribution (as does the get_concentration
-    method in Environment_states).
+    This test assumes the leak forms a Gaussian distribution.
 
     The concentration of a leak follows 1/sigma * e^-(distance^2/sigma), where
     distance = distance to a source
@@ -58,14 +57,15 @@ def test_get_concentration():
     calculated in desmos.
     """
     # test case where there is only 1 target. There is only 1 initial condition.
-
     target_pos1 = jnp.array([[3.0, 4.0]])
     sigma1 = jnp.array([0.3])
     prng_key1 = jax.random.PRNGKey(2)
     x_inits1 = 1 * jax.random.uniform(prng_key1, shape=(1, 3))
-    new_env1 = Environment_state(target_pos1, sigma1, x_inits1)
-    answer = 1 / 0.3 * jnp.exp(-25 / 0.3)
-    concentration = new_env1.get_concentration(0.0, 0.0, 1)
+    new_env1 = EnvironmentState(target_pos1, sigma1, x_inits1)
+    answer = 2.1462085467591996e-36
+    concentration = new_env1.get_concentration(
+        jnp.array(0.0), jnp.array(0.0), 1
+    )  # calculate concentration at origin
     assert jnp.isclose(concentration, answer)
 
     # test case where there is 2 targets. There is 1 initial condition.
@@ -73,9 +73,11 @@ def test_get_concentration():
     sigma = jnp.array([0.6, 0.71])
     prng_key = jax.random.PRNGKey(2)
     x_inits = 1 * jax.random.uniform(prng_key, shape=(1, 3))
-    new_env = Environment_state(target_pos, sigma, x_inits)
+    new_env = EnvironmentState(target_pos, sigma, x_inits)
     answer = 2.146208e-16
-    concentration = new_env.get_concentration(0.0, 0.0, 2)
+    concentration = new_env.get_concentration(
+        jnp.array(0.0), jnp.array(0.0), 2
+    )  # calculate concentration at origin
     assert jnp.allclose(concentration, answer)
 
 
