@@ -335,14 +335,13 @@ class TurtleBotResult(NamedTuple):
         xs: trajectory of the turtle bot
 
     """
-
     # exogenous:
     n_targets: int
     target_pos: Float[Array, "n 2"]
     sigma: Float[Array, " n"]
     # design:
     game_duration: float
-    squared_controls: Float[Array, "n 2"]  # jnp.array of v,w
+    squared_controls: Float[Array, "N duration 2"]  # jnp.array of v,w
     potential: Float[Array, ""]
     # turtle_positions:
     xs: Float[Array, "N duration 3"]
