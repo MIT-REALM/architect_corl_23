@@ -217,6 +217,7 @@ class HighwayEnv:
             next_ego_state[:3],  # trim out speed; not needed for collision checking
             next_non_ego_states[:, :3],
             self._render_sharpness,
+            include_ground=False,
         )
         collision_reward = -self._collision_penalty * jax.nn.sigmoid(
             -5 * min_distance_to_obstacle

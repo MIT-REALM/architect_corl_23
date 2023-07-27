@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 from architect.experiments.highway.predict_and_mitigate import (
     non_ego_actions_prior_logprob,
@@ -91,9 +90,9 @@ if __name__ == "__main__":
     #     print(f"{t}: grad norms: {grad_norms[-1]} (values: {logprob})")
 
     # Test whether gradient ascent works
-    t = 32
-    lr = 1e-3
-    steps = 100
+    t = 60
+    lr = 1e-1
+    steps = 10
     value_and_grad_fn = jax.jit(
         jax.value_and_grad(
             lambda ep: simulate(
@@ -101,8 +100,8 @@ if __name__ == "__main__":
             ).potential
         )
     )
-    ep = initial_eps[0]
-    for i in tqdm(range(steps)):
+    ep = initial_eps[0, :t]
+    for i in range(steps):
         v, g = value_and_grad_fn(ep)
         print(f"Step {i}: potential: {v}, grad norm: {jnp.linalg.norm(g)}")
         ep = ep + lr * g  # gradient ASCENT to increase potential
