@@ -6,6 +6,7 @@ Created on Mon Jun 26 11:28:49 2023
 @author: rchanna
 """
 import equinox as eqx
+import math
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
@@ -174,11 +175,11 @@ class Arena(eqx.Module):
         )
         pos = jnp.hstack((x, y))
         return pos
-
+    
     @jaxtyped
     @beartype
-    def sigma_prior_logprob(
-        self, sigma: Float[Array, "n_targets"]
+    def logsigma_prior_logprob(
+        self, logsigma: Float[Array, "n_targets"]
     ) -> Float[Array, " "]:
         """
         Compute the prior log probability of a given array of sigma value(s). Assumes a uniform prior distribution.
@@ -190,19 +191,19 @@ class Arena(eqx.Module):
         args:
             sigma: the given jnp array of sigma value(s)
         """
-        sigma_min = 0.1
-        sigma_max = 1.0
+        logsigma_min = math.log(0.1)
+        logsigma_max = math.log(1.0)
         smoothing = self.smoothing
-        logprob_sigma = jnp.sum(
+        logprob_logsigma = jnp.sum(
             jax.vmap(utils.log_smooth_uniform, in_axes=(0, None, None, None))(
-                sigma, sigma_min, sigma_max, smoothing
+                logsigma, logsigma_min, logsigma_max, smoothing
             )
         )
-        return logprob_sigma
+        return logprob_logsigma
 
     @jaxtyped
     @beartype
-    def sample_random_sigma(self, key: PRNGKeyArray) -> Float[Array, "n_targets"]:
+    def sample_random_logsigma(self, key: PRNGKeyArray) -> Float[Array, "n_targets"]:
         """
         Sample a random jnp array of sigma value(s). Returns a 1D array of shape (n_targets).
 
@@ -282,7 +283,7 @@ class EnvironmentState(NamedTuple):
     """
 
     target_pos: Float[Array, "n 2"]
-    sigma: Float[Array, " n"]
+    logsigma: Float[Array, " n"]
     x_inits: Float[Array, "N 3"]
 
     @jaxtyped
@@ -297,8 +298,8 @@ class EnvironmentState(NamedTuple):
 
     @jaxtyped
     @beartype
-    def get_sigma(self) -> Float[Array, " n"]:
-        return self.sigma
+    def get_logsigma(self) -> Float[Array, " n"]:
+        return self.logsigma
 
     @jaxtyped
     @beartype
@@ -307,7 +308,7 @@ class EnvironmentState(NamedTuple):
     ) -> Float[Array, " "]:
         concentration: float = 0
         targets = self.target_pos
-        sigmas = self.sigma
+        sigmas = jnp.exp(self.logsigma)
         make_gaussian = lambda target, sigma: jax.scipy.stats.norm.pdf(
             ((target[0] - x) ** 2 + (target[1] - y) ** 2), target, sigma
         )

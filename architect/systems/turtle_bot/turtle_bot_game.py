@@ -44,7 +44,7 @@ class Game(eqx.Module):
     def __call__(
         self,
         target_pos: Float[Array, "n_targets 2"],
-        sigma: Float[Array, "n_targets "],
+        logsigma: Float[Array, "n_targets "],
         x_inits: Float[Array, "N 3"],
         policy: Policy,
     ) -> TurtleBotResult:
@@ -69,7 +69,7 @@ class Game(eqx.Module):
             policy: neural network policy used to for control input
 
         """
-        e_sigma = jnp.exp(sigma)
+        e_sigma = jnp.exp(logsigma)
         T = self.duration
         exogenous_env = EnvironmentState(target_pos, e_sigma, x_inits)
 
@@ -123,12 +123,14 @@ class Game(eqx.Module):
             distance = (trajectory[:, :, 0] - target[:, :, 0]) ** 2 + (
                 trajectory[:, :, 1] - target[:, :, 1]
             ) ** 2
-            return distance
+            return (distance)
+
 
         # find distances without knowing how many targets there are
         loss = (
             lambda sigma, distance: -1 / sigma * jax.lax.exp(-distance / sigma).mean()
         )
+
         cost = [
             loss(
                 e_sigma[n],
@@ -138,12 +140,19 @@ class Game(eqx.Module):
             )
             for n in range(self.n_targets)
         ]
+        a = [get_squared_distance(trajectory, (jnp.zeros_like(trajectory[:,:,:2])+target_pos[n])) for n in range(self.n_targets)]
+        #jax.debug.print("a, {a}", a=a)
+        #cost = jnp.array(cost)
+        jax.debug.print("cost, {cost}", cost = cost)
+        #jax.debug.print("a {a}", a=a)
         cost = sum(cost) + control.mean()
+        #jax.debug.print("cost, {cost}", cost = cost)
 
+        
         return TurtleBotResult(
             n_targets=self.n_targets,
             target_pos=exogenous_env.get_target_pos(),
-            sigma=exogenous_env.get_sigma(),
+            sigma=e_sigma,
             game_duration=self.duration,
             squared_controls=control,
             potential=cost,

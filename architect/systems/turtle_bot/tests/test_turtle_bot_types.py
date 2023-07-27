@@ -58,10 +58,10 @@ def test_get_concentration():
     """
     # test case where there is only 1 target. There is only 1 initial condition.
     target_pos1 = jnp.array([[3.0, 4.0]])
-    sigma1 = jnp.array([0.3])
+    logsigma1 = jnp.log(jnp.array([0.3]))
     prng_key1 = jax.random.PRNGKey(2)
     x_inits1 = 1 * jax.random.uniform(prng_key1, shape=(1, 3))
-    new_env1 = EnvironmentState(target_pos1, sigma1, x_inits1)
+    new_env1 = EnvironmentState(target_pos1, logsigma1, x_inits1)
     answer = 2.1462085467591996e-36
     concentration = new_env1.get_concentration(
         jnp.array(0.0), jnp.array(0.0), 1
@@ -69,13 +69,13 @@ def test_get_concentration():
     assert jnp.isclose(concentration, answer)
 
     # test case where there is 2 targets. There is 1 initial condition.
-    target_pos = jnp.array([[2.3, 4.1], [3.1, 6.8]])
-    sigma = jnp.array([0.6, 0.71])
-    prng_key = jax.random.PRNGKey(2)
-    x_inits = 1 * jax.random.uniform(prng_key, shape=(1, 3))
-    new_env = EnvironmentState(target_pos, sigma, x_inits)
+    target_pos2 = jnp.array([[2.3, 4.1], [3.1, 6.8]])
+    logsigma2 = jnp.log(jnp.array([0.6, 0.71]))
+    prng_key2 = jax.random.PRNGKey(2)
+    x_inits2 = 1 * jax.random.uniform(prng_key2, shape=(1, 3))
+    new_env2 = EnvironmentState(target_pos2, logsigma2, x_inits2)
     answer = 2.146208e-16
-    concentration = new_env.get_concentration(
+    concentration = new_env2.get_concentration(
         jnp.array(0.0), jnp.array(0.0), 2
     )  # calculate concentration at origin
     assert jnp.allclose(concentration, answer)
@@ -133,7 +133,7 @@ def test_target_pos_prior_logprob():
     assert not jnp.allclose(logprob_target3, logprob_target6)
 
 
-def test_sigma_prior_logprob():
+def test_logsigma_prior_logprob():
     """Test sigma_prior_logprob function in Arena class.
 
     Assume uniform prior distribution (hence equal logprobs for each instance of sigma).
@@ -145,33 +145,33 @@ def test_sigma_prior_logprob():
     arena1 = Arena(6.0, 6.0, 1, smoothing=500.0)
     arena2 = Arena(6.0, 6.0, 2, smoothing=500.0)
 
-    sigma1 = jnp.array([0.3])
-    sigma2 = jnp.array([0.6])
-    logprob_sigma1 = arena1.sigma_prior_logprob(sigma1)
-    logprob_sigma2 = arena1.sigma_prior_logprob(sigma2)
+    logsigma1 = jnp.log(jnp.array([0.3]))
+    logsigma2 = jnp.log(jnp.array([0.6]))
+    logprob_logsigma1 = arena1.logsigma_prior_logprob(logsigma1)
+    logprob_logsigma2 = arena1.logsigma_prior_logprob(logsigma2)
     # assert that the logprobs are equal (uniform)
-    assert jnp.allclose(logprob_sigma1, logprob_sigma2, atol=1e-3)
+    assert jnp.allclose(logprob_logsigma1, logprob_logsigma2, atol=1e-3)
 
-    sigma3 = jnp.array([0.36, 0.61])
-    sigma4 = jnp.array([0.49, 0.12])
-    logprob_sigma3 = arena2.sigma_prior_logprob(sigma3)
-    logprob_sigma4 = arena2.sigma_prior_logprob(sigma4)
+    logsigma3 = jnp.log(jnp.array([0.36, 0.61]))
+    logsigma4 = jnp.log(jnp.array([0.49, 0.12]))
+    logprob_logsigma3 = arena2.logsigma_prior_logprob(logsigma3)
+    logprob_logsigma4 = arena2.logsigma_prior_logprob(logsigma4)
     # assert that the logprobs are equal (uniform)
-    assert jnp.allclose(logprob_sigma3, logprob_sigma4, atol=1e-3)
+    assert jnp.allclose(logprob_logsigma3, logprob_logsigma4, atol=1e-3)
 
     # Check that the logprobs are different for sigmas inside and outside the bounds
-    sigma5 = jnp.array([-0.05])  # out of bounds sigma for 1 target
-    logprob_sigma5 = arena1.sigma_prior_logprob(sigma5)
-    assert not jnp.allclose(logprob_sigma1, logprob_sigma5)
-    sigma6 = jnp.array([1.2, 0.3])  # out of bounds sigma for 2 targets
-    logprob_sigma6 = arena2.sigma_prior_logprob(sigma6)
-    assert not jnp.allclose(logprob_sigma3, logprob_sigma6)
+    logsigma5 = jnp.log(jnp.array([-0.05]))  # out of bounds sigma for 1 target
+    logprob_logsigma5 = arena1.logsigma_prior_logprob(logsigma5)
+    assert not jnp.allclose(logprob_logsigma1, logprob_logsigma5)
+    logsigma6 = jnp.log(jnp.array([1.2, 0.3]))  # out of bounds sigma for 2 targets
+    logprob_logsigma6 = arena2.logsigma_prior_logprob(logsigma6)
+    assert not jnp.allclose(logprob_logsigma3, logprob_logsigma6)
 
 
 def test_x_inits_prior_logpob():
     """Test x_inits_prior_logprob method in Arena class.
 
-    Assume uniform prior distribution (hence equal logprobs for each instance of sigma).
+    Assume uniform prior distribution (hence equal logprobs for each instance of logsigma).
 
     Tests cases where there is 1 initial condition and 4 initial conditions.
     """
@@ -263,7 +263,7 @@ def test_sample_random_target_pos():
     assert len(indeces2) == len(keys)
 
 
-def test_sample_random_sigma():
+def test_sample_random_logsigma():
     """Test sample_random_sigma method in Arena class.
 
     Checks that random samples are indeed unique when provided different PRNGkeys
@@ -274,29 +274,29 @@ def test_sample_random_sigma():
     key = jax.random.PRNGKey(0)
     keys = jax.random.split(key, 5)
 
-    make1 = lambda key: arena1.sample_random_sigma(
+    make1 = lambda key: arena1.sample_random_logsigma(
         key
     )  # anonymous function to get samples for 1 target
-    make2 = lambda key: arena2.sample_random_sigma(
+    make2 = lambda key: arena2.sample_random_logsigma(
         key
     )  # anonymous function to get samples for 2 targets
 
     # create arrays of samples
-    samples_sigma1 = jnp.array([make1(key) for key in keys])
-    samples_sigma2 = jnp.array([make2(key) for key in keys])
+    samples_logsigma1 = jnp.array([make1(key) for key in keys])
+    samples_logsigma2 = jnp.array([make2(key) for key in keys])
 
     for i in range(len(keys)):
-        assert (samples_sigma1[i, :].shape) == (
+        assert (samples_logsigma1[i, :].shape) == (
             1,
         )  # check the shape of target position if 1 target
-        assert (samples_sigma2[i, :].shape) == (
+        assert (samples_logsigma2[i, :].shape) == (
             2,
         )  # check the shape of target positions if 2 targets
     # for each of the sample arrays, find the unique target arrays and their indeces
     # check that the number of unnique target arrays is the same as the number of keys given
-    u1, indices1 = jnp.unique(samples_sigma1, return_index=True, axis=0)
+    u1, indices1 = jnp.unique(samples_logsigma1, return_index=True, axis=0)
     assert len(indices1) == len(keys)
-    u2, indeces2 = jnp.unique(samples_sigma2, return_index=True, axis=0)
+    u2, indeces2 = jnp.unique(samples_logsigma2, return_index=True, axis=0)
     assert len(indeces2) == len(keys)
 
 
