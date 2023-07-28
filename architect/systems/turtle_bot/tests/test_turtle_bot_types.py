@@ -18,7 +18,8 @@ from architect.systems.turtle_bot.turtle_bot_types import (
 def test_Policy():
     """Test Policy class.
 
-    Tests the __init__ and __call__ methods of the Policy class for two different memory_length examples.
+    Tests the __init__ and __call__ methods of the Policy class
+    for two different memory_length examples.
     """
     # Test the init and call method of Policy for memory length 1.
     # create a policy
@@ -50,8 +51,8 @@ def test_get_concentration():
     distance = distance to a source
     sigma = value that influences concentration strength
 
-    If there are multiple sources, the concentrations of each leak at the given point are summed
-    for an overall concentration.
+    If there are multiple sources, the concentrations of each leak
+    at the given point are summed for an overall concentration.
 
     The values being compared to the concentration at (0.0,0.0) were
     calculated in desmos.
@@ -84,7 +85,8 @@ def test_get_concentration():
 def test_policy_prior_logprob_uniform():
     """Test policy_prior_logprob_uniform method in Arena class.
 
-    Assume uniform prior distribution (hence equal logprobs for each instance of policy).
+    Assume uniform prior distribution
+    (hence equal logprobs for each instance of policy).
     """
     arena = Arena(6.0, 6.0, 1)
 
@@ -102,9 +104,11 @@ def test_policy_prior_logprob_uniform():
 def test_target_pos_prior_logprob():
     """Test target_pos_prior_logprob method in Arena class.
 
-    Assume uniform prior distribution (hence equal logprobs for each instance of target_pos).
+    Assume uniform prior distribution
+    (hence equal logprobs for each instance of target_pos).
 
-    Two arena objects are used to test the case when there is 1 and 2 targets in the environment.
+    Two arena objects are used to test the case when there is 1
+    and 2 targets in the environment.
     """
 
     arena1 = Arena(6.0, 6.0, 1, smoothing=500.0)
@@ -124,7 +128,8 @@ def test_target_pos_prior_logprob():
     # assert that the logprobs are equal (uniform)
     assert jnp.allclose(logprob_target3, logprob_target4)
 
-    # Check that the logprobs are different for target positions inside and outside the bounds
+    # Check that the logprobs are different for target positions
+    # inside and outside the bounds
     target_pos5 = jnp.array([[-3.4, 0.7]])  # out of bounds for 1 target
     logprob_target5 = arena1.target_pos_prior_logprob(target_pos5)
     assert not jnp.allclose(logprob_target1, logprob_target5)
@@ -138,7 +143,8 @@ def test_logsigma_prior_logprob():
 
     Assume uniform prior distribution (hence equal logprobs for each instance of sigma).
 
-    Two arena objects are used to test the case when there is 1 and 2 targets in the environment.
+    Two arena objects are used to test the case when there is 1
+    and 2 targets in the environment.
     """
 
     # smoothing is increased to test the uniform distribution
@@ -171,7 +177,8 @@ def test_logsigma_prior_logprob():
 def test_x_inits_prior_logpob():
     """Test x_inits_prior_logprob method in Arena class.
 
-    Assume uniform prior distribution (hence equal logprobs for each instance of logsigma).
+    Assume uniform prior distribution
+    (hence equal logprobs for each instance of logsigma).
 
     Tests cases where there is 1 initial condition and 4 initial conditions.
     """
@@ -179,7 +186,8 @@ def test_x_inits_prior_logpob():
 
     x_init_spread = 2
 
-    # Note that the values in the arrays must be between -x_init_spread and +x_init_spread
+    # Note:
+    #   values in the arrays must be between -x_init_spread and +x_init_spread
     x_inits1 = jnp.array([[1.6, 0.2, -0.6]])  # N = 1
     x_inits2 = jnp.array([[0.9, -0.3, 0.3]])
     x_inits3 = jnp.array(
@@ -225,7 +233,8 @@ def test_sample_random_target_pos():
     """Test sample_random_target_pos method in Arena class.
 
     Checks that random samples are indeed unique when provided different PRNGkeys
-    and that the returned array has the correct shape (depending on number of target locations).
+    and that the returned array has the correct shape
+    (depending on number of target locations).
     """
     arena1 = Arena(6.0, 6.0, 1)
     arena2 = Arena(6.0, 6.0, 2)
@@ -256,7 +265,7 @@ def test_sample_random_target_pos():
             2,
         )  # check the shape of target positions if 2 targets
     # for each of the sample arrays, find the unique target arrays and their indeces
-    # check that the number of unnique target arrays is the same as the number of keys given
+    # check that the number of unique target arrays equals the number of keys given
     u1, indices1 = jnp.unique(samples_target_pos1, return_index=True, axis=0)
     assert len(indices1) == len(keys)
     u2, indeces2 = jnp.unique(samples_target_pos2, return_index=True, axis=0)
@@ -267,7 +276,8 @@ def test_sample_random_logsigma():
     """Test sample_random_sigma method in Arena class.
 
     Checks that random samples are indeed unique when provided different PRNGkeys
-    and that the returned array has the correct shape (depending on number of target locations).
+    and that the returned array has the correct shape
+    (depending on number of target locations).
     """
     arena1 = Arena(6.0, 6.0, 1)
     arena2 = Arena(6.0, 6.0, 2)
@@ -293,7 +303,7 @@ def test_sample_random_logsigma():
             2,
         )  # check the shape of target positions if 2 targets
     # for each of the sample arrays, find the unique target arrays and their indeces
-    # check that the number of unnique target arrays is the same as the number of keys given
+    # check that the number of unique target arrays equals the number of keys given
     u1, indices1 = jnp.unique(samples_logsigma1, return_index=True, axis=0)
     assert len(indices1) == len(keys)
     u2, indeces2 = jnp.unique(samples_logsigma2, return_index=True, axis=0)
