@@ -22,7 +22,8 @@ import jax.flatten_util
 @jaxtyped
 @beartype
 def change_sincos(state_3: Float[Array, " 3"]) -> Float[Array, " 4"]:
-    """Return the turtle bot's state converted from [x, y, theta] to [x, y, sintheta, costheta]"""
+    """Return the turtle bot's state converted from
+    [x, y, theta] to [x, y, sintheta, costheta]"""
     x = state_3[0]
     y = state_3[1]
     theta = state_3[2]
@@ -92,7 +93,8 @@ class Arena(eqx.Module):
     @beartype
     def policy_prior_logprob_gaussian(self, dp: Policy) -> Float[Array, " "]:
         """
-        Compute the prior log probability of the given policy. Assumes a gaussian prior distribution.
+        Compute the prior log probability of the given policy.
+        Assumes a gaussian prior distribution.
 
         Probability is not necessarily normalized.
 
@@ -103,7 +105,7 @@ class Arena(eqx.Module):
             lambda x_updated: jax.scipy.stats.norm.logpdf(x_updated).mean(),
             dp,
         )
-        # Take a block mean rather than the sum of all blocks to avoid a crazy large logprob
+        # Take a block mean rather than sum of all blocks to avoid a crazy large logprob
         overall_logprob = jax.flatten_util.ravel_pytree(block_logprobs)[0].mean()
         return overall_logprob
 
@@ -111,8 +113,8 @@ class Arena(eqx.Module):
     @beartype
     def policy_prior_logprob_uniform(self, dp: Policy) -> Float[Array, " "]:
         """
-        Return log probability of 0 given a policy. This indicates unifrom distribution and no knowledge
-        of the prior distribution.
+        Return log probability of 0 given a policy.
+        This indicates unifrom distribution and no knowledge of the prior distribution.
 
         args:
             dp: design parameter (policy)
@@ -175,16 +177,18 @@ class Arena(eqx.Module):
         )
         pos = jnp.hstack((x, y))
         return pos
-    
+
     @jaxtyped
     @beartype
     def logsigma_prior_logprob(
         self, logsigma: Float[Array, "n_targets"]
     ) -> Float[Array, " "]:
         """
-        Compute the prior log probability of a given array of sigma value(s). Assumes a uniform prior distribution.
+        Compute the prior log probability of a given array of sigma value(s).
+        Assumes a uniform prior distribution.
 
-        The sigma value is used in computing the concentation of a leak that behaves like a Gaussian distribution.
+        The sigma value is used in computing the concentation of a leak
+        that behaves like a Gaussian distribution.
 
         Probability is not necessarily normalized.
 
@@ -205,7 +209,9 @@ class Arena(eqx.Module):
     @beartype
     def sample_random_logsigma(self, key: PRNGKeyArray) -> Float[Array, "n_targets"]:
         """
-        Sample a random jnp array of sigma value(s). Returns a 1D array of shape (n_targets).
+        Sample a random jnp array of sigma value(s).
+
+        Returns a 1D array of shape (n_targets).
 
         args:
             key: PRNG key to use for sampling
@@ -270,15 +276,18 @@ class EnvironmentState(NamedTuple):
     """
     The collection of exogenous parameters.
 
-    There can be up to 2 sources of a Gaussian form. The concentration of a leak
-    follows 1/sigma * e^-(distance^2/sigma) with distance being the distance to each source
+    There can be up to 2 sources of a Gaussian form.
+    The concentration of a leak follows 1/sigma * e^-(distance^2/sigma)
+    with distance being the distance to each source
     and sigma influencing the concentration strength.
 
     args:
         target_pos: a 2D jnp array of target position(s) with shape (arena.n_targets, 2)
-        sigma: a 1D jnp array of sigma value(s) used to calculate concentration; has shape (arena.n_targets)
+        sigma: a 1D jnp array of sigma value(s) used to calculate concentration;
+            has shape (arena.n_targets)
         x_inits: a jnp array of a turtle bot's initial ([x, y, theta]) positions
-                 Note: x_inits has shape (N, 3) where N is an argument provided in solve_turtle_bot.py
+            Note: x_inits has shape (N, 3)
+            where N is an argument provided in solve_turtle_bot.py
         arena: a Arena object in which the game is set up
     """
 
@@ -309,8 +318,8 @@ class EnvironmentState(NamedTuple):
         concentration: float = 0
         targets = self.target_pos
         sigmas = jnp.exp(self.logsigma)
-        make_gaussian = lambda target, sigma: jax.scipy.stats.norm.pdf(
-            ((target[0] - x) ** 2 + (target[1] - y) ** 2), target, sigma
+        make_gaussian = lambda target, sigma: jax.scipy.stats.multivariate_normal.pdf(
+            jnp.array([x, y]), target, sigma * jnp.eye(2)
         )
         concs = [make_gaussian(targets[n], sigmas[n]) for n in range(num_targets)]
         concentration = sum(concs)
@@ -336,6 +345,7 @@ class TurtleBotResult(NamedTuple):
         xs: trajectory of the turtle bot
 
     """
+
     # exogenous:
     n_targets: int
     target_pos: Float[Array, "n 2"]
