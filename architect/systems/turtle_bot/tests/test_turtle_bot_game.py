@@ -100,7 +100,7 @@ def test_Game(plot=False):
     
     env = EnvironmentState(target_pos, logsigma, x_inits)
     # Evaluate the game
-    esult = game(target_pos, logsigma, x_inits, policy)
+    result = game(target_pos, logsigma, x_inits, policy)
     assert result.squared_controls.shape == (N, game.duration, 2)
     #assert result.potential.shape == ()
     assert result.xs.shape == (N, game.duration, 3)

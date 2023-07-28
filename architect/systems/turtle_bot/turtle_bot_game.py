@@ -140,13 +140,9 @@ class Game(eqx.Module):
             )
             for n in range(self.n_targets)
         ]
-        a = [get_squared_distance(trajectory, (jnp.zeros_like(trajectory[:,:,:2])+target_pos[n])) for n in range(self.n_targets)]
-        #jax.debug.print("a, {a}", a=a)
-        #cost = jnp.array(cost)
+        #a = [get_squared_distance(trajectory, (jnp.zeros_like(trajectory[:,:,:2])+target_pos[n])) for n in range(self.n_targets)]
         jax.debug.print("cost, {cost}", cost = cost)
-        #jax.debug.print("a {a}", a=a)
         cost = sum(cost) + control.mean()
-        #jax.debug.print("cost, {cost}", cost = cost)
 
         
         return TurtleBotResult(
