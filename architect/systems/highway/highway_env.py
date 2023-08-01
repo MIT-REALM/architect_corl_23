@@ -177,6 +177,7 @@ class HighwayEnv:
         ego_action: Float[Array, " n_actions"],
         non_ego_actions: Float[Array, "n_non_ego n_actions"],
         key: PRNGKeyArray,
+        reset: bool = True,
     ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""], Bool[Array, ""]]:
         """Take a step in the environment.
 
@@ -190,6 +191,7 @@ class HighwayEnv:
             non_ego_actions: the control action to take for all other vehicles
                 (acceleration and steering angle)
             key: a random number generator key
+            reset: whether to reset the environment.
 
         Returns:
             The next state of the environment, the observations, the reward, and a
@@ -233,7 +235,7 @@ class HighwayEnv:
         # environment (or if we run out of road)
         done = jnp.logical_or(min_distance_to_obstacle < 0.0, next_ego_state[0] > 90.0)
         next_state = jax.lax.cond(
-            done,
+            jnp.logical_and(done, reset),
             lambda: self.reset(key),
             lambda: next_state,
         )

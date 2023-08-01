@@ -268,7 +268,7 @@ def plotting_cb(dp, eps, T=60):
 
     # Plot the trajectories for each case, color-coded by potential
     max_potential = jnp.max(result.potential)
-    min_potential = jnp.min(result.potential)
+    min_potential = jnp.min(result.potential) - 1e-3
     normalized_potential = (result.potential - min_potential) / (
         max_potential - min_potential
     )
@@ -401,16 +401,16 @@ if __name__ == "__main__":
 
     quench_dps_only = False
     if reinforce:
-        alg_type = "reinforce_l2c_0.05_step"
+        alg_type = f"reinforce_l2c_0.05_step_lr_{ep_mcmc_step_size:.1e}"
     elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala_nonorm"
+        alg_type = f"mala_lr_{ep_mcmc_step_size:.1e}"
         quench_dps_only = True
     elif use_gradients and use_stochasticity and not use_mh:
-        alg_type = "ula"
+        alg_type = f"ula_lr_{ep_mcmc_step_size:.1e}"
     elif use_gradients and not use_stochasticity:
-        alg_type = "gd"
+        alg_type = f"gd_lr_{ep_mcmc_step_size:.1e}"
     elif not use_gradients and use_stochasticity and use_mh:
-        alg_type = "rmh"
+        alg_type = f"rmh_lr_{ep_mcmc_step_size:.1e}"
     elif not use_gradients and use_stochasticity and not use_mh:
         alg_type = "random_walk"
     else:
@@ -529,6 +529,7 @@ if __name__ == "__main__":
             params,
             logprob_fn,
             normalize_gradients,
+            gradient_clip=grad_clip,
         )
         make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
             logprob_fn,
@@ -571,7 +572,7 @@ if __name__ == "__main__":
         quench_dps_only=quench_dps_only,
         tempering_schedule=tempering_schedule,
         logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
-        stress_test_cases=stress_test_eps,
+        stress_test_cases=None,  # stress_test_eps, # TODO
         potential_fn=lambda dp, ep: simulate(
             env, dp, initial_state, ep, static_policy, T
         ).potential,

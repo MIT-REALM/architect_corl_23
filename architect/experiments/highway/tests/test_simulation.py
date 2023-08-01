@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import matplotlib.pyplot as plt
 
+from architect.engines.samplers import normalize_gradients_with_threshold
 from architect.experiments.highway.predict_and_mitigate import (
     non_ego_actions_prior_logprob,
     sample_non_ego_actions,
@@ -26,7 +27,7 @@ if __name__ == "__main__":
     # Load the model (key doesn't matter; we'll replace all leaves with the saved
     # parameters), duplicating the model for each chain. We'll also split partition
     # out just the continuous parameters, which will be our design parameters
-    num_dp_chains = 1
+    num_dp_chains = 2
     dummy_policy = DrivingPolicy(jrandom.PRNGKey(0), image_shape)
     load_policy = lambda _: eqx.tree_deserialise_leaves(
         "results/highway/initial_policy.eqx", dummy_policy
@@ -42,11 +43,11 @@ if __name__ == "__main__":
     env._shading_light_direction_covariance = (
         1e-3 * env._shading_light_direction_covariance
     )
-    # # Hack: make collision much more likely
+    # Hack: change initial conditions
     # env._initial_ego_state = jnp.array([-100.0, -3.0, 0.0, 10.0])
     # env._initial_non_ego_states = jnp.array(
     #     [
-    #         [-95.0, -3.0, 0.0, 5.0],
+    #         [-95.0, 3.0, 0.0, 5.0],
     #         [-70, 3.0, 0.0, 8.0],
     #     ]
     # )
@@ -63,8 +64,8 @@ if __name__ == "__main__":
     initial_eps = jax.vmap(sample_eps_fn)(ep_keys)
 
     # Define the logprob function
-    L = 1.0
-    failure_level = 4.0
+    L = 10.0
+    failure_level = 7.4
     potential_fn = lambda actions, policy, t: -L * jax.nn.elu(
         failure_level
         - simulate(env, policy, initial_state, actions, static_policy, t).potential
@@ -72,10 +73,13 @@ if __name__ == "__main__":
     logprior_fn = lambda actions: non_ego_actions_prior_logprob(
         actions, env, noise_scale
     )
-    logprob_fn = lambda actions, policies, t: softmin(
-        jax.vmap(potential_fn, in_axes=(None, 0, None))(actions, policies, t),
-        sharpness=0.05,
-    ) + logprior_fn(actions)
+    # logprob_fn = lambda actions, policies, t: softmin(
+    #     jax.vmap(potential_fn, in_axes=(None, 0, None))(actions, policies, t),
+    #     sharpness=0.05,
+    # ) + logprior_fn(actions)
+    logprob_fn = lambda actions, policies, t: jax.vmap(
+        potential_fn, in_axes=(None, 0, None)
+    )(actions, policies, t).min() + logprior_fn(actions)
 
     # # Get the norm of the gradient of actions wrt actions for different simulation
     # # lengths
@@ -95,15 +99,18 @@ if __name__ == "__main__":
     steps = 10
     value_and_grad_fn = jax.jit(
         jax.value_and_grad(
-            lambda ep: simulate(
-                env, initial_dp, initial_state, ep, static_policy, t
-            ).potential
+            # lambda ep: simulate(
+            #     env, initial_dp, initial_state, ep, static_policy, t
+            # ).potential
+            lambda ep: logprob_fn(ep, initial_dps, t)
         )
     )
-    ep = initial_eps[0, :t]
+    ep = initial_eps[1, :t]
     for i in range(steps):
         v, g = value_and_grad_fn(ep)
-        print(f"Step {i}: potential: {v}, grad norm: {jnp.linalg.norm(g)}")
+        print(f"Step {i}: potential: {v}, grad norm: {jnp.linalg.norm(g)}", end="")
+        g = normalize_gradients_with_threshold(g, 10.0)
+        print(f" (normalized: {jnp.linalg.norm(g)})")
         ep = ep + lr * g  # gradient ASCENT to increase potential
 
     # Simulate

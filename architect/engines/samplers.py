@@ -24,12 +24,40 @@ class SamplerState(NamedTuple):
     num_accepts: Integer[Array, ""]
 
 
+def normalize_gradients_with_threshold(
+    gradients: Params,
+    threshold: Union[float, Float[Array, ""]],
+) -> Params:
+    """
+    Normalize the gradients to a threshold if they are larger than the threshold.
+
+    args:
+        gradients: the gradients to normalize
+        threshold: the threshold to normalize to
+    returns:
+        the normalized gradients
+    """
+    # Compute the L2 norm of the gradients
+    block_grad_norms_sq = jtu.tree_map(lambda x: jnp.sum(x**2), gradients)
+    grad_norm = jnp.sqrt(jtu.tree_reduce(operator.add, block_grad_norms_sq))
+
+    # Normalize the gradients if they are larger than the threshold
+    normalized_gradients = jax.lax.cond(
+        grad_norm > threshold,
+        lambda: jtu.tree_map(lambda x: x * threshold / grad_norm, gradients),
+        lambda: gradients,
+    )
+
+    return normalized_gradients
+
+
 @jaxtyped
 @beartype
 def init_sampler(
     position: Params,
     logdensity_fn: LogLikelihood,
     normalize_gradients: Union[bool, Bool[Array, ""]] = True,
+    gradient_clip: Union[float, Float[Array, ""]] = float("inf"),
 ) -> SamplerState:
     """
     Initialize a sampler.
@@ -37,7 +65,8 @@ def init_sampler(
     args:
         position: the initial position of the sampler
         logdensity_fn: the non-normalized log likelihood function
-        normalize_gradients: if True, normalize gradients to have unit L2 norm
+        normalize_gradients: if True, normalize gradients to have clipped L2 norm
+        gradient_clip: maximum value to clip gradients
     """
     grad_fn = jax.value_and_grad(logdensity_fn)
     logdensity, logdensity_grad = grad_fn(position)
@@ -48,14 +77,9 @@ def init_sampler(
     )
 
     # Normalize the gradients if requested
-    block_grad_norms_sq = jtu.tree_map(lambda x: jnp.sum(x**2), logdensity_grad)
-    grad_norm = jnp.sqrt(jtu.tree_reduce(operator.add, block_grad_norms_sq))
-    normalized_logdensity_grad = jtu.tree_map(
-        lambda grad: grad / grad_norm, logdensity_grad
-    )
     logdensity_grad = jax.lax.cond(
         normalize_gradients,
-        lambda: normalized_logdensity_grad,
+        lambda: normalize_gradients_with_threshold(logdensity_grad, gradient_clip),
         lambda: logdensity_grad,
     )
 
@@ -69,7 +93,7 @@ def make_kernel(
     step_size: Union[float, Float[Array, ""]],
     use_gradients: Union[bool, Bool[Array, ""]] = True,
     use_stochasticity: Union[bool, Bool[Array, ""]] = True,
-    grad_clip: Union[float, Float[Array, ""]] = float("inf"),
+    gradient_clip: Union[float, Float[Array, ""]] = float("inf"),
     normalize_gradients: Union[bool, Bool[Array, ""]] = True,
     use_mh: Union[bool, Bool[Array, ""]] = True,
 ) -> Sampler:
@@ -92,7 +116,7 @@ def make_kernel(
         step_size: the size of the step to take
         use_gradients: if True, use gradients in the proposal and acceptance steps
         use_stochasticity: if True, add a Gaussian to the proposal and acceptance steps
-        grad_clip: maximum value to clip gradients
+        gradient_clip: maximum value to clip gradients
         normalize_gradients: if True, normalize gradients to have unit L2 norm
         use_mh: if True, use Metropolis-Hastings acceptance, otherwise always accept
     """
@@ -114,9 +138,7 @@ def make_kernel(
         # If we're not using gradients, zero out the gradient in a JIT compatible way
         grad = jax.lax.cond(
             use_gradients,
-            lambda x: jtu.tree_map(
-                lambda v: jnp.clip(v, a_min=-grad_clip, a_max=grad_clip), x
-            ),
+            lambda x: x,
             lambda x: jtu.tree_map(jnp.zeros_like, x),
             state.logdensity_grad,
         )
@@ -186,17 +208,9 @@ def make_kernel(
         )
 
         # Normalize the gradients if requested.
-        # We do this by re-scaling gradients to match the rough order of the
-        # Gaussian noise
-        block_grad_norms_sq = jtu.tree_map(lambda x: jnp.sum(x**2), new_grad)
-        grad_norm = jnp.sqrt(jtu.tree_reduce(operator.add, block_grad_norms_sq))
-        normalized_new_grad = jtu.tree_map(
-            lambda grad: grad * jnp.linalg.norm(sample) / grad_norm,
-            new_grad,
-        )
         new_grad = jax.lax.cond(
             normalize_gradients,
-            lambda: normalized_new_grad,
+            lambda: normalize_gradients_with_threshold(new_grad, gradient_clip),
             lambda: new_grad,
         )
 

@@ -246,26 +246,16 @@ def predict_and_mitigate_failure_modes(
             # Create a loglikelihood function that maximizes the minimum potential
             # across all current design parameters. Need to make this positive so that
             # large potentials/costs -> higher likelihoods
-            ep_mean_potential_fn = lambda ep: softmin(
-                jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
-                sharpness=0.05,
-            )
+            # ep_mean_potential_fn = lambda ep: softmin(
+            #     jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
+            #     sharpness=0.05,
+            # )  # TODO
+            ep_mean_potential_fn = lambda ep: jax.vmap(
+                ep_potential_fn, in_axes=(0, None)
+            )(current_dps, ep).min()
             ep_logprob_fn = lambda ep: ep_logprior_fn(
                 ep
             ) + tempering * ep_mean_potential_fn(ep)
-
-            # Get the grad for debugging
-            ep_logprob_grads = jax.vmap(jax.grad(ep_logprob_fn))(current_eps)
-            ep_mean_potential_grads = jax.vmap(jax.grad(ep_mean_potential_fn))(
-                current_eps
-            )
-            jax.debug.print(
-                "ep logprob grad norm: {}", jax.vmap(jnp.linalg.norm)(ep_logprob_grads)
-            )
-            jax.debug.print(
-                "ep mean potential grads: {}",
-                jax.vmap(jnp.linalg.norm)(ep_mean_potential_grads),
-            )
 
             # Initialize the chains for this kernel
             initial_ep_sampler_states = jax.vmap(init_sampler, in_axes=(0, None))(
@@ -322,7 +312,7 @@ def predict_and_mitigate_failure_modes(
             "Mean Cost": stress_test_costs.mean(),
             "Max Cost": stress_test_costs.max(),
             "Failure rate (test)": (stress_test_costs > failure_level).mean(),
-        }  # TODO uncomment
+        }
 
     if plotting_cb is not None:
         plotting_cb(current_best_dps, exogenous_params)

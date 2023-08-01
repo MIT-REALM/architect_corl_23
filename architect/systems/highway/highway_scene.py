@@ -246,9 +246,9 @@ class HighwayScene:
             ]
 
         shapes = []
-        shapes += self.walls
         shapes += [shape for sublist in car_shapes for shape in sublist]
         if include_ground:
+            shapes += self.walls
             shapes.append(self.ground)
 
         return Scene(shapes=shapes, sharpness=sharpness)
