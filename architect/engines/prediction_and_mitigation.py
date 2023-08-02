@@ -250,9 +250,14 @@ def predict_and_mitigate_failure_modes(
             #     jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
             #     sharpness=0.05,
             # )  # TODO
-            ep_mean_potential_fn = lambda ep: jax.vmap(
-                ep_potential_fn, in_axes=(0, None)
-            )(current_dps, ep).min()
+            # ep_mean_potential_fn = lambda ep: jax.vmap(
+            #     ep_potential_fn, in_axes=(0, None)
+            # )(
+            #     current_dps, ep
+            # ).mean()  # TODO min or mean?
+            pick_one_dps = jtu.tree_map(lambda leaf: leaf[0], current_dps)
+            ep_mean_potential_fn = lambda ep: ep_potential_fn(pick_one_dps, ep)  # TODO
+
             ep_logprob_fn = lambda ep: ep_logprior_fn(
                 ep
             ) + tempering * ep_mean_potential_fn(ep)

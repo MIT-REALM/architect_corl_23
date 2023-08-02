@@ -53,11 +53,65 @@ def normalize_gradients_with_threshold(
 
 @jaxtyped
 @beartype
+def weight_perturbation_gradient_estimator(
+    logdensity_fn: LogLikelihood,
+    position: Params,
+    step_size: Union[float, Float[Array, ""]],
+    key: PRNGKeyArray,
+    n_samples: Union[int, Integer[Array, ""]] = 8,
+) -> Params:
+    """
+    Estimate the gradient using a weight perturbation method.
+
+    args:
+        logdensity_fn: the non-normalized log likelihood function
+        position: the position to estimate the gradient at
+        step_size: the size of the step to take
+        key: the random key to use for the perturbation
+        n_samples: the number of samples to use in the estimate
+
+    returns:
+        the log density at the current position and the gradient estimate
+    """
+    # Compute the log density at the current position
+    logdensity = logdensity_fn(position)
+
+    # Make a function to get the gradient estimate from a single perturbation
+    def single_perturbation_estimate(subkey):
+        # Generate noise with the same shape as the position pytree
+        p, unravel_fn = jax.flatten_util.ravel_pytree(position)
+        sample = jrandom.normal(subkey, shape=p.shape, dtype=p.dtype)
+        perturbation = unravel_fn(sample)
+
+        # Compute the log density at the perturbed position
+        perturbed_position = jtu.tree_map(
+            lambda x, y: x + jnp.sqrt(2 * step_size) * y, position, perturbation
+        )
+        perturbed_logdensity = logdensity_fn(perturbed_position)
+
+        # Compute the gradient estimate
+        return jtu.tree_map(
+            lambda x, y: (perturbed_logdensity - logdensity) * y,
+            position,
+            perturbation,
+        )
+
+    # Compute the gradient estimate by averaging over several perturbations
+    keys = jrandom.split(key, n_samples)
+    gradient_estimate = jax.vmap(single_perturbation_estimate)(keys)
+    gradient_estimate = jtu.tree_map(lambda x: x.mean(axis=0), gradient_estimate)
+
+    return logdensity, gradient_estimate
+
+
+@jaxtyped
+@beartype
 def init_sampler(
     position: Params,
     logdensity_fn: LogLikelihood,
     normalize_gradients: Union[bool, Bool[Array, ""]] = True,
     gradient_clip: Union[float, Float[Array, ""]] = float("inf"),
+    estimate_gradients: bool = False,
 ) -> SamplerState:
     """
     Initialize a sampler.
@@ -67,9 +121,16 @@ def init_sampler(
         logdensity_fn: the non-normalized log likelihood function
         normalize_gradients: if True, normalize gradients to have clipped L2 norm
         gradient_clip: maximum value to clip gradients
+        estimate_gradients: if True, estimate gradients using a weight perturbation
     """
     grad_fn = jax.value_and_grad(logdensity_fn)
-    logdensity, logdensity_grad = grad_fn(position)
+
+    if estimate_gradients:
+        logdensity, logdensity_grad = weight_perturbation_gradient_estimator(
+            logdensity_fn, position, 1e-3, jrandom.PRNGKey(0)
+        )
+    else:
+        logdensity, logdensity_grad = grad_fn(position)
 
     # Drop nans
     logdensity_grad = jtu.tree_map(
@@ -96,6 +157,7 @@ def make_kernel(
     gradient_clip: Union[float, Float[Array, ""]] = float("inf"),
     normalize_gradients: Union[bool, Bool[Array, ""]] = True,
     use_mh: Union[bool, Bool[Array, ""]] = True,
+    estimate_gradients: bool = False,
 ) -> Sampler:
     """
     Build a kernel for a sampling algorithm (either MALA, RMH, or MLE).
@@ -119,6 +181,7 @@ def make_kernel(
         gradient_clip: maximum value to clip gradients
         normalize_gradients: if True, normalize gradients to have unit L2 norm
         use_mh: if True, use Metropolis-Hastings acceptance, otherwise always accept
+        estimate_gradients: if True, estimate gradients using a weight perturbation
     """
     # A generic Metropolis-Hastings-style MCMC algorithm has 2 steps: a proprosal and
     # an accept/reject step.
@@ -161,7 +224,7 @@ def make_kernel(
     def one_step(prng_key: PRNGKeyArray, state: SamplerState) -> SamplerState:
         """Generate a new sample"""
         # Split the key
-        proposal_key, acceptance_key = jrandom.split(prng_key)
+        proposal_key, estimate_key, acceptance_key = jrandom.split(prng_key, 3)
 
         # Propose a new state
         delta_x = jtu.tree_map(
@@ -200,7 +263,15 @@ def make_kernel(
 
         # Make the state proposal
         new_position = jtu.tree_map(lambda x, dx: x + dx, state.position, delta_x)
-        new_logdensity, new_grad = jax.value_and_grad(logdensity_fn)(new_position)
+        if estimate_gradients:
+            new_logdensity, new_grad = weight_perturbation_gradient_estimator(
+                logdensity_fn,
+                new_position,
+                step_size,
+                estimate_key,
+            )
+        else:
+            new_logdensity, new_grad = jax.value_and_grad(logdensity_fn)(new_position)
 
         # Drop nans
         new_grad = jtu.tree_map(
