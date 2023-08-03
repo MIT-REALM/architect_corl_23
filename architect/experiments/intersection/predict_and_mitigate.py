@@ -280,29 +280,19 @@ def plotting_cb(dp, eps):
     result = eqx.filter_vmap(
         lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
         in_axes=(None, 0),
-    )(dp, final_eps)
+    )(dp, eps)
 
     # Plot the results
     fig = plt.figure(figsize=(32, 16), constrained_layout=True)
     axs = fig.subplot_mosaic(
         [
-            ["trace", "trace", "trace", "trajectory", "trajectory"],
-            ["trace", "trace", "trace", "trajectory", "trajectory"],
-            ["trace", "trace", "trace", "trajectory", "trajectory"],
+            ["trajectory", "trajectory", "trajectory", "trajectory", "trajectory"],
+            ["trajectory", "trajectory", "trajectory", "trajectory", "trajectory"],
+            ["trajectory", "trajectory", "trajectory", "trajectory", "trajectory"],
             ["final_obs", "final_obs", "final_obs", "final_obs", "final_obs"],
             ["reward", "reward", "reward", "reward", "reward"],
         ],
     )
-
-    # Plot the chain convergence
-    if predict:
-        axs["trace"].plot(ep_logprobs)
-        axs["trace"].set_ylabel("Log probability after contingency update")
-    else:
-        axs["trace"].plot(dp_logprobs)
-        axs["trace"].set_ylabel("Log probability after repair")
-
-    axs["trace"].set_xlabel("# Samples")
 
     # Plot the trajectories for each case, color-coded by potential
     max_potential = jnp.max(result.potential)
@@ -377,6 +367,9 @@ def plotting_cb(dp, eps):
     # log the figure to wandb
     wandb.log({"plot": fig}, commit=False)
 
+    # Close the figure
+    plt.close()
+
 
 if __name__ == "__main__":
     # Set up arguments
@@ -401,6 +394,7 @@ if __name__ == "__main__":
     parser.add_argument("--disable_stochasticity", action="store_true")
     parser.add_argument("--disable_mh", action="store_true")
     parser.add_argument("--reinforce", action="store_true")
+    parser.add_argument("--zero_order_gradients", action="store_true")
     parser.add_argument("--num_stress_test_cases", type=int, nargs="?", default=1_000)
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
@@ -426,6 +420,7 @@ if __name__ == "__main__":
     use_stochasticity = not args.disable_stochasticity
     use_mh = not args.disable_mh
     reinforce = args.reinforce
+    zero_order_gradients = args.zero_order_gradients
     num_stress_test_cases = args.num_stress_test_cases
     repair = args.repair
     predict = args.predict
@@ -434,47 +429,50 @@ if __name__ == "__main__":
     grad_clip = args.grad_clip
     normalize_gradients = not args.dont_normalize_gradients
 
-    print("Running prediction/mitigation on intersection with hyperparameters:")
-    print(f"\tmodel_path = {args.model_path}")
-    print(f"\timage dimensions (w x h) = {args.image_w} x {args.image_h}")
-    print(f"\tnoise_scale = {noise_scale}")
-    print(f"\tfailure_level = {failure_level}")
-    print(f"\tT = {T}")
-    print(f"\tseed = {seed}")
-    print(f"\tL = {L}")
-    print(f"\tdp_logprior_scale = {dp_logprior_scale}")
-    print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
-    print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
-    print(f"\tnum_rounds = {num_rounds}")
-    print(f"\tnum_steps_per_round = {num_steps_per_round}")
-    print(f"\tnum_chains = {num_chains}")
-    print(f"\tnum_stress_test_cases = {num_stress_test_cases}")
-    print(f"\tuse_gradients = {use_gradients}")
-    print(f"\tuse_stochasticity = {use_stochasticity}")
-    print(f"\tuse_mh = {use_mh}")
-    print(f"\trepair = {repair}")
-    print(f"\tpredict = {predict}")
-    print(f"\ttemper = {temper}")
-    print(f"\tquench_rounds = {quench_rounds}")
-    print(f"\tgrad_clip = {grad_clip}")
-    print(f"\tnormalize_gradients = {normalize_gradients}")
-    print(
-        f"Using alternative algorithm? {reinforce}",
-        f"(reinforce = {reinforce})",
-    )
+    # print("Running prediction/mitigation on intersection with hyperparameters:")
+    # print(f"\tmodel_path = {args.model_path}")
+    # print(f"\timage dimensions (w x h) = {args.image_w} x {args.image_h}")
+    # print(f"\tnoise_scale = {noise_scale}")
+    # print(f"\tfailure_level = {failure_level}")
+    # print(f"\tT = {T}")
+    # print(f"\tseed = {seed}")
+    # print(f"\tL = {L}")
+    # print(f"\tdp_logprior_scale = {dp_logprior_scale}")
+    # print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
+    # print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
+    # print(f"\tnum_rounds = {num_rounds}")
+    # print(f"\tnum_steps_per_round = {num_steps_per_round}")
+    # print(f"\tnum_chains = {num_chains}")
+    # print(f"\tnum_stress_test_cases = {num_stress_test_cases}")
+    # print(f"\tuse_gradients = {use_gradients}")
+    # print(f"\tuse_stochasticity = {use_stochasticity}")
+    # print(f"\tuse_mh = {use_mh}")
+    # print(f"\trepair = {repair}")
+    # print(f"\tpredict = {predict}")
+    # print(f"\ttemper = {temper}")
+    # print(f"\tquench_rounds = {quench_rounds}")
+    # print(f"\tgrad_clip = {grad_clip}")
+    # print(f"\tnormalize_gradients = {normalize_gradients}")
+    # print(
+    #     f"Using alternative algorithm? {reinforce}",
+    #     f"(reinforce = {reinforce})",
+    # )
 
     quench_dps_only = False
     if reinforce:
-        alg_type = "reinforce_l2c_0.05_step"
-    elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala"
+        alg_type = f"reinforce_l2c_0.05_step_lr_{ep_mcmc_step_size:.1e}"
+    elif use_gradients and use_stochasticity and use_mh and not zero_order_gradients:
+        alg_type = f"mala_lr_{ep_mcmc_step_size:.1e}"
+        quench_dps_only = True
+    elif use_gradients and use_stochasticity and use_mh and zero_order_gradients:
+        alg_type = f"mala_zo_lr_{ep_mcmc_step_size:.1e}"
         quench_dps_only = True
     elif use_gradients and use_stochasticity and not use_mh:
-        alg_type = "ula"
+        alg_type = f"ula_lr_{ep_mcmc_step_size:.1e}"
     elif use_gradients and not use_stochasticity:
-        alg_type = "gd"
+        alg_type = f"gd_lr_{ep_mcmc_step_size:.1e}"
     elif not use_gradients and use_stochasticity and use_mh:
-        alg_type = "rmh"
+        alg_type = f"rmh_lr_{ep_mcmc_step_size:.1e}"
     elif not use_gradients and use_stochasticity and not use_mh:
         alg_type = "random_walk"
     else:
@@ -505,6 +503,7 @@ if __name__ == "__main__":
             "use_stochasticity": use_stochasticity,
             "use_mh": use_mh,
             "reinforce": reinforce,
+            "zero_order_gradients": zero_order_gradients,
             "repair": repair,
             "predict": predict,
             "temper": temper,
@@ -596,6 +595,8 @@ if __name__ == "__main__":
             params,
             logprob_fn,
             normalize_gradients,
+            gradient_clip=grad_clip,
+            estimate_gradients=zero_order_gradients,
         )
         make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
             logprob_fn,
@@ -605,6 +606,7 @@ if __name__ == "__main__":
             grad_clip,
             normalize_gradients,
             use_mh,
+            zero_order_gradients,
         )
 
     # Run the prediction+mitigation process
@@ -638,7 +640,7 @@ if __name__ == "__main__":
         quench_dps_only=quench_dps_only,
         tempering_schedule=tempering_schedule,
         logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
-        stress_test_cases=stress_test_eps,
+        stress_test_cases=None,  # stress_test_eps,  # TODO
         potential_fn=lambda dp, ep: simulate(
             env, dp, initial_state, ep, static_policy, T
         ).potential,
@@ -671,20 +673,7 @@ if __name__ == "__main__":
     # ep_logprobs = jnp.zeros((num_rounds, num_chains))
     # # TODO debugging bit ends here
 
-    if reinforce:
-        alg_type = "reinforce_l2c"
-    elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala"
-    elif use_gradients and use_stochasticity and not use_mh:
-        alg_type = "ula"
-    elif use_gradients and not use_stochasticity:
-        alg_type = "gd"
-    elif not use_gradients and use_stochasticity and use_mh:
-        alg_type = "rmh"
-    elif not use_gradients and use_stochasticity and not use_mh:
-        alg_type = "random_walk"
-    else:
-        alg_type = "static"
+    # Figure out where to save
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
         f"{'_' if repair else ''}{'repair_' + str(dp_logprior_scale) if repair else ''}/"
