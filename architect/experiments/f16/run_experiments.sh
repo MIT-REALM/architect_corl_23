@@ -3,8 +3,8 @@ wait
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --disable_stochasticity --no-predict &  # GD no adv
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --disable_stochasticity &  # GD
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --disable_gradients --quench_rounds 0 &  # RMH
-CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py &  # MALA
-CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --reinforce --quench_rounds 0 &  # REINFORCE
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --quench_rounds 15 &  # MALA
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --reinforce --quench_rounds 0 --dp_mcmc_step_size 1e-5 --ep_mcmc_step_size 1e-5 &  # REINFORCE
 
 wait
 

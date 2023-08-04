@@ -90,9 +90,9 @@ if __name__ == "__main__":
     parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
-    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-3)
+    parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=50)
-    parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=1)
+    parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=5)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
     parser.add_argument("--disable_gradients", action="store_true")
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=True)
-    parser.add_argument("--grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--grad_clip", type=float, nargs="?", default=10.0)
     parser.add_argument("--dont_normalize_gradients", action="store_true")
     args = parser.parse_args()
 
@@ -150,8 +150,6 @@ if __name__ == "__main__":
         alg_type = "random_walk"
     else:
         alg_type = "static"
-
-    alg_type += f"_lr_{dp_mcmc_step_size:.1e}/{ep_mcmc_step_size:.1e}"
 
     # Initialize logger
     wandb.init(
@@ -305,6 +303,9 @@ if __name__ == "__main__":
 
     # Save the final design parameters (joined back into the full policy)
     eqx.tree_serialise_leaves(filename + ".eqx", final_dps)
+
+    # Save the trace of design parameters
+    eqx.tree_serialise_leaves(filename + "_dp_trace.eqx", dps)
 
     # Save the results
     with open(filename + ".json", "w") as f:

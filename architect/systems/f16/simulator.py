@@ -164,10 +164,10 @@ def closed_loop_dynamics(
     returns:
         the derivative of the state
     """
-    # u_gcas = gcas_controller(x)
+    u_gcas = gcas_controller(x)
     u_residual = residual_controller(x)
-    # u = u_gcas + u_residual
-    u = u_residual
+    u = 0.5 * u_gcas + 0.5 * u_residual
+    # u = u_residual
 
     return F16().xdot(x, u)
 
@@ -255,9 +255,9 @@ def simulate(
 
     # Potential is high when min altitude is low
     potential = jax.nn.elu(200.0 - min_alt) / FLIGHT_DECK  # Normalize by flight deck
-    # Add a penalty for deviation from level at end of simulation
-    potential += jnp.abs(x[-1, F16.PHI]) / jnp.pi
-    potential += jnp.abs(x[-1, F16.THETA]) / jnp.pi
+    # # Add a penalty for deviation from level at end of simulation
+    # potential += x[-1, F16.PHI] ** 2 / jnp.pi**2
+    # potential += x[-1, F16.THETA] ** 2 / jnp.pi**2
 
     return F16Result(states=x, potential=potential)
 
