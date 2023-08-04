@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import time
 from beartype import beartype
 from jax.nn import logsumexp
-from jaxtyping import Array, Float, jaxtyped
+from jaxtyping import Array, Float, jaxtyped, PyTree
 from architect.systems.components.dynamics.dubins import dubins_next_state
 from architect.systems.turtle_bot.turtle_bot_types import (
     Arena,
@@ -19,7 +19,7 @@ from architect.systems.turtle_bot.turtle_bot_types import (
     EnvironmentState,
     TurtleBotResult,
 )
-
+from beartype.typing import NamedTuple
 
 @jaxtyped
 @beartype
@@ -44,9 +44,7 @@ class Game(eqx.Module):
     def loss_fn(
         self,
         policy: Policy,
-        target_pos: Float[Array, "n_targets 2"],
-        logsigma: Float[Array, "n_targets "],
-        x_inits: Float[Array, "N 3"]
+        eps: PyTree[Float[Array, "..."]]
         
     ):
         """
@@ -64,15 +62,18 @@ class Game(eqx.Module):
         (to disincentivize excessive movement).
         
         args:
-            target_pos: the source(s) of the leak(s)
-            sigma: array of values representing the concentration "strength" of a leak
-            x_inits: turtle-bot's starting positions
             policy: neural network policy used to for control input
-
+            eps: a PyTree of 
+                target_pos: the source(s) of the leak(s)
+                sigma: array of values representing the concentration "strength" of a leak
+                x_inits: turtle-bot's starting positions
         """
+        target_pos = eps[0] 
+        logsigma = eps[1] 
+        x_inits = eps[2]
         e_sigma = jnp.exp(logsigma)
         T = self.duration
-        exogenous_env = EnvironmentState(target_pos, e_sigma, x_inits)
+        exogenous_env = EnvironmentState(target_pos, logsigma, x_inits)
 
         # initialize x_hists
         def make_x_hist(x_init: Float[Array, "N 3"]) -> Float[Array, "N memory_length 3"]:
@@ -89,7 +90,6 @@ class Game(eqx.Module):
         conc_hists = make_conc_hists(x_inits)
 
         # Define a function to execute one step in the game
-
         def step_policy(carry, dummy_input):
             x_hist, conc_hist, x_current = carry
             control_inputs = jax.nn.tanh(policy(x_hist, conc_hist))
@@ -141,14 +141,6 @@ class Game(eqx.Module):
             )
             for n in range(self.n_targets)
         ]
-        a = [get_squared_distance(trajectory, (jnp.zeros_like(trajectory[:,:,:2])+target_pos[n])) for n in range(self.n_targets)]
-        #jax.debug.print("a, {a}", a=a)
-        #cost = jnp.array(cost)
-        #jax.debug.print("cost, {cost}", cost = cost)
-        #jax.debug.print("a {a}", a=a)
-        cost = sum(cost) + control.mean()
-        #jax.debug.print("cost, {cost}", cost = cost)
 
-        # return cost
-        
+        cost = sum(cost) + control.mean()
         return cost
