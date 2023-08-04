@@ -5,70 +5,57 @@ import time
 import jax.tree_util
 from matplotlib import pyplot as plt
 from beartype import beartype
+from jax import tree_util
 from jax.nn import logsumexp
-from jaxtyping import Array, Float, jaxtyped
+from jaxtyping import Array, Float, jaxtyped, PyTree
 from architect.systems.components.dynamics.dubins import dubins_next_state
 from architect.systems.turtle_bot.turtle_bot_types import Policy, EnvironmentState
 from architect.systems.turtle_bot.tests.grad_descent_game_test import (
     Game
 )
+from architect.engines.simple_gradient_descent import simple_grad_descent
 
-# Goal: to create an engine that takes a function as input and runs only gradient descent optimization
+# on the jupyter notebook, make a copy of turtle bots and use only single integrator
 
-def simple_grad_descent(iterations: int, rate: float,loss_fn,target,sig,init,dp):
-    T = game.duration
-    loss_and_grad = jax.jit(jax.value_and_grad(loss_fn, allow_int = True))
+# This simulator tests the behavior of turtle bots in the source-seeking problem. 
+# The control inputs are outputs of a neural network policy, which is trained using 
+# simple gradient descent. The policy takes into consideration a history of positions 
+# and a history of concentrations. The target positions and strengths (sigmas) of the sources 
+# and the initial conditions/positions (of which there are N) are exogenous parameters.
 
-    # Train
-    iters = iterations
-    learning_rate = rate #this is the "alpha" constant in the x - alpha*gradx
-    t_start = time.time()
-    for i in range(iters):
-        
-        loss, grads = loss_and_grad(dp,target,sig,init) #this is gradient descent optimization
-        dp = jax.tree_util.tree_map(lambda m, g: m - learning_rate * g, dp, grads) #policy and grads are pytrees. They are same size and structure
-
-        if i % 1000 == 0 or i == iters - 1:
-            print(f"Iter {i}, loss {loss}")
-    return dp
-    t_end = time.time()
-    #print("Trained on {:,d} environmental interactions in {:.2f} seconds; final loss = {:.3f}".format(T * N * iters, t_end - t_start, loss))
-
-
+# Initialization
 game = Game(
-    memory_length = 3,
+    memory_length = 10,
     n_targets = 2
 )
 prng_key = jax.random.PRNGKey(1)
 prng_key, subkey = jax.random.split(prng_key)
-policy = Policy(subkey,3)
+policy = Policy(subkey,10)
 
 
-N=20
-memory_length = 3
+N=30
+memory_length = 10
+# Define exogenous parameters
 prng_key = jax.random.PRNGKey(0)
 x_inits = 1 * jax.random.normal(prng_key, shape=(N, 3)) 
 target_pos = jnp.array([[-1.5,0.0],[0.5,0.0]])
 num_targets = target_pos.shape[0]
-# Define test sigma
-logsigma = jnp.log(jnp.array([0.435, 0.435]))
+logsigma = jnp.log(jnp.array([0.3, 0.2]))
 
-
+# Define parameters fro gradient descent
+T = game.duration
 iterations = 6000
 rate = 1e-2
 loss_fn = game.loss_fn
-print (target_pos)
-print(logsigma)
-print(x_inits)
 target = target_pos
 sig = logsigma
 init = x_inits
 dp = policy
-new_dp = simple_grad_descent(iterations,rate,loss_fn,target,sig,init,dp)
+eps = (target,sig,init)
+new_dp = simple_grad_descent(N,T,iterations,rate,loss_fn,eps,dp)
 
-
+# Define the Game to be solved using the optimized design parameter
 e_sigma = jnp.exp(logsigma)
-T = 100
 exogenous_env = EnvironmentState(target_pos, e_sigma, x_inits)
 n_targets = num_targets
 # initialize x_hists
@@ -86,7 +73,6 @@ make_conc_hists = jax.vmap(make_conc_hist)
 conc_hists = make_conc_hists(x_inits)
 
 # Define a function to execute one step in the game
-
 def step_policy(carry, dummy_input):
     x_hist, conc_hist, x_current = carry
     control_inputs = jax.nn.tanh(new_dp(x_hist, conc_hist))
@@ -117,26 +103,18 @@ simulate_batched = jax.vmap(simulate_scan)
 trajectory, control = simulate_batched(x_inits, x_hists, conc_hists)
 control = control**2
 
-
-
-
-
+# Plotting
 delta = 0.025
 x = jnp.arange(-3.0, 3.0, delta)
 y = jnp.arange(-2.0, 2.0, delta)
 X, Y = jnp.meshgrid(x, y)
 def get_concentration(x, y):
     sigmas = jnp.exp(logsigma)
-    import pdb
-    pdb.set_trace()
     make_gaussian = lambda target, sig: 1/sig*jax.lax.exp(-1/sig* ((target[0]-x)**2 + (target[1]-y)**2))
     concs = [make_gaussian(target[n], sigmas[n]) for n in range(num_targets)]
-    pdb.set_trace()
     concentration = sum(concs)
     concentration = jnp.take(concentration, 0)
     return concentration
-import pdb
-pdb.set_trace()
 data = jax.vmap(jax.vmap(get_concentration))(X,Y)
 print (data.shape)
 plt.contour(X,Y, data)
@@ -146,6 +124,6 @@ for i in range(N):
     plt.plot(xs[i,:,0], xs[i,:,1])
     plt.plot(xs[i,0,0], xs[i,0,1], "bo")
     plt.plot(xs[i,-1,0], xs[i,-1,1], "ro")
+plt.title(f"Run for duration of {T} seconds, with {N} initial conditions. Final cost: {game.loss_fn(new_dp,eps)}")
 plt.show()
-pdb.set_trace()
 
