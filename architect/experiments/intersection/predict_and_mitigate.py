@@ -517,7 +517,7 @@ if __name__ == "__main__":
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds) + 0.1
-    tempering_schedule = 1 - jnp.exp(-20 * t) if temper else None
+    tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
     prng_key = jrandom.PRNGKey(seed)
