@@ -70,7 +70,7 @@ def plotting_cb(dp, ep):
         if chain_idx == 0:
             axs["roll"].legend()
 
-    axs["altitude"].set_ylim([-5e3, 5e3])
+    axs["altitude"].set_ylim([-100.0, 5e3])
 
     # log the figure to wandb
     wandb.log({"plot": wandb.Image(fig)}, commit=False)
@@ -82,16 +82,16 @@ def plotting_cb(dp, ep):
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--savename", type=str, default="f16")
+    parser.add_argument("--savename", type=str, default="f16_ep_1e-4")
     parser.add_argument(
         "--model_path", type=str, default="results/f16/initial_policy.eqx"
     )
     parser.add_argument("--seed", type=int, nargs="?", default=0)
-    parser.add_argument("--L", type=float, nargs="?", default=10.0)
+    parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
-    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-4)
+    parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-4)
-    parser.add_argument("--num_rounds", type=int, nargs="?", default=50)
+    parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
     parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=5)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=True)
-    parser.add_argument("--grad_clip", type=float, nargs="?", default=10.0)
+    parser.add_argument("--grad_clip", type=float, nargs="?", default=float("inf"))
     parser.add_argument("--dont_normalize_gradients", action="store_true")
     args = parser.parse_args()
 
@@ -153,13 +153,10 @@ if __name__ == "__main__":
 
     # Initialize logger
     wandb.init(
-        project=(
-            args.savename
-            + ("-predict" if predict else "")
-            + ("-repair" if repair else "")
-            + f"-{num_rounds}x{num_steps_per_round}"
-        ),
-        group=alg_type,
+        project=args.savename + f"-{num_rounds}x{num_steps_per_round}",
+        group=alg_type
+        + ("-predict" if predict else "")
+        + ("-repair" if repair else ""),
         config={
             "L": L,
             "seed": seed,
@@ -188,16 +185,19 @@ if __name__ == "__main__":
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
-    tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
+    tempering_schedule = 1 - jnp.exp(-10 * t) if temper else None
 
     # Make a PRNG key (#sorandom)
-    prng_key = jrandom.PRNGKey(0)
+    prng_key = jrandom.PRNGKey(seed)
 
     # Initialize the residual policies (these will be DPs)
-    dummy_policy = ResidualControl(jrandom.PRNGKey(0))
-    load_policy = lambda _: eqx.tree_deserialise_leaves(args.model_path, dummy_policy)
-    get_dps = lambda _: eqx.partition(load_policy(_), eqx.is_array)[0]
-    initial_dps = eqx.filter_vmap(get_dps)(jnp.arange(num_chains))
+    # dummy_policy = ResidualControl(jrandom.PRNGKey(0))
+    # load_policy = lambda _: eqx.tree_deserialise_leaves(args.model_path, dummy_policy)
+    # get_dps = lambda _: eqx.partition(load_policy(_), eqx.is_array)[0]
+    # initial_dps = eqx.filter_vmap(get_dps)(jnp.arange(num_chains))
+    prng_key, dp_key = jrandom.split(prng_key)
+    dp_keys = jrandom.split(dp_key, num_chains)
+    initial_dps = jax.vmap(ResidualControl)(dp_keys)
 
     # Initialize the initial states (these will be EPs)
     prng_key, x0_key = jrandom.split(prng_key)
@@ -268,7 +268,7 @@ if __name__ == "__main__":
         logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
         stress_test_cases=stress_test_eps,
         potential_fn=lambda dp, ep: simulate(ep, dp).potential,
-        failure_level=0.0,
+        failure_level=15.0,
         plotting_cb=plotting_cb,
     )
     t_end = time.perf_counter()

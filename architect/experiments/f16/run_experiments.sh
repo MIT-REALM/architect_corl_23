@@ -1,10 +1,28 @@
 wait
 
-CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --disable_stochasticity --no-predict &  # GD no adv
-CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --disable_stochasticity &  # GD
-CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --disable_gradients --quench_rounds 0 &  # RMH
-CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --quench_rounds 15 &  # MALA
-CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.2 python architect/experiments/f16/solve.py --reinforce --quench_rounds 0 --dp_mcmc_step_size 1e-5 --ep_mcmc_step_size 1e-5 &  # REINFORCE
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 0 --disable_stochasticity --no-predict &  # GD no adv
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 0 --disable_stochasticity &  # GD
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 0 --disable_gradients --quench_rounds 0 &  # RMH
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 0 &  # MALA
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 0 --reinforce &  # REINFORCE
+
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 1 --disable_stochasticity --no-predict &  # GD no adv
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 1 --disable_stochasticity &  # GD
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 1 --disable_gradients --quench_rounds 0 &  # RMH
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 1 &  # MALA
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 1 --reinforce &  # REINFORCE
+
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 2 --disable_stochasticity --no-predict &  # GD no adv
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 2 --disable_stochasticity &  # GD
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 2 --disable_gradients --quench_rounds 0 &  # RMH
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 2 &  # MALA
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 2 --reinforce &  # REINFORCE
+
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 3 --disable_stochasticity --no-predict &  # GD no adv
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 3 --disable_stochasticity &  # GD
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 3 --disable_gradients --quench_rounds 0 &  # RMH
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 3 &  # MALA
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.075 python architect/experiments/f16/solve.py --seed 3 --reinforce &  # REINFORCE
 
 wait
 
