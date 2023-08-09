@@ -297,7 +297,7 @@ if __name__ == "__main__":
         f"{'repair' if repair else 'no_repair'}/"
         f"{'predict' if predict else 'no_predict'}"
     )
-    filename = os.path.join(path, alg_type)
+    filename = os.path.join(path, alg_type + f"_{seed}")
     print(f"Saving results to: {filename}")
     os.makedirs(path, exist_ok=True)
 

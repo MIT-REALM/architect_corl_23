@@ -6,23 +6,23 @@ import seaborn as sns
 data = [
     {
         "Algorithm": "DR",
-        "predicted_failures": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/no_predict/gd_stress_test.npz",  # noqa
+        "predicted_failures": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/no_predict/gd_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/no_predict/gd_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "GD",
-        "predicted_failures": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/gd_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/gd_stress_test.npz",  # noqa
+        "predicted_failures": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/predict/gd_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/predict/gd_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "Ours (RMH)",
-        "predicted_failures": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/0_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/rmh_stress_test.npz",  # noqa
+        "predicted_failures": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/predict/rmh_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/predict/rmh_stress_test.npz",  # noqa
     },
     {
         "Algorithm": "Ours (MALA)",
-        "predicted_failures": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_predicted_failures.npz",  # noqa"
-        "stress_test_results": "results/TODOformation2d_grad_norm_netconn/5/L_1.0e+00/3_T/250_samples/5_quench/no_temper5_chains/dp_1.0e-03/ep_1.0e-03/repair/predict/mala_stress_test.npz",  # noqa
+        "predicted_failures": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/predict/mala_predicted_failures.npz",  # noqa"
+        "stress_test_results": "results/f16_ep_1e-4/L_1.0e+00/500_samples/0_quench/tempered10_chains/dp_1.0e-02/ep_1.0e-04/repair/predict/mala_stress_test.npz",  # noqa
     },
 ]
 
@@ -127,5 +127,6 @@ if __name__ == "__main__":
     plt.legend(markerscale=1.5)
     plt.xlabel("")
     plt.gca().legend().remove()
+    plt.ylim([-0.5, 30])
 
-    plt.show()
+    plt.savefig("f16.png", bbox_inches="tight")

@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument("--dp_logprior_scale", type=float, nargs="?", default=1.0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-3)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-3)
-    parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
+    parser.add_argument("--num_rounds", type=int, nargs="?", default=10)
     parser.add_argument("--num_steps_per_round", type=int, nargs="?", default=10)
     parser.add_argument("--num_chains", type=int, nargs="?", default=10)
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=0)
@@ -131,13 +131,10 @@ if __name__ == "__main__":
 
     # Initialize logger
     wandb.init(
-        project=(
-            args.savename
-            + ("-predict" if predict else "")
-            + ("-repair" if repair else "")
-            + f"-{num_rounds}x{num_steps_per_round}"
-        ),
-        group=alg_type,
+        project=args.savename + f"-{num_rounds}x{num_steps_per_round}",
+        group=alg_type
+        + ("-predict" if predict else "")
+        + ("-repair" if repair else ""),
         config={
             "L": L,
             "seed": seed,

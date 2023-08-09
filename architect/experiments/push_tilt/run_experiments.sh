@@ -3,25 +3,25 @@ wait
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 0 --disable_stochasticity --no-predict &  # GD no adv
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 0 --disable_stochasticity &  # GD
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 0 --disable_gradients --quench_rounds 0 &  # RMH
-CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 0 --quench_rounds 5 &  # MALA
+CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 0 &  # MALA
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 0 --reinforce &  # REINFORCE
 
 CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 1 --disable_stochasticity --no-predict &  # GD no adv
 CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 1 --disable_stochasticity &  # GD
 CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 1 --disable_gradients --quench_rounds 0 &  # RMH
-CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 1 --quench_rounds 5 &  # MALA
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 1 &  # MALA
 CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 1 --reinforce &  # REINFORCE
 
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 2 --disable_stochasticity --no-predict &  # GD no adv
 CUDA_VISIBLE_DEVICES=2, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 2 --disable_stochasticity &  # GD
 CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 2 --disable_gradients --quench_rounds 0 &  # RMH
-CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 2 --quench_rounds 5 &  # MALA
+CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 2 &  # MALA
 CUDA_VISIBLE_DEVICES=3, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 2 --reinforce &  # REINFORCE
 
 CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 3 --disable_stochasticity --no-predict &  # GD no adv
 CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 3 --disable_stochasticity &  # GD
 CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 3 --disable_gradients --quench_rounds 0 &  # RMH
-CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 3 --quench_rounds 5 &  # MALA
+CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 3 &  # MALA
 CUDA_VISIBLE_DEVICES=1, XLA_PYTHON_CLIENT_MEM_FRACTION=0.1 python architect/experiments/push_tilt/solve.py --seed 3 --reinforce &  # REINFORCE
 
 wait
