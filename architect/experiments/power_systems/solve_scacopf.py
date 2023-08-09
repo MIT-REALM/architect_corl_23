@@ -9,6 +9,7 @@ import jax.random as jrandom
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
 import seaborn as sns
+import wandb
 from jax.nn import sigmoid
 from jaxtyping import Array, Shaped
 
@@ -22,6 +23,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--case_name", type=str, nargs="?", default="case14")
     parser.add_argument("--L", type=float, nargs="?", default=100.0)
+    parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--dp_mcmc_step_size", type=float, nargs="?", default=1e-6)
     parser.add_argument("--ep_mcmc_step_size", type=float, nargs="?", default=1e-2)
     parser.add_argument("--num_rounds", type=int, nargs="?", default=100)
@@ -30,6 +32,7 @@ if __name__ == "__main__":
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=10)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
+    parser.add_argument("--num_stress_test_cases", type=int, nargs="?", default=100)
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
@@ -69,6 +72,40 @@ if __name__ == "__main__":
     print(f"\tquench_rounds = {quench_rounds}")
     print(f"\tgrad_clip = {grad_clip}")
 
+    if use_gradients and use_stochasticity:
+        alg_type = "mala"
+    elif use_gradients and not use_stochasticity:
+        alg_type = "gd"
+    elif not use_gradients and use_stochasticity:
+        alg_type = "rmh"
+    else:
+        alg_type = "static"
+
+    # Initialize logger
+    wandb.init(
+        project=f"scopf-{case_name}-{num_rounds}x{num_mcmc_steps_per_round}",
+        group=alg_type
+        + ("-predict" if predict else "")
+        + ("-repair" if repair else ""),
+        config={
+            "L": L,
+            "case_name": case_name,
+            "seed": args.seed,
+            "dp_mcmc_step_size": dp_mcmc_step_size,
+            "ep_mcmc_step_size": ep_mcmc_step_size,
+            "num_rounds": num_rounds,
+            "num_steps_per_round": num_mcmc_steps_per_round,
+            "num_chains": num_chains,
+            "use_gradients": use_gradients,
+            "use_stochasticity": use_stochasticity,
+            "repair": repair,
+            "predict": predict,
+            "temper": temper,
+            "quench_rounds": quench_rounds,
+            "grad_clip": grad_clip,
+        },
+    )
+
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
@@ -77,7 +114,7 @@ if __name__ == "__main__":
     sys = load_test_network(case_name, penalty=L)
 
     # Make a PRNG key (#sorandom)
-    prng_key = jrandom.PRNGKey(0)
+    prng_key = jrandom.PRNGKey(args.seed)
 
     # Initialize the dispatch randomly
     prng_key, dispatch_key = jrandom.split(prng_key)
@@ -88,6 +125,11 @@ if __name__ == "__main__":
     prng_key, network_key = jrandom.split(prng_key)
     network_keys = jrandom.split(network_key, num_chains)
     init_exogenous_params = jax.vmap(sys.sample_random_network_state)(network_keys)
+
+    # Initialize stress test parameters
+    prng_key, network_key = jrandom.split(prng_key)
+    network_keys = jrandom.split(network_key, args.num_stress_test_cases)
+    stress_test_eps = jax.vmap(sys.sample_random_network_state)(network_keys)
 
     # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
     # stochasticity are enabled
@@ -116,8 +158,8 @@ if __name__ == "__main__":
         ep_logprior_fn=sys.network_state_prior_logprob,
         ep_potential_fn=lambda dp, ep: sys(dp, ep).potential,
         dp_potential_fn=lambda dp, ep: -sys(dp, ep).potential,
-        init_sampler_fn=init_sampler_fn,
-        make_kernel_fn=make_kernel_fn,
+        init_sampler=init_sampler_fn,
+        make_kernel=make_kernel_fn,
         num_rounds=num_rounds,
         num_mcmc_steps_per_round=num_mcmc_steps_per_round,
         dp_mcmc_step_size=dp_mcmc_step_size,
@@ -127,6 +169,8 @@ if __name__ == "__main__":
         predict=predict,
         quench_rounds=quench_rounds,
         tempering_schedule=tempering_schedule,
+        stress_test_cases=stress_test_eps,
+        potential_fn=lambda dp, ep: sys(dp, ep).potential,
     )
     t_end = time.perf_counter()
     print(

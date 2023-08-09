@@ -26,3 +26,32 @@ wait
 python architect/experiments/formation2d/plot_training_curves.py
 
 python architect/experiments/formation2d/plot_stress_test_results.py 
+
+
+## Running with different seeds
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 0 --n 10 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 0 --n 10 --grad_clip 10 &
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 1 --n 10 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 1 --n 10 --grad_clip 10 &
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 2 --n 10 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 2 --n 10 --grad_clip 10 &
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 3 --n 10 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 3 --n 10 --grad_clip 10 &
+
+wait;
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 0 --n 5 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 0 --n 5 --grad_clip 10 &
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 1 --n 5 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 1 --n 5 --grad_clip 10 &
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 2 --n 5 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 2 --n 5 --grad_clip 10 &
+
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 3 --n 5 --disable_gradients --quench_rounds 0 &
+CUDA_VISIBLE_DEVICES=, python architect/experiments/formation2d/solve.py --seed 3 --n 5 --grad_clip 10 &

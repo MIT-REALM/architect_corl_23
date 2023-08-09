@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
+import wandb
 from jax.config import config
 from jaxtyping import Array, Shaped
 
@@ -23,6 +24,7 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--n_seekers", type=int, nargs="?", default=4 * 3)
     parser.add_argument("--n_hiders", type=int, nargs="?", default=4 * 5)
     parser.add_argument("--L", type=float, nargs="?", default=10.0)
@@ -39,11 +41,12 @@ if __name__ == "__main__":
     parser.add_argument("--quench_rounds", type=int, nargs="?", default=25)
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
+    parser.add_argument("--num_stress_test_cases", type=int, nargs="?", default=100)
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=False)
-    parser.add_argument("--grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--grad_clip", type=float, nargs="?", default=10.0)
     args = parser.parse_args()
 
     # Hyperparameters
@@ -90,6 +93,41 @@ if __name__ == "__main__":
     print(f"\tquench_rounds = {quench_rounds}")
     print(f"\tgrad_clip = {grad_clip}")
 
+    if use_gradients and use_stochasticity:
+        alg_type = "mala"
+    elif use_gradients and not use_stochasticity:
+        alg_type = "gd"
+    elif not use_gradients and use_stochasticity:
+        alg_type = "rmh"
+    else:
+        alg_type = "static"
+
+    # Initialize logger
+    wandb.init(
+        project=f"hideseek-{n_hiders}-hiders-{n_seekers}-seekers-{num_rounds}x{num_mcmc_steps_per_round}",
+        group=alg_type
+        + ("-predict" if predict else "")
+        + ("-repair" if repair else ""),
+        config={
+            "L": L,
+            "n_hiders": n_hiders,
+            "n_seekers": n_seekers,
+            "seed": args.seed,
+            "dp_mcmc_step_size": dp_mcmc_step_size,
+            "ep_mcmc_step_size": ep_mcmc_step_size,
+            "num_rounds": num_rounds,
+            "num_steps_per_round": num_mcmc_steps_per_round,
+            "num_chains": num_chains,
+            "use_gradients": use_gradients,
+            "use_stochasticity": use_stochasticity,
+            "repair": repair,
+            "predict": predict,
+            "temper": temper,
+            "quench_rounds": quench_rounds,
+            "grad_clip": grad_clip,
+        },
+    )
+
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
@@ -120,7 +158,7 @@ if __name__ == "__main__":
     )
 
     # Make a PRNG key (#sorandom)
-    prng_key = jrandom.PRNGKey(0)
+    prng_key = jrandom.PRNGKey(args.seed)
 
     # Initialize the seeker trajectories randomly
     prng_key, seeker_key = jrandom.split(prng_key)
@@ -148,6 +186,26 @@ if __name__ == "__main__":
             key, jnp.zeros_like(initial_seeker_positions), T=T
         )
     )(disturbance_keys)
+
+    # Initialize stress test cases randomly
+    prng_key, hider_key = jrandom.split(prng_key)
+    hider_keys = jrandom.split(hider_key, args.num_stress_test_cases)
+    stress_test_hider_trajectories = jax.vmap(
+        lambda key: arena.sample_random_multi_trajectory(
+            key, initial_hider_positions, T=T
+        )
+    )(hider_keys)
+    prng_key, disturbance_key = jrandom.split(prng_key)
+    disturbance_keys = jrandom.split(disturbance_key, args.num_stress_test_cases)
+    stress_test_disturbance_trajectory = jax.vmap(
+        lambda key: arena.sample_random_multi_trajectory(
+            key, jnp.zeros_like(initial_seeker_positions), T=T
+        )
+    )(disturbance_keys)
+    stress_test_eps = (
+        stress_test_hider_trajectories,
+        stress_test_disturbance_trajectory,
+    )
 
     # Define a joint logprob for the hider trajectories and disturbances
     def joint_ep_prior_logprob(ep):
@@ -194,8 +252,10 @@ if __name__ == "__main__":
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
-        quench_dps=False,  # quench both dps and eps
+        quench_dps_only=False,  # quench both dps and eps
         tempering_schedule=tempering_schedule,
+        stress_test_cases=stress_test_eps,
+        potential_fn=lambda dp, ep: game(dp, ep[0], ep[1]).potential,
     )
     t_end = time.perf_counter()
     print(
