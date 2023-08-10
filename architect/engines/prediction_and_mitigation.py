@@ -311,6 +311,7 @@ def predict_and_mitigate_failure_modes(
     log_dict["Failure rate (predicted)"] = (predicted_costs > failure_level).mean()
 
     if stress_test_cases is not None:
+        # Stress test current best DP
         stress_test_costs = stress_test_dps(current_best_dps, stress_test_cases)
 
         log_dict = log_dict | {
@@ -361,6 +362,7 @@ def predict_and_mitigate_failure_modes(
             lambda leaf: leaf[most_likely_dps_idx], current_dps
         )
         if stress_test_cases is not None:
+            # Stress test current best DP
             stress_test_costs = stress_test_dps(current_best_dps, stress_test_cases)
 
             log_dict = log_dict | {

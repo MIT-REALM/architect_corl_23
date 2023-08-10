@@ -37,7 +37,7 @@ if __name__ == "__main__":
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
     parser.add_argument("--temper", action=boolean_action, default=False)
-    parser.add_argument("--grad_clip", type=float, nargs="?", default=float("inf"))
+    parser.add_argument("--grad_clip", type=float, nargs="?", default=1e4)
     args = parser.parse_args()
 
     # Hyperparameters
@@ -131,12 +131,15 @@ if __name__ == "__main__":
     network_keys = jrandom.split(network_key, args.num_stress_test_cases)
     stress_test_eps = jax.vmap(sys.sample_random_network_state)(network_keys)
 
-    # This sampler yields either MALA, GD, or RMH depending on whether gradients and/or
-    # stochasticity are enabled
+    # This sampler yields either MALA, GD, or RMH depending on whether gradients
+    # and/or stochasticity are enabled
+    normalize_gradients = True
+    use_mh = True
     init_sampler_fn = lambda params, logprob_fn: init_mcmc_sampler(
         params,
         logprob_fn,
-        False,  # don't normalize gradients
+        normalize_gradients,
+        gradient_clip=grad_clip,
     )
     make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
         logprob_fn,
@@ -144,8 +147,8 @@ if __name__ == "__main__":
         use_gradients,
         stochasticity,
         grad_clip,
-        False,  # don't normalize gradients
-        True,  # use metroplis-hastings
+        normalize_gradients,
+        use_mh,
     )
 
     # Run the prediction+mitigation process
