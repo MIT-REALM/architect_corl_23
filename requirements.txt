@@ -26,7 +26,7 @@ jax-tqdm>=0.1.1
 optax>=0.1.4
 
 # Neural networks
-equinox==0.10.1
+equinox==0.10.5
 
 # DE solver (includes Newton-Raphson solver)
 diffrax>=0.3.1

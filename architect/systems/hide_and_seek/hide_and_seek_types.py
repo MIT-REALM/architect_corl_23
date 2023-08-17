@@ -29,6 +29,7 @@ class Trajectory2D(NamedTuple):
     @property
     def n(self):
         """Return the degree of this Bezier curve"""
+        # * number of rows - 1
         return self.p.shape[0] - 1
 
     @property
@@ -48,6 +49,9 @@ class Trajectory2D(NamedTuple):
         """Return the point along the trajectory at the given time"""
         # Bezier curves have an explicit form
         # see https://en.wikipedia.org/wiki/B%C3%A9zier_curve
+        # * jnp.sum returns sum of array elements over a given axis
+        # * array: 
+        # * axis = -1:  sum along the last index of the array
         return jnp.sum(
             self.coefficients * (1 - t) ** (self.n - self.i) * t**self.i * self.p.T,
             axis=-1,
@@ -93,6 +97,8 @@ class Arena(eqx.Module):
 
     @jaxtyped
     @beartype
+    # ? why log probability
+    # ? why assume prior distribution is uniform -- robot could go in any direction?
     def trajectory_prior_logprob(self, traj: Trajectory2D) -> Float[Array, ""]:
         """
         Compute the prior log probability of the given trajectory.

@@ -23,11 +23,11 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_seekers", type=int, nargs="?", default=12)
-    parser.add_argument("--n_hiders", type=int, nargs="?", default=20)
+    parser.add_argument("--n_seekers", type=int, nargs="?", default=1)
+    parser.add_argument("--n_hiders", type=int, nargs="?", default=5)
     parser.add_argument("--L", type=float, nargs="?", default=10.0)
     parser.add_argument("--T", type=int, nargs="?", default=5)
-    parser.add_argument("--width", type=float, nargs="?", default=2 * 3.2)
+    parser.add_argument("--width", type=float, nargs="?", default=2 * 1.0)
     parser.add_argument("--height", type=float, nargs="?", default=4 * 2.0)
     parser.add_argument("--buffer", type=float, nargs="?", default=0.2)
     parser.add_argument("--duration", type=float, nargs="?", default=50.0)
@@ -95,19 +95,24 @@ if __name__ == "__main__":
     tempering_schedule = 1 - jnp.exp(-5 * t) if temper else None
 
     # Create the game
+    # * arena
     arena = Arena(width, height, buffer)
+    # * where the seekers start
     initial_seeker_positions = jnp.stack(
         (
             jnp.zeros(n_seekers) - width / 2.0 + buffer,
+            # * jnp.linspace: return evenly spaced numbers over a specified interval
             jnp.linspace(-height / 2.0 + buffer, height / 2.0 - buffer, n_seekers),
         )
     ).T
+    # * where the hiders start
     initial_hider_positions = jnp.stack(
         (
             jnp.zeros(n_hiders) + width / 2.0 - buffer,
             jnp.linspace(-height / 2.0 + buffer, height / 2.0 - buffer, n_hiders),
         )
     ).T
+    # * the game itself
     game = Game(
         initial_seeker_positions,
         initial_hider_positions,

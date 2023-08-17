@@ -72,21 +72,27 @@ class Game(eqx.Module):
 
         # Define a function to execute one step in the game
         def step(carry, t):
+            '''
+            carry: (current_seeker_positions, current_hider_positions)
+            t: time step
+            '''
             # Unpack carry
             current_seeker_positions, current_hider_positions = carry
 
-            # Get current target positions for hiders and seekers
             seeker_target = seeker_trajectory(t / self.duration)
             hider_target = hider_trajectory(t / self.duration)
 
             # Steer towards these targets (clip with max speeds)
             v_seeker = seeker_target - current_seeker_positions
             seeker_speed = softnorm(v_seeker)
+            # * jnp.where: (condition, x, y)
+            # * if condition is met, return elts from x; else, return elts from y
             v_seeker = jnp.where(
                 seeker_speed >= self.seeker_max_speed,
                 v_seeker * self.seeker_max_speed / (1e-3 + seeker_speed),  # avoid nans
                 v_seeker,
             )
+            # * repeat lines 87-97 for hiders
             v_hider = hider_target - current_hider_positions
             hider_speed = softnorm(v_hider)
             v_hider = jnp.where(
@@ -113,7 +119,7 @@ class Game(eqx.Module):
                 hider_positions,
                 hider_to_closest_seeker_distance,
             )
-            carry = output[:2]
+            carry = output[:2] # * carry: just seeker and hider positions
             return carry, output
 
         # Execute the game simulation to get a trace of hider and seeker positions
