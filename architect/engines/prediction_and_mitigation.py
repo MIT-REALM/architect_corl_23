@@ -246,17 +246,17 @@ def predict_and_mitigate_failure_modes(
             # Create a loglikelihood function that maximizes the minimum potential
             # across all current design parameters. Need to make this positive so that
             # large potentials/costs -> higher likelihoods
-            # ep_mean_potential_fn = lambda ep: softmin(
-            #     jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
-            #     sharpness=0.05,
-            # )  # TODO
+            ep_mean_potential_fn = lambda ep: softmin(
+                jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
+                sharpness=0.05,
+            )
             # ep_mean_potential_fn = lambda ep: jax.vmap(
             #     ep_potential_fn, in_axes=(0, None)
             # )(
             #     current_dps, ep
             # ).mean()  # TODO min or mean?
-            pick_one_dps = jtu.tree_map(lambda leaf: leaf[0], current_dps)
-            ep_mean_potential_fn = lambda ep: ep_potential_fn(pick_one_dps, ep)  # TODO
+            # pick_one_dps = jtu.tree_map(lambda leaf: leaf[0], current_dps)
+            # ep_mean_potential_fn = lambda ep: ep_potential_fn(pick_one_dps, ep)  # TODO
 
             ep_logprob_fn = lambda ep: ep_logprior_fn(
                 ep
@@ -311,6 +311,7 @@ def predict_and_mitigate_failure_modes(
     log_dict["Failure rate (predicted)"] = (predicted_costs > failure_level).mean()
 
     if stress_test_cases is not None:
+        # Stress test current best DP
         stress_test_costs = stress_test_dps(current_best_dps, stress_test_cases)
 
         log_dict = log_dict | {
@@ -361,6 +362,7 @@ def predict_and_mitigate_failure_modes(
             lambda leaf: leaf[most_likely_dps_idx], current_dps
         )
         if stress_test_cases is not None:
+            # Stress test current best DP
             stress_test_costs = stress_test_dps(current_best_dps, stress_test_cases)
 
             log_dict = log_dict | {

@@ -379,7 +379,7 @@ if __name__ == "__main__":
     if reinforce:
         alg_type = f"reinforce_l2c_0.05_step_lr_{ep_mcmc_step_size:.1e}"
     elif use_gradients and use_stochasticity and use_mh and not zero_order_gradients:
-        alg_type = f"mala_lr_{ep_mcmc_step_size:.1e}_clip5"
+        alg_type = f"mala_lr_{ep_mcmc_step_size:.1e}"
         quench_dps_only = True
     elif use_gradients and use_stochasticity and use_mh and zero_order_gradients:
         alg_type = f"mala_zo_lr_{ep_mcmc_step_size:.1e}"

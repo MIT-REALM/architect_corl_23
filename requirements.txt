@@ -34,3 +34,6 @@ diffrax>=0.3.1
 
 # Sampling
 blackjax>=0.9.6
+
+# Systems
+jax-f16

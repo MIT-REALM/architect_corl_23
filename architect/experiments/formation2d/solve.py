@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
+import wandb
 from jax.config import config
 from jaxtyping import Array, Shaped
 
@@ -31,9 +32,11 @@ config.update("jax_debug_nans", True)
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument("--savename", type=str, default="formation")
     parser.add_argument("--n", type=int, nargs="?", default=5)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
     parser.add_argument("--T", type=int, nargs="?", default=3)
+    parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--width", type=float, nargs="?", default=3.2)
     parser.add_argument("--height", type=float, nargs="?", default=3.0)
     parser.add_argument("--R", type=float, nargs="?", default=0.5)
@@ -48,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--disable_gradients", action="store_true")
     parser.add_argument("--disable_stochasticity", action="store_true")
     parser.add_argument("--reinforce", action="store_true")
+    parser.add_argument("--num_stress_test_cases", type=int, nargs="?", default=100)
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=True)
     parser.add_argument("--predict", action=boolean_action, default=True)
@@ -77,8 +81,9 @@ if __name__ == "__main__":
     quench_rounds = args.quench_rounds
     grad_clip = args.grad_clip
     reinforce = args.reinforce
+    num_stress_test_cases = args.num_stress_test_cases
 
-    print("Running HideAndSeek with hyperparameters:")
+    print("Running Formation with hyperparameters:")
     print(f"\tn = {n}")
     print(f"\tT = {T}")
     print(f"\tL = {L}")
@@ -100,6 +105,44 @@ if __name__ == "__main__":
     print(f"\ttemper = {temper}")
     print(f"\tquench_rounds = {quench_rounds}")
     print(f"\tgrad_clip = {grad_clip}")
+    print(f"\tnum_stress_test_cases = {num_stress_test_cases}")
+
+    if reinforce:
+        alg_type = "reinforce"
+    elif use_gradients and use_stochasticity:
+        alg_type = "mala"
+    elif use_gradients and not use_stochasticity:
+        alg_type = "gd"
+    elif not use_gradients and use_stochasticity:
+        alg_type = "rmh"
+    else:
+        alg_type = "static"
+
+    # Initialize logger
+    wandb.init(
+        project=args.savename + f"-{n}-agents-{num_rounds}x{num_mcmc_steps_per_round}",
+        group=alg_type
+        + ("-predict" if predict else "")
+        + ("-repair" if repair else ""),
+        config={
+            "L": L,
+            "n": n,
+            "seed": args.seed,
+            "dp_mcmc_step_size": dp_mcmc_step_size,
+            "ep_mcmc_step_size": ep_mcmc_step_size,
+            "num_rounds": num_rounds,
+            "num_steps_per_round": num_mcmc_steps_per_round,
+            "num_chains": num_chains,
+            "use_gradients": use_gradients,
+            "use_stochasticity": use_stochasticity,
+            "reinforce": reinforce,
+            "repair": repair,
+            "predict": predict,
+            "temper": temper,
+            "quench_rounds": quench_rounds,
+            "grad_clip": grad_clip,
+        },
+    )
 
     # Add exponential tempering if using
     t = jnp.linspace(0, 1, num_rounds)
@@ -130,7 +173,7 @@ if __name__ == "__main__":
         )
 
     # Make a PRNG key (#sorandom)
-    prng_key = jrandom.PRNGKey(0)
+    prng_key = jrandom.PRNGKey(args.seed)
 
     # Initialize the trajectories randomly (these will be the DPs)
     prng_key, traj_key = jrandom.split(prng_key)
@@ -150,6 +193,19 @@ if __name__ == "__main__":
     prng_key, conn_key = jrandom.split(prng_key)
     conn_keys = jrandom.split(conn_key, num_chains)
     conn = jax.vmap(sample_random_connection_strengths, in_axes=(0, None))(conn_keys, n)
+
+    # Make stress test eps
+    prng_key, wind_key = jrandom.split(prng_key)
+    wind_keys = jrandom.split(wind_key, num_stress_test_cases)
+    wind_stress_test = jax.vmap(WindField)(wind_keys)
+
+    # Initialize the connection strengths
+    prng_key, conn_key = jrandom.split(prng_key)
+    conn_keys = jrandom.split(conn_key, num_stress_test_cases)
+    conn_stress_test = jax.vmap(sample_random_connection_strengths, in_axes=(0, None))(
+        conn_keys, n
+    )
+    stress_test_eps = (wind_stress_test, conn_stress_test)
 
     # Define a prior over wind fields that says that the average wind thrust
     # should follow a gaussian distribution (maybe not super physical but just a start)
@@ -231,8 +287,10 @@ if __name__ == "__main__":
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
-        quench_dps=False,  # quench both dps and eps
+        quench_dps_only=False,  # quench both dps and eps
+        stress_test_cases=stress_test_eps,
         tempering_schedule=tempering_schedule,
+        potential_fn=lambda dp, ep: simulate_fn(dp, ep).potential,
     )
     t_end = time.perf_counter()
     print(

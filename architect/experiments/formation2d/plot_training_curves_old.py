@@ -45,4 +45,5 @@ if __name__ == "__main__":
     plt.ylabel("Avg. Cost (test set)")
     plt.xlabel("# Sampling Rounds")
     plt.legend()
-    plt.show()
+    # plt.show()
+    plt.savefig("test.png")
