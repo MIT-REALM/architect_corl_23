@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util as jtu
+import wandb
 from beartype import beartype
 from beartype.typing import Any, Callable, Optional, Tuple
 from jaxtyping import Array, Float, Integer, PyTree, jaxtyped
@@ -53,7 +54,6 @@ def run_chain(
         return carry
 
     initial_carry = (initial_state, prng_key)
-    one_step(0, initial_carry)  # todo
     final_state, _ = jax.lax.fori_loop(0, num_samples, one_step, initial_carry)
 
     # Compute acceptance rate if the sampler supports it
@@ -61,7 +61,7 @@ def run_chain(
         # convert to float
         accept_rate = final_state.num_accepts.astype(jnp.float32) / num_samples
     else:
-        accept_rate = jnp.array(-1.0)
+        accept_rate = jnp.array(1.0)
 
     # Add debug information
     debug = {}
@@ -73,6 +73,7 @@ def run_chain(
                 jtu.tree_map(lambda x: jnp.sum(x * x), final_state.logdensity_grad),
             )
         )
+        debug["final_grad"] = final_state.logdensity_grad
 
     return (
         final_state.position,
@@ -102,9 +103,13 @@ def predict_and_mitigate_failure_modes(
     repair: bool = True,
     predict: bool = True,
     quench_rounds: int = 0,
-    quench_dps: bool = True,
+    quench_dps_only: bool = True,
     tempering_schedule: Optional[Float[Array, " num_rounds"]] = None,
     logging_prefix: str = "",
+    stress_test_cases: Optional[Params] = None,
+    potential_fn: Optional[Callable[[Params, Params], Float[Array, ""]]] = None,
+    failure_level: float = 0.0,
+    plotting_cb: Optional[Callable[[Params, Params], None]] = None,
 ) -> Tuple[
     Params,
     Params,
@@ -145,13 +150,20 @@ def predict_and_mitigate_failure_modes(
         use_stochasticity: if True, add a Gaussian to the proposal and acceptance steps
         repair: if True, run the repair steps
         predict: if True, run the predict steps
-        quench_rounds: if True, turn off stochasticity for the last round
-        quench_dps: if True, turn off stochasticity for the design parameters
+        quench_rounds: if True, turn off stochasticity for the last rounds
+        quench_dps_only: if True, turn off stochasticity for the design parameters only
+            (i.e. don't quench the exogenous parameters).
         tempering_schedule: a monotonically increasing array of positive tempering
             values. If not provided, defaults to all 1s (no tempering).
-        dp_grad_clip: clip design param gradients at this value
-        ep_grad_clip: clip exogenous param gradients at this value
-        normalize_gradients: if True, normalize gradients by the number of samples
+        logging_prefix: a string to prepend to all logging messages
+        stress_test_cases: test the DPs at the end of each round with these EPs,
+            recording the failure rate and average cost, if not None.
+        potential_fn: the function used for stress testing
+        failure_level: the level of cost at which a failure is deemed to occur.
+        plotting_cb: a callback function to call at the end of each round, if not None.
+            The callback function should take the current best dp and all predicted
+            eps as arguments, and it should log any desired images or plots to wandb,
+            but it should NOT commit those logs.
 
     returns:
         - A trace of updated populations of design parameters
@@ -182,7 +194,7 @@ def predict_and_mitigate_failure_modes(
 
         # If we're in the last round, turn off stochasticity if we're quenching
         ep_stochasticity = jax.lax.cond(
-            jnp.logical_and(not quench_dps, i > num_rounds - quench_rounds),
+            jnp.logical_and(not quench_dps_only, i > num_rounds - quench_rounds),
             lambda: False,
             lambda: use_stochasticity,
         )
@@ -238,6 +250,14 @@ def predict_and_mitigate_failure_modes(
                 jax.vmap(ep_potential_fn, in_axes=(0, None))(current_dps, ep),
                 sharpness=0.05,
             )
+            # ep_mean_potential_fn = lambda ep: jax.vmap(
+            #     ep_potential_fn, in_axes=(0, None)
+            # )(
+            #     current_dps, ep
+            # ).mean()  # TODO min or mean?
+            # pick_one_dps = jtu.tree_map(lambda leaf: leaf[0], current_dps)
+            # ep_mean_potential_fn = lambda ep: ep_potential_fn(pick_one_dps, ep)  # TODO
+
             ep_logprob_fn = lambda ep: ep_logprior_fn(
                 ep
             ) + tempering * ep_mean_potential_fn(ep)
@@ -276,41 +296,102 @@ def predict_and_mitigate_failure_modes(
         )
         return output[:3], output
 
+    # Make a function to test the current best DP on the stress test set
+    @jax.jit
+    def stress_test_dps(dp, eps):
+        costs = jax.vmap(potential_fn, in_axes=(None, 0))(dp, eps)
+        return costs
+
+    # Log some metrics for the initial (random) solutions
+    log_dict = {}
+    # Choose a set of DPs arbitrarily to log for the first iteration
+    current_best_dps = jtu.tree_map(lambda leaf: leaf[0], design_params)
+
+    predicted_costs = stress_test_dps(current_best_dps, exogenous_params)
+    log_dict["Failure rate (predicted)"] = (predicted_costs > failure_level).mean()
+
+    if stress_test_cases is not None:
+        # Stress test current best DP
+        stress_test_costs = stress_test_dps(current_best_dps, stress_test_cases)
+
+        log_dict = log_dict | {
+            "Mean Cost": stress_test_costs.mean(),
+            "Max Cost": stress_test_costs.max(),
+            "Failure rate (test)": (stress_test_costs > failure_level).mean(),
+        }
+
+    if plotting_cb is not None:
+        plotting_cb(current_best_dps, exogenous_params)
+
+    # Log to wandb
+    wandb.log(log_dict, commit=True)
+
     # Run the appropriate number of steps
     carry = (0, design_params, exogenous_params)
     keys = jrandom.split(prng_key, num_rounds)
     results = []
     for i, (key, tempering) in enumerate(zip(keys, tempering_schedule)):
-        print(f"{logging_prefix} - Iteration {i}", end="")
+        # Run the SMC round to update both the design and exogenous parameters
+        print(f"{logging_prefix} - Iteration {i}")
         start = time.perf_counter()
         carry, y = one_smc_step(carry, (key, tempering))
         end = time.perf_counter()
+        (
+            _,
+            current_dps,
+            current_eps,
+            dp_logprobs,
+            ep_logprobs,
+            dp_accept_rate,
+            ep_accept_rate,
+            debug_info,
+        ) = y
+
+        # Log the results to wandb
+        log_dict = {
+            "Step time (s)": end - start,
+            "DP Accept Rate": dp_accept_rate.mean(),
+            "EP Accept Rate": ep_accept_rate.mean(),
+            "Mean DP Logprob": dp_logprobs.mean(),
+            "Mean EP Logprob": ep_logprobs.mean(),
+        }
+
+        # Stress test and plot the current best design parameters
+        most_likely_dps_idx = jnp.argmax(dp_logprobs)
+        current_best_dps = jtu.tree_map(
+            lambda leaf: leaf[most_likely_dps_idx], current_dps
+        )
+        if stress_test_cases is not None:
+            # Stress test current best DP
+            stress_test_costs = stress_test_dps(current_best_dps, stress_test_cases)
+
+            log_dict = log_dict | {
+                "Mean Cost": stress_test_costs.mean(),
+                "Max Cost": stress_test_costs.max(),
+                "Failure rate (test)": (stress_test_costs > failure_level).mean(),
+            }
+
+        # Log the failure rate on the predicted test cases
+        predicted_costs = stress_test_dps(current_best_dps, current_eps)
+        log_dict["Failure rate (predicted)"] = (predicted_costs > failure_level).mean()
+
+        if plotting_cb is not None:
+            plotting_cb(current_best_dps, current_eps)
+
+        # Print some results to the console
         try:
-            ep_debug = (
-                y[7]["ep_debug"]["final_grad_norm"].round(2)
-                if "final_grad_norm" in y[7]["ep_debug"]
-                else "N/A"
-            )
+            log_dict["EP Grad Norm"] = debug_info["ep_debug"]["final_grad_norm"].mean()
         except:
-            ep_debug = "N/A"
+            pass  # No grad norm info, so don't log it
 
         try:
-            dp_debug = (
-                y[7]["dp_debug"]["final_grad_norm"].round(2)
-                if "final_grad_norm" in y[7]["dp_debug"]
-                else "N/A"
-            )
+            log_dict["DP Grad Norm"] = debug_info["dp_debug"]["final_grad_norm"].mean()
         except:
-            dp_debug = "N/A"
-        print(
-            (
-                f" ({end - start:.2f} s); "
-                f"DP/EP mean logprob: {y[3].mean():.2f}/{y[4].mean():.2f}; "
-                f"DP/EP accept rate: {y[5].mean():.2f}/{y[6].mean():.2f}; "
-                f"EP debug: {ep_debug}; "
-                f"DP debug: {dp_debug}"
-            )
-        )
+            pass  # No grad norm info, so don't log it
+
+        # Log to wandb
+        wandb.log(log_dict, commit=True)
+
         results.append(y)
 
     # The python for loop above is faster than this scan, since we skip a long

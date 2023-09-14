@@ -119,6 +119,21 @@ def raycast(
         tangent_solve=lambda g, y: y / g(1.0),
     )
 
+    # # Empirically, implicit autodiff doesn't work as well as just differentiating
+    # # through the for loop in solve
+    # dist_fn = lambda d: sdf(origin + d * ray)
+    # initial_guess = jnp.array(1e-2)
+
+    # # Define a function for executing one step of ray marching
+    # @jax.checkpoint
+    # def step_ray(_, dist_along_ray: Float[Array, ""]) -> Float[Array, ""]:
+    #     h = dist_fn(dist_along_ray)
+    #     new_dist_along_ray = dist_along_ray + h
+    #     return jnp.clip(new_dist_along_ray, 0.0, max_dist)
+
+    # # Raymarch
+    # distance_along_ray = jax.lax.fori_loop(0, max_steps, step_ray, initial_guess)
+
     return origin + distance_along_ray * ray
 
 

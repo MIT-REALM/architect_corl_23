@@ -3,6 +3,7 @@
 tmp/*
 *trace.eqx
 *line_states.npz
+wandb/*
 
 # Editor stuff
 .vscode

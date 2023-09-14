@@ -75,6 +75,7 @@ class HighwayEnv:
             any obstacle in the scene.
         max_render_dist: the maximum distance to render in the depth image.
         render_sharpness: the sharpness of the scene.
+        anti_alias_samples: the number of samples to use for anti-aliasing.
     """
 
     _highway_scene: HighwayScene
@@ -106,10 +107,10 @@ class HighwayEnv:
         collision_penalty: float = 50.0,
         max_render_dist: float = 30.0,
         render_sharpness: float = 100.0,
+        anti_alias_samples: int = 1,
     ):
         """Initialize the environment."""
         self._highway_scene = highway_scene
-        self._camera_intrinsics = camera_intrinsics
         self._dt = dt
         self._initial_ego_state = initial_ego_state
         self._initial_non_ego_states = initial_non_ego_states
@@ -119,6 +120,17 @@ class HighwayEnv:
         self._collision_penalty = collision_penalty
         self._max_render_dist = max_render_dist
         self._render_sharpness = render_sharpness
+
+        # Increase the resolution so we can down-sample later to anti-alias
+        self._camera_intrinsics = CameraIntrinsics(
+            resolution=(
+                camera_intrinsics.resolution[0] * anti_alias_samples,
+                camera_intrinsics.resolution[1] * anti_alias_samples,
+            ),
+            focal_length=camera_intrinsics.focal_length,
+            sensor_size=camera_intrinsics.sensor_size,
+        )
+        self._anti_alias_samples = anti_alias_samples
 
     @jaxtyped
     @beartype
@@ -165,6 +177,7 @@ class HighwayEnv:
         ego_action: Float[Array, " n_actions"],
         non_ego_actions: Float[Array, "n_non_ego n_actions"],
         key: PRNGKeyArray,
+        reset: bool = True,
     ) -> Tuple[HighwayState, HighwayObs, Float[Array, ""], Bool[Array, ""]]:
         """Take a step in the environment.
 
@@ -178,6 +191,7 @@ class HighwayEnv:
             non_ego_actions: the control action to take for all other vehicles
                 (acceleration and steering angle)
             key: a random number generator key
+            reset: whether to reset the environment.
 
         Returns:
             The next state of the environment, the observations, the reward, and a
@@ -205,6 +219,7 @@ class HighwayEnv:
             next_ego_state[:3],  # trim out speed; not needed for collision checking
             next_non_ego_states[:, :3],
             self._render_sharpness,
+            include_ground=False,
         )
         collision_reward = -self._collision_penalty * jax.nn.sigmoid(
             -5 * min_distance_to_obstacle
@@ -220,7 +235,7 @@ class HighwayEnv:
         # environment (or if we run out of road)
         done = jnp.logical_or(min_distance_to_obstacle < 0.0, next_ego_state[0] > 90.0)
         next_state = jax.lax.cond(
-            done,
+            jnp.logical_and(done, reset),
             lambda: self.reset(key),
             lambda: next_state,
         )
@@ -292,6 +307,26 @@ class HighwayEnv:
             shading_light_direction=state.shading_light_direction,
             car_colors=state.non_ego_colors,
         )
+
+        # Down-sample the image to anti-alias
+        depth_image = jax.image.resize(
+            depth_image,
+            (
+                self._camera_intrinsics.resolution[0] // self._anti_alias_samples,
+                self._camera_intrinsics.resolution[1] // self._anti_alias_samples,
+            ),
+            method=jax.image.ResizeMethod.LINEAR,
+        )
+        color_image = jax.image.resize(
+            color_image,
+            (
+                self._camera_intrinsics.resolution[0] // self._anti_alias_samples,
+                self._camera_intrinsics.resolution[1] // self._anti_alias_samples,
+                3,
+            ),
+            method=jax.image.ResizeMethod.LINEAR,
+        )
+
         obs = HighwayObs(
             speed=ego_v,
             depth_image=depth_image,

@@ -14,6 +14,7 @@ import jax.tree_util as jtu
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
+import wandb
 from beartype.typing import NamedTuple
 from jaxtyping import Array, Float, Shaped
 
@@ -49,7 +50,7 @@ def dlqr(A, B, Q, R):
     # compute the LQR gain
     K = np.matrix(scipy.linalg.inv(B.T * X * B + R) * (B.T * X * A))
 
-    eigVals, eigVecs = scipy.linalg.eig(A - B * K)
+    eigVals, _ = scipy.linalg.eig(A - B * K)
 
     return K, X, eigVals
 
@@ -183,19 +184,15 @@ def simulate(
         step_subkey, action_subkey = jrandom.split(key)
 
         # The action passed in is a residual applied to a stabilizing policy for each
-        # non-ego agent
-        # TODO: This causes them to slow down and stop, since they're tracking their
-        # initial state. They should instead track some state further down the road,
-        # but we can't change this now since we've already done the pre-training etc.,
-        # but we should change it for any future use.
+        # non-ego agent. The stabilizing policy is LQR tracking the initial state,
+        # except that the x position is updated to the current x position.
         compute_lqr = lambda non_ego_state, initial_state: -K @ (
             non_ego_state - initial_state
         )
-        target = initial_state.non_ego_states  # uncomment to patch
-        target = target.at[:, 0].set(state.non_ego_states[:, 0])  # uncomment to patch
+        target = initial_state.non_ego_states
+        target = target.at[:, 0].set(state.non_ego_states[:, 0])
         non_ego_stable_action = jax.vmap(compute_lqr)(
             state.non_ego_states,
-            # initial_state.non_ego_states + jnp.array([0.0, 0.0, 0.0, 2.0]),
             target,
         )
 
@@ -234,7 +231,7 @@ def simulate(
     final_obs = env.get_obs(final_state)
 
     # The potential is the negative of the (soft) minimum reward observed
-    potential = -softmin(reward, sharpness=1.0)
+    potential = -softmin(reward, sharpness=0.5)
 
     return SimulationResults(
         potential,
@@ -245,15 +242,90 @@ def simulate(
     )
 
 
+def plotting_cb(dp, eps, T=60):
+    """Plot the results of the simulation with the given DP and all given EPs.
+
+    Args:
+        dp: The DP to plot.
+        eps: The EPs to plot.
+    """
+    # Evaluate the solutions proposed by the prediction+mitigation algorithm
+    result = eqx.filter_vmap(
+        lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
+        in_axes=(None, 0),
+    )(dp, eps)
+
+    # Plot the results
+    fig = plt.figure(figsize=(32, 16), constrained_layout=True)
+    axs = fig.subplot_mosaic(
+        [
+            ["trajectory", "trajectory", "trajectory", "trajectory", "trajectory"],
+            ["initial_obs", "initial_obs", "initial_obs", "initial_obs", "initial_obs"],
+            ["final_obs", "final_obs", "final_obs", "final_obs", "final_obs"],
+            ["reward", "reward", "reward", "reward", "reward"],
+        ],
+    )
+
+    # Plot the trajectories for each case, color-coded by potential
+    max_potential = jnp.max(result.potential)
+    min_potential = jnp.min(result.potential) - 1e-3
+    normalized_potential = (result.potential - min_potential) / (
+        max_potential - min_potential
+    )
+    axs["trajectory"].axhline(7.5, linestyle="--", color="k")
+    axs["trajectory"].axhline(-7.5, linestyle="--", color="k")
+    for chain_idx in range(num_chains):
+        axs["trajectory"].plot(
+            result.ego_trajectory[chain_idx, :, 0].T,
+            result.ego_trajectory[chain_idx, :, 1].T,
+            linestyle="-",
+            color=plt.cm.plasma(normalized_potential[chain_idx]),
+            label="Ego" if chain_idx == 0 else None,
+        )
+        axs["trajectory"].plot(
+            result.non_ego_trajectory[chain_idx, :, 0, 0],
+            result.non_ego_trajectory[chain_idx, :, 0, 1],
+            linestyle="-.",
+            color=plt.cm.plasma(normalized_potential[chain_idx]),
+            label="Non-ego 1" if chain_idx == 0 else None,
+        )
+        axs["trajectory"].plot(
+            result.non_ego_trajectory[chain_idx, :, 1, 0],
+            result.non_ego_trajectory[chain_idx, :, 1, 1],
+            linestyle="--",
+            color=plt.cm.plasma(normalized_potential[chain_idx]),
+            label="Non-ego 2" if chain_idx == 0 else None,
+        )
+
+    # Plot the reward across all failure cases
+    axs["reward"].plot(result.potential, "ko")
+    axs["reward"].set_ylabel("Potential (negative min reward)")
+
+    # Plot the initial RGB observations tiled on the same subplot
+    axs["initial_obs"].imshow(
+        jnp.concatenate(result.initial_obs.color_image.transpose(0, 2, 1, 3), axis=1)
+    )
+    # And do the same for the final observations
+    axs["final_obs"].imshow(
+        jnp.concatenate(result.final_obs.color_image.transpose(0, 2, 1, 3), axis=1)
+    )
+
+    # log the figure to wandb
+    wandb.log({"plot": fig}, commit=False)
+
+    # Close the figure
+    plt.close()
+
+
 if __name__ == "__main__":
     # Set up arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
-    parser.add_argument("--savename", type=str, default="overtake_actions")
+    parser.add_argument("--savename", type=str, default="highway")
     parser.add_argument("--image_w", type=int, nargs="?", default=32)
     parser.add_argument("--image_h", type=int, nargs="?", default=32)
     parser.add_argument("--noise_scale", type=float, nargs="?", default=0.5)
-    parser.add_argument("--failure_level", type=int, nargs="?", default=5.0)
+    parser.add_argument("--failure_level", type=int, nargs="?", default=7.4)
     parser.add_argument("--T", type=int, nargs="?", default=60)
     parser.add_argument("--seed", type=int, nargs="?", default=0)
     parser.add_argument("--L", type=float, nargs="?", default=1.0)
@@ -268,6 +340,8 @@ if __name__ == "__main__":
     parser.add_argument("--disable_stochasticity", action="store_true")
     parser.add_argument("--disable_mh", action="store_true")
     parser.add_argument("--reinforce", action="store_true")
+    parser.add_argument("--zero_order_gradients", action="store_true")
+    parser.add_argument("--num_stress_test_cases", type=int, nargs="?", default=1_000)
     boolean_action = argparse.BooleanOptionalAction
     parser.add_argument("--repair", action=boolean_action, default=False)
     parser.add_argument("--predict", action=boolean_action, default=True)
@@ -292,6 +366,8 @@ if __name__ == "__main__":
     use_stochasticity = not args.disable_stochasticity
     use_mh = not args.disable_mh
     reinforce = args.reinforce
+    zero_order_gradients = args.zero_order_gradients
+    num_stress_test_cases = args.num_stress_test_cases
     repair = args.repair
     predict = args.predict
     temper = args.temper
@@ -299,32 +375,61 @@ if __name__ == "__main__":
     grad_clip = args.grad_clip
     normalize_gradients = not args.dont_normalize_gradients
 
-    print("Running prediction/mitigation on overtake with hyperparameters:")
-    print(f"\tmodel_path = {args.model_path}")
-    print(f"\timage dimensions (w x h) = {args.image_w} x {args.image_h}")
-    print(f"\tnoise_scale = {noise_scale}")
-    print(f"\tfailure_level = {failure_level}")
-    print(f"\tT = {T}")
-    print(f"\tseed = {seed}")
-    print(f"\tL = {L}")
-    print(f"\tdp_logprior_scale = {dp_logprior_scale}")
-    print(f"\tdp_mcmc_step_size = {dp_mcmc_step_size}")
-    print(f"\tep_mcmc_step_size = {ep_mcmc_step_size}")
-    print(f"\tnum_rounds = {num_rounds}")
-    print(f"\tnum_steps_per_round = {num_steps_per_round}")
-    print(f"\tnum_chains = {num_chains}")
-    print(f"\tuse_gradients = {use_gradients}")
-    print(f"\tuse_stochasticity = {use_stochasticity}")
-    print(f"\tuse_mh = {use_mh}")
-    print(f"\trepair = {repair}")
-    print(f"\tpredict = {predict}")
-    print(f"\ttemper = {temper}")
-    print(f"\tquench_rounds = {quench_rounds}")
-    print(f"\tgrad_clip = {grad_clip}")
-    print(f"\tnormalize_gradients = {normalize_gradients}")
-    print(
-        f"Using alternative algorithm? {reinforce}",
-        f"(reinforce = {reinforce})",
+    quench_dps_only = False
+    if reinforce:
+        alg_type = f"reinforce_l2c_0.05_step_lr_{ep_mcmc_step_size:.1e}"
+    elif use_gradients and use_stochasticity and use_mh and not zero_order_gradients:
+        alg_type = f"mala_lr_{ep_mcmc_step_size:.1e}"
+        quench_dps_only = True
+    elif use_gradients and use_stochasticity and use_mh and zero_order_gradients:
+        alg_type = f"mala_zo_lr_{ep_mcmc_step_size:.1e}"
+        quench_dps_only = True
+    elif use_gradients and use_stochasticity and not use_mh:
+        alg_type = f"ula_lr_{ep_mcmc_step_size:.1e}"
+    elif use_gradients and not use_stochasticity:
+        alg_type = f"gd_lr_{ep_mcmc_step_size:.1e}"
+    elif not use_gradients and use_stochasticity and use_mh:
+        alg_type = f"rmh_lr_{ep_mcmc_step_size:.1e}"
+    elif not use_gradients and use_stochasticity and not use_mh:
+        alg_type = "random_walk"
+    else:
+        alg_type = "static"
+
+    # Initialize logger
+    wandb.init(
+        project=(
+            args.savename
+            + ("-predict" if predict else "")
+            + ("-repair" if repair else "")
+            + f"-{num_rounds}x{num_steps_per_round}"
+        ),
+        group=alg_type,
+        config={
+            "L": L,
+            "noise_scale": noise_scale,
+            "failure_level": failure_level,
+            "T": T,
+            "seed": seed,
+            "dp_logprior_scale": dp_logprior_scale,
+            "dp_mcmc_step_size": dp_mcmc_step_size,
+            "ep_mcmc_step_size": ep_mcmc_step_size,
+            "num_rounds": num_rounds,
+            "num_steps_per_round": num_steps_per_round,
+            "num_chains": num_chains,
+            "use_gradients": use_gradients,
+            "use_stochasticity": use_stochasticity,
+            "use_mh": use_mh,
+            "reinforce": reinforce,
+            "zero_order_gradients": zero_order_gradients,
+            "repair": repair,
+            "predict": predict,
+            "temper": temper,
+            "quench_rounds": quench_rounds,
+            "grad_clip": grad_clip,
+            "normalize_gradients": normalize_gradients,
+            "num_stress_test_cases": num_stress_test_cases,
+            "quench_dps_only": quench_dps_only,
+        },
     )
 
     # Add exponential tempering if using
@@ -380,6 +485,14 @@ if __name__ == "__main__":
         lambda key: sample_non_ego_actions(key, env, T, 2, noise_scale)
     )(ep_keys)
 
+    # Also initialize a bunch of exogenous parameters to serve as stress test cases
+    # for the policy
+    prng_key, ep_key = jrandom.split(prng_key)
+    ep_keys = jrandom.split(ep_key, num_stress_test_cases)
+    stress_test_eps = jax.vmap(
+        lambda key: sample_non_ego_actions(key, env, T, 2, noise_scale)
+    )(ep_keys)
+
     # Choose which sampler to use
     if reinforce:
         init_sampler_fn = init_reinforce_sampler
@@ -396,6 +509,8 @@ if __name__ == "__main__":
             params,
             logprob_fn,
             normalize_gradients,
+            gradient_clip=grad_clip,
+            estimate_gradients=zero_order_gradients,
         )
         make_kernel_fn = lambda logprob_fn, step_size, stochasticity: make_mcmc_kernel(
             logprob_fn,
@@ -405,24 +520,8 @@ if __name__ == "__main__":
             grad_clip,
             normalize_gradients,
             use_mh,
+            zero_order_gradients,
         )
-
-    quench_dps = False
-    if reinforce:
-        alg_type = "reinforce_l2c_0.05_step"
-    elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala"
-        quench_dps = True
-    elif use_gradients and use_stochasticity and not use_mh:
-        alg_type = "ula"
-    elif use_gradients and not use_stochasticity:
-        alg_type = "gd"
-    elif not use_gradients and use_stochasticity and use_mh:
-        alg_type = "rmh"
-    elif not use_gradients and use_stochasticity and not use_mh:
-        alg_type = "random_walk"
-    else:
-        alg_type = "static"
 
     # Run the prediction+mitigation process
     t_start = time.perf_counter()
@@ -452,9 +551,15 @@ if __name__ == "__main__":
         repair=repair,
         predict=predict,
         quench_rounds=quench_rounds,
-        quench_dps=quench_dps,
+        quench_dps_only=quench_dps_only,
         tempering_schedule=tempering_schedule,
         logging_prefix=f"{args.savename}/{alg_type}[{os.getpid()}]",
+        stress_test_cases=None,  # stress_test_eps, # TODO
+        potential_fn=lambda dp, ep: simulate(
+            env, dp, initial_state, ep, static_policy, T
+        ).potential,
+        failure_level=failure_level,
+        plotting_cb=plotting_cb,
     )
     t_end = time.perf_counter()
     print(
@@ -482,91 +587,7 @@ if __name__ == "__main__":
     # ep_logprobs = jnp.zeros((num_rounds, num_chains))
     # # TODO debugging bit ends here
 
-    # Evaluate the solutions proposed by the prediction+mitigation algorithm
-    result = eqx.filter_vmap(
-        lambda dp, ep: simulate(env, dp, initial_state, ep, static_policy, T),
-        in_axes=(None, 0),
-    )(final_dps, final_eps)
-
-    # Plot the results
-    fig = plt.figure(figsize=(32, 16), constrained_layout=True)
-    axs = fig.subplot_mosaic(
-        [
-            ["trace", "trajectory", "trajectory", "trajectory", "trajectory"],
-            ["initial_obs", "initial_obs", "initial_obs", "initial_obs", "initial_obs"],
-            ["final_obs", "final_obs", "final_obs", "final_obs", "final_obs"],
-            ["reward", "reward", "reward", "reward", "reward"],
-        ],
-    )
-
-    # Plot the chain convergence
-    if predict:
-        axs["trace"].plot(ep_logprobs)
-        axs["trace"].set_ylabel("Log probability after contingency update")
-    else:
-        axs["trace"].plot(dp_logprobs)
-        axs["trace"].set_ylabel("Log probability after repair")
-
-    axs["trace"].set_xlabel("# Samples")
-
-    # Plot the trajectories for each case, color-coded by potential
-    max_potential = jnp.max(result.potential)
-    min_potential = jnp.min(result.potential)
-    normalized_potential = (result.potential - min_potential) / (
-        max_potential - min_potential
-    )
-    axs["trajectory"].axhline(7.5, linestyle="--", color="k")
-    axs["trajectory"].axhline(-7.5, linestyle="--", color="k")
-    for chain_idx in range(num_chains):
-        axs["trajectory"].plot(
-            result.ego_trajectory[chain_idx, :, 0].T,
-            result.ego_trajectory[chain_idx, :, 1].T,
-            linestyle="-",
-            color=plt.cm.plasma(normalized_potential[chain_idx]),
-            label="Ego" if chain_idx == 0 else None,
-        )
-        axs["trajectory"].plot(
-            result.non_ego_trajectory[chain_idx, :, 0, 0],
-            result.non_ego_trajectory[chain_idx, :, 0, 1],
-            linestyle="-.",
-            color=plt.cm.plasma(normalized_potential[chain_idx]),
-            label="Non-ego 1" if chain_idx == 0 else None,
-        )
-        axs["trajectory"].plot(
-            result.non_ego_trajectory[chain_idx, :, 1, 0],
-            result.non_ego_trajectory[chain_idx, :, 1, 1],
-            linestyle="--",
-            color=plt.cm.plasma(normalized_potential[chain_idx]),
-            label="Non-ego 2" if chain_idx == 0 else None,
-        )
-
-    # Plot the reward across all failure cases
-    axs["reward"].plot(result.potential, "ko")
-    axs["reward"].set_ylabel("Potential (negative min reward)")
-
-    # Plot the initial RGB observations tiled on the same subplot
-    axs["initial_obs"].imshow(
-        jnp.concatenate(result.initial_obs.color_image.transpose(0, 2, 1, 3), axis=1)
-    )
-    # And do the same for the final observations
-    axs["final_obs"].imshow(
-        jnp.concatenate(result.final_obs.color_image.transpose(0, 2, 1, 3), axis=1)
-    )
-
-    if reinforce:
-        alg_type = "reinforce_l2c"
-    elif use_gradients and use_stochasticity and use_mh:
-        alg_type = "mala"
-    elif use_gradients and use_stochasticity and not use_mh:
-        alg_type = "ula"
-    elif use_gradients and not use_stochasticity:
-        alg_type = "gd"
-    elif not use_gradients and use_stochasticity and use_mh:
-        alg_type = "rmh"
-    elif not use_gradients and use_stochasticity and not use_mh:
-        alg_type = "random_walk"
-    else:
-        alg_type = "static"
+    # Figure out where to save
     save_dir = (
         f"results/{args.savename}/{'predict' if predict else ''}"
         f"{'_' if repair else ''}{'repair_' + str(dp_logprior_scale) if repair else ''}/"
@@ -583,7 +604,6 @@ if __name__ == "__main__":
     filename += f"_{seed}"
     print(f"Saving results to: {filename}")
     os.makedirs(save_dir, exist_ok=True)
-    plt.savefig(filename + ".png")
 
     # Save the final design parameters (joined back into the full policy)
     final_policy = eqx.combine(final_dps, static_policy)

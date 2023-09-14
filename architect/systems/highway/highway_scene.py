@@ -227,6 +227,7 @@ class HighwayScene:
         car_states: Float[Array, "n_car 3"],
         sharpness: float = 100.0,
         car_colors: Optional[Float[Array, "n_car 3"]] = None,
+        include_ground: bool = True,
     ) -> SDFShape:
         """Return an SDF representation this scene.
 
@@ -234,6 +235,7 @@ class HighwayScene:
             car_states: the [x, y, heading] state of each car in the scene
             sharpness: the sharpness of the SDF shapes
             car_colors: the color of each car. If None, the default colors are used.
+            include_ground: whether to include the ground plane
         """
         if car_colors is None:
             car_shapes = [self.car.get_shapes(state) for state in car_states]
@@ -243,12 +245,12 @@ class HighwayScene:
                 for state, color in zip(car_states, car_colors)
             ]
 
-        shapes = (
-            []
-            + [self.ground]
-            + self.walls
-            + [shape for sublist in car_shapes for shape in sublist]
-        )
+        shapes = []
+        shapes += [shape for sublist in car_shapes for shape in sublist]
+        if include_ground:
+            shapes += self.walls
+            shapes.append(self.ground)
+
         return Scene(shapes=shapes, sharpness=sharpness)
 
     @jaxtyped
@@ -258,6 +260,7 @@ class HighwayScene:
         collider_state: Float[Array, " 3"],
         scene_car_states: Float[Array, "n_car 3"],
         sharpness: float = 100.0,
+        include_ground: bool = True,
     ) -> Float[Array, ""]:
         """Check for collision with any obstacle in the scene.
 
@@ -267,12 +270,15 @@ class HighwayScene:
                 there will always be a collision).
             scene_car_states: the [x, y, heading] state of each car in the scene
             sharpness: the sharpness of the SDF shapes
+            include_ground: whether to include the ground plane
 
         Returns:
             The minimum distance from the car to any obstacle in the scene.
         """
         # Make the scene (a composite of SDF shapes)
-        scene = self._get_shapes(scene_car_states)
+        scene = self._get_shapes(
+            scene_car_states, sharpness=sharpness, include_ground=include_ground
+        )
 
         # Check for collision at four points on the car
         car_R_to_world = jnp.array(
@@ -364,7 +370,7 @@ class HighwayScene:
         # Render the scene
         rays = pinhole_camera_rays(intrinsics, extrinsics)
         hit_pts = jax.vmap(raycast, in_axes=(None, None, 0, None, None))(
-            scene, extrinsics.camera_origin, rays, 100, 200.0
+            scene, extrinsics.camera_origin, rays, 200, 200.0
         )
         depth_image = render_depth(
             hit_pts, intrinsics, extrinsics, max_dist=max_dist
